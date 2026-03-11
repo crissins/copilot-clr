@@ -1,0 +1,71 @@
+# ============================================================================
+# GitHub Actions: Deploy Python Azure Functions Backend
+# Triggers on changes to api/ folder on main branch
+# ============================================================================
+
+name: Deploy API (Functions)
+
+on:
+  push:
+    branches: [main]
+    paths: ['api/**']
+  workflow_dispatch:
+
+permissions:
+  id-token: write
+  contents: read
+
+env:
+  AZURE_RESOURCE_GROUP: rg-chatapp-dev
+  PYTHON_VERSION: '3.11'
+
+jobs:
+  build-and-deploy:
+    name: Build & Deploy Functions
+    runs-on: ubuntu-latest
+    environment: dev
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: 'pip'
+          cache-dependency-path: 'api/requirements.txt'
+
+      - name: Install dependencies
+        run: |
+          cd api
+          pip install -r requirements.txt --target=".python_packages/lib/site-packages"
+
+      - name: Azure Login (OIDC)
+        uses: azure/login@v2
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Get Function App name
+        id: get-func-name
+        uses: azure/cli@v2
+        with:
+          inlineScript: |
+            FUNC_NAME=$(az functionapp list -g ${{ env.AZURE_RESOURCE_GROUP }} --query "[?tags.\"azd-service-name\"=='api'].name" -o tsv)
+            echo "func_name=$FUNC_NAME" >> $GITHUB_OUTPUT
+
+      - name: Deploy to Azure Functions
+        uses: Azure/functions-action@v1
+        with:
+          app-name: ${{ steps.get-func-name.outputs.func_name }}
+          package: './api'
+          scm-do-build-during-deployment: true
+          enable-oryx-build: true
+
+      - name: Health check
+        run: |
+          sleep 30
+          HOSTNAME=$(az functionapp show -g ${{ env.AZURE_RESOURCE_GROUP }} -n ${{ steps.get-func-name.outputs.func_name }} --query defaultHostName -o tsv)
+          curl -sf "https://$HOSTNAME/api/health" || echo "Health check endpoint not yet available"

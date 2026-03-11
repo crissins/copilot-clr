@@ -1,0 +1,74 @@
+# ============================================================================
+# GitHub Actions: Deploy Infrastructure (Bicep)
+# Triggers on changes to infra/ folder on main branch
+# Uses OIDC federated credentials (no stored secrets)
+# ============================================================================
+
+name: Deploy Infrastructure
+
+on:
+  push:
+    branches: [main]
+    paths: ['infra/**']
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: 'Target environment'
+        required: true
+        default: 'dev'
+        type: choice
+        options: [dev, staging, prod]
+
+permissions:
+  id-token: write
+  contents: read
+
+env:
+  AZURE_RESOURCE_GROUP: rg-chatapp-${{ github.event.inputs.environment || 'dev' }}
+  AZURE_LOCATION: eastus
+
+jobs:
+  deploy-infra:
+    name: Deploy Bicep Infrastructure
+    runs-on: ubuntu-latest
+    environment: ${{ github.event.inputs.environment || 'dev' }}
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Azure Login (OIDC)
+        uses: azure/login@v2
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Create Resource Group
+        uses: azure/cli@v2
+        with:
+          inlineScript: |
+            az group create \
+              --name ${{ env.AZURE_RESOURCE_GROUP }} \
+              --location ${{ env.AZURE_LOCATION }} \
+              --tags project=chatapp environment=${{ github.event.inputs.environment || 'dev' }}
+
+      - name: Deploy Bicep
+        uses: azure/arm-deploy@v2
+        id: deploy
+        with:
+          resourceGroupName: ${{ env.AZURE_RESOURCE_GROUP }}
+          template: ./infra/main.bicep
+          parameters: >
+            location=${{ env.AZURE_LOCATION }}
+            environmentName=${{ github.event.inputs.environment || 'dev' }}
+            projectName=chatapp
+          failOnStdErr: false
+
+      - name: Output deployment results
+        run: |
+          echo "## Deployment Outputs" >> $GITHUB_STEP_SUMMARY
+          echo "- **Function App**: ${{ steps.deploy.outputs.FUNCTION_APP_HOSTNAME }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **Static Web App**: ${{ steps.deploy.outputs.STATIC_WEB_APP_HOSTNAME }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **OpenAI Endpoint**: ${{ steps.deploy.outputs.AZURE_OPENAI_ENDPOINT }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **Cosmos DB Endpoint**: ${{ steps.deploy.outputs.COSMOS_DB_ENDPOINT }}" >> $GITHUB_STEP_SUMMARY
