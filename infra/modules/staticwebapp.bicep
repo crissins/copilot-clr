@@ -18,14 +18,14 @@ var staticWebAppName = 'swa-${resourceToken}'
 resource staticWebApp 'Microsoft.Web/staticSites@2023-12-01' = {
   name: staticWebAppName
   location: location
-  tags: union(tags, { 'azd-service-name': 'app' })
+  tags: union(tags, { 'azd-service-name': 'frontend' })
   sku: {
     name: 'Free'
     tier: 'Free'
   }
   properties: {
     buildProperties: {
-      appLocation: '/app'
+      appLocation: '/frontend'
       outputLocation: 'dist'
       skipGithubActionWorkflowGeneration: true
     }
