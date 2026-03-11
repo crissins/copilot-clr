@@ -1,0 +1,27 @@
+# ASGI Runtime — Container Apps (replaces azure-functions)
+fastapi
+uvicorn[standard]
+websockets
+
+# Azure Runtime
+azure-identity
+
+# azure-functions retained for local reference only — not used in Container App
+# azure-functions
+
+# Azure AI Agent Framework
+azure-ai-projects
+azure-ai-inference
+
+# Azure Data Services
+azure-cosmos
+azure-storage-blob
+azure-servicebus
+
+# Azure AI Services
+azure-ai-contentsafety
+azure-search-documents
+
+# Auth
+PyJWT
+cryptography
