@@ -1,6 +1,6 @@
 # ============================================================================
 # GitHub Actions: Deploy React Frontend to Static Web Apps
-# Triggers on changes to app/ folder on main branch
+# Triggers on changes to frontend/ folder on main branch
 # ============================================================================
 
 name: Deploy App (Static Web App)
@@ -8,7 +8,7 @@ name: Deploy App (Static Web App)
 on:
   push:
     branches: [main]
-    paths: ['app/**']
+    paths: ['frontend/**']
   workflow_dispatch:
 
 permissions:
@@ -37,7 +37,7 @@ jobs:
         uses: azure/cli@v2
         with:
           inlineScript: |
-            SWA_NAME=$(az staticwebapp list -g rg-chatapp-dev --query "[?tags.\"azd-service-name\"=='app'].name" -o tsv)
+            SWA_NAME=$(az staticwebapp list -g rg-chatapp-dev --query "[?tags.\"azd-service-name\"=='frontend'].name" -o tsv)
             TOKEN=$(az staticwebapp secrets list -g rg-chatapp-dev -n "$SWA_NAME" --query "properties.apiKey" -o tsv)
             echo "::add-mask::$TOKEN"
             echo "swa_token=$TOKEN" >> $GITHUB_OUTPUT
@@ -48,6 +48,6 @@ jobs:
           azure_static_web_apps_api_token: ${{ steps.get-swa-token.outputs.swa_token }}
           repo_token: ${{ secrets.GITHUB_TOKEN }}
           action: upload
-          app_location: /app
+          app_location: /frontend
           output_location: dist
           app_build_command: npm run build

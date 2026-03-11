@@ -1,6 +1,6 @@
 # ============================================================================
 # GitHub Actions: Deploy Python Azure Functions Backend
-# Triggers on changes to api/ folder on main branch
+# Triggers on changes to backend/ folder on main branch
 # ============================================================================
 
 name: Deploy API (Functions)
@@ -8,7 +8,7 @@ name: Deploy API (Functions)
 on:
   push:
     branches: [main]
-    paths: ['api/**']
+    paths: ['backend/**']
   workflow_dispatch:
 
 permissions:
@@ -34,11 +34,11 @@ jobs:
         with:
           python-version: ${{ env.PYTHON_VERSION }}
           cache: 'pip'
-          cache-dependency-path: 'api/requirements.txt'
+          cache-dependency-path: 'backend/requirements.txt'
 
       - name: Install dependencies
         run: |
-          cd api
+          cd backend
           pip install -r requirements.txt --target=".python_packages/lib/site-packages"
 
       - name: Azure Login (OIDC)
