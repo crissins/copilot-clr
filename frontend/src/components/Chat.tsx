@@ -1,6 +1,7 @@
 import { useState, useRef, useEffect, useCallback } from "react";
 import { apiClient, type Message } from "../services/api";
 import { MessageList } from "./MessageList";
+import { FileUpload } from "./FileUpload";
 import { useAuth } from "../hooks/useAuth";
 
 export function Chat() {
@@ -82,12 +83,13 @@ export function Chat() {
   return (
     <div className="chat-container">
       <div className="chat-toolbar">
+        <FileUpload />
         <button onClick={handleNewChat} className="btn-secondary">
           + New Chat
         </button>
       </div>
 
-      <MessageList messages={messages} isLoading={isLoading} />
+      <MessageList messages={messages} isLoading={isLoading} sessionId={sessionId} />
 
       <div className="chat-input-container">
         <textarea

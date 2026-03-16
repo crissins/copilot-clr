@@ -1,4 +1,7 @@
-/** API client for the Azure Functions backend */
+/** API client for the Container Apps backend */
+
+// Base URL: empty for SWA proxied API, or full URL for direct Container App access
+const API_BASE = import.meta.env.VITE_API_BASE || "";
 
 interface ChatResponse {
   sessionId: string;
@@ -47,7 +50,7 @@ class ApiClient {
     sessionId: string | null,
     token: string | null
   ): Promise<ChatResponse> {
-    const res = await fetch("/api/chat", {
+    const res = await fetch(`${API_BASE}/api/chat`, {
       method: "POST",
       headers: this.getHeaders(token),
       body: JSON.stringify({ message, sessionId }),
@@ -57,7 +60,7 @@ class ApiClient {
   }
 
   async listSessions(token: string | null): Promise<Session[]> {
-    const res = await fetch("/api/sessions", {
+    const res = await fetch(`${API_BASE}/api/sessions`, {
       headers: this.getHeaders(token),
     });
     if (!res.ok) throw new Error(`List sessions failed: ${res.status}`);
@@ -69,7 +72,7 @@ class ApiClient {
     title: string,
     token: string | null
   ): Promise<Session> {
-    const res = await fetch("/api/sessions", {
+    const res = await fetch(`${API_BASE}/api/sessions`, {
       method: "POST",
       headers: this.getHeaders(token),
       body: JSON.stringify({ title }),
@@ -82,7 +85,7 @@ class ApiClient {
     sessionId: string,
     token: string | null
   ): Promise<SessionDetail> {
-    const res = await fetch(`/api/sessions/${encodeURIComponent(sessionId)}`, {
+    const res = await fetch(`${API_BASE}/api/sessions/${encodeURIComponent(sessionId)}`, {
       headers: this.getHeaders(token),
     });
     if (!res.ok) throw new Error(`Get session failed: ${res.status}`);
@@ -93,13 +96,101 @@ class ApiClient {
     sessionId: string,
     token: string | null
   ): Promise<void> {
-    const res = await fetch(`/api/sessions/${encodeURIComponent(sessionId)}`, {
+    const res = await fetch(`${API_BASE}/api/sessions/${encodeURIComponent(sessionId)}`, {
       method: "DELETE",
       headers: this.getHeaders(token),
     });
     if (!res.ok) throw new Error(`Delete session failed: ${res.status}`);
   }
+
+  async getPreferences(token: string | null): Promise<UserPreferences> {
+    const res = await fetch(`${API_BASE}/api/prefs`, {
+      headers: this.getHeaders(token),
+    });
+    if (!res.ok) throw new Error(`Get prefs failed: ${res.status}`);
+    return res.json();
+  }
+
+  async updatePreferences(
+    prefs: Partial<UserPreferences>,
+    token: string | null
+  ): Promise<UserPreferences> {
+    const res = await fetch(`${API_BASE}/api/prefs`, {
+      method: "PUT",
+      headers: this.getHeaders(token),
+      body: JSON.stringify(prefs),
+    });
+    if (!res.ok) throw new Error(`Update prefs failed: ${res.status}`);
+    return res.json();
+  }
+
+  async uploadDocument(file: File, token: string | null): Promise<UploadResult> {
+    const formData = new FormData();
+    formData.append("file", file);
+    const headers: Record<string, string> = {};
+    if (token) headers["Authorization"] = `Bearer ${token}`;
+    const res = await fetch(`${API_BASE}/api/upload`, {
+      method: "POST",
+      headers,
+      body: formData,
+    });
+    if (!res.ok) throw new Error(`Upload failed: ${res.status}`);
+    return res.json();
+  }
+
+  async textToSpeech(text: string, token: string | null): Promise<Blob> {
+    const res = await fetch(`${API_BASE}/api/tts`, {
+      method: "POST",
+      headers: this.getHeaders(token),
+      body: JSON.stringify({ text }),
+    });
+    if (!res.ok) throw new Error(`TTS failed: ${res.status}`);
+    return res.blob();
+  }
+
+  async getIRToken(token: string | null): Promise<{ token: string; subdomain: string }> {
+    const res = await fetch(`${API_BASE}/api/ir-token`, {
+      method: "POST",
+      headers: this.getHeaders(token),
+    });
+    if (!res.ok) throw new Error(`IR token failed: ${res.status}`);
+    return res.json();
+  }
+
+  async reportMessage(
+    messageId: string,
+    sessionId: string,
+    reason: string,
+    token: string | null
+  ): Promise<void> {
+    const res = await fetch(`${API_BASE}/api/report`, {
+      method: "POST",
+      headers: this.getHeaders(token),
+      body: JSON.stringify({ messageId, sessionId, reason }),
+    });
+    if (!res.ok) throw new Error(`Report failed: ${res.status}`);
+  }
+}
+
+interface UserPreferences {
+  id: string;
+  userId: string;
+  readingLevel: string;
+  preferredFormat: string;
+  voiceSpeed: string;
+  fontSize: string;
+  highContrast: boolean;
+  theme: string;
+  language: string;
+}
+
+interface UploadResult {
+  documentId: string;
+  filename: string;
+  chunks: number;
+  totalChars: number;
+  message: string;
 }
 
 export const apiClient = new ApiClient();
-export type { ChatResponse, Session, Message, SessionDetail };
+export type { ChatResponse, Session, Message, SessionDetail, UserPreferences, UploadResult };
