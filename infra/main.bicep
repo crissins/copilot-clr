@@ -1,16 +1,25 @@
 ﻿// ============================================================================
-// MAIN ORCHESTRATOR — Azure Voice + Chat App Infrastructure
+// MAIN ORCHESTRATOR — CognitiveClear Infrastructure
+// AI Accessibility Assistant for Neurodiverse Users
 // Deploys all modules in dependency order with a single command:
 //   az deployment group create -g <rg> -f main.bicep -p main.bicepparam
 //
-// Services deployed (14):
-//   1.  Storage Account           8.  AI Services (Content Safety)
-//   2.  Key Vault                 9.  Service Bus (Basic)
-//   3.  Log Analytics + AppInsights 10. Container Registry (Basic)
-//   4.  Azure OpenAI             11.  Container Apps (Consumption)
-//   5.  AI Foundry Hub           12.  Static Web App (Free — frontend only)
-//   6.  AI Foundry Project       13.  Cosmos DB (Serverless)
-//   7.  AI Search (Free)         14.  RBAC Role Assignments
+// Deployment tiers (choose parameter file):
+//   Production:   main.bicepparam          — full 18 services (~$10-14/mo)
+//   Low-cost:     main.lowcost.bicepparam  — same 18 services, reduced capacity (~$6-8/mo)
+//   Development:  main.dev.bicepparam      — API services only, no compute (~$0-2/mo)
+//
+// Services deployed (18 in prod/low-cost, 14 in dev — no ACR, Container Apps, SWA, Service Bus):
+//   1.  Storage Account           10. Container Registry (Basic)*
+//   2.  Key Vault                 11. Container Apps (Consumption)*
+//   3.  Log Analytics + AppInsights 12. Static Web App (Free)*
+//   4.  Azure OpenAI              13. Cosmos DB (Serverless)
+//   5.  AI Foundry Hub            14. RBAC Role Assignments
+//   6.  AI Foundry Project        15. Azure Speech Service
+//   7.  AI Search (Free)          16. Azure Immersive Reader
+//   8.  AI Services (Content Safety) 17. Entra ID (external)
+//   9.  Service Bus (Basic)*      18. Managed Identity (system-assigned)
+//   * Skipped when localDevMode=true (dev tier)
 // ============================================================================
 
 @description('Primary Azure region for all resources')
@@ -49,14 +58,18 @@ param containerMemory string = '1Gi'
 @description('Log Analytics and App Insights retention in days. Set 7 in low-cost mode.')
 param logRetentionDays int = 30
 
+@description('Local development mode — skip compute/hosting resources (Container Apps, ACR, Static Web App, Service Bus). Backend and frontend run locally. Use with main.dev.bicepparam.')
+param localDevMode bool = false
+
 // Generate a unique token for resource naming to avoid conflicts
-var resourceToken = toLower(uniqueString(subscription().id, resourceGroup().id, projectName, environmentName))
+var resourceToken = substring(toLower(uniqueString(subscription().id, resourceGroup().id, projectName, environmentName)), 0, 3)
 
 var tags = {
   project: projectName
   environment: environmentName
   'managed-by': 'bicep'
 }
+
 
 // ============================================================================
 // Phase 1: Foundation (no dependencies)
@@ -114,10 +127,11 @@ module aiServices 'modules/cognitiveservices.bicep' = {
     location: location
     resourceToken: resourceToken
     tags: tags
+    skuName: 'S0' // Multi-service CognitiveServices requires S0
   }
 }
 
-module serviceBus 'modules/servicebus.bicep' = {
+module serviceBus 'modules/servicebus.bicep' = if (!localDevMode) {
   name: 'servicebus-deployment'
   params: {
     location: location
@@ -126,8 +140,37 @@ module serviceBus 'modules/servicebus.bicep' = {
   }
 }
 
-// Container Registry — must exist before Container Apps references its login server
-module containerRegistry 'modules/container-registry.bicep' = {
+module speech 'modules/speech.bicep' = {
+  name: 'speech-deployment'
+  params: {
+    location: location
+    resourceToken: resourceToken
+    tags: tags
+    skuName: 'F0' // Free tier: 5K chars TTS, 5hr STT/month
+  }
+}
+
+module immersiveReader 'modules/immersive-reader.bicep' = {
+  name: 'immersive-reader-deployment'
+  params: {
+    location: location
+    resourceToken: resourceToken
+    tags: tags
+  }
+}
+
+module documentIntelligence 'modules/document-intelligence.bicep' = {
+  name: 'document-intelligence-deployment'
+  params: {
+    location: location
+    resourceToken: resourceToken
+    tags: tags
+    skuName: 'F0' // Free tier: 500 pages/month
+  }
+}
+
+// Container Registry — skipped in localDevMode (no containers in local development)
+module containerRegistry 'modules/container-registry.bicep' = if (!localDevMode) {
   name: 'container-registry-deployment'
   params: {
     location: location
@@ -182,7 +225,7 @@ module aiFoundryProject 'modules/ai-foundry-project.bicep' = {
 // Phase 3: Compute (depends on foundation + AI layer + container registry)
 // ============================================================================
 
-module staticWebApp 'modules/staticwebapp.bicep' = {
+module staticWebApp 'modules/staticwebapp.bicep' = if (!localDevMode) {
   name: 'staticwebapp-deployment'
   params: {
     location: location
@@ -195,7 +238,7 @@ module staticWebApp 'modules/staticwebapp.bicep' = {
 // Reasons: native WebSocket support for Azure OpenAI GPT Realtime API voice
 // sessions (up to 30 min), scale-to-zero on Consumption plan ($0 idle cost),
 // no per-request execution timeout, KEDA HTTP autoscaling.
-module containerApps 'modules/container-apps.bicep' = {
+module containerApps 'modules/container-apps.bicep' = if (!localDevMode) {
   name: 'container-apps-deployment'
   params: {
     location: location
@@ -211,10 +254,15 @@ module containerApps 'modules/container-apps.bicep' = {
     serviceBusNamespace: '${serviceBus.outputs.serviceBusName}.servicebus.windows.net'
     keyVaultUri: keyVault.outputs.keyVaultUri
     aiProjectName: aiFoundryProject.outputs.projectName
+    aiFoundryEndpoint: aiFoundryProject.outputs.projectDiscoveryUrl
     staticWebAppHostname: staticWebApp.outputs.staticWebAppHostname
     entraClientId: entraClientId
     containerCpu: containerCpu
     containerMemory: containerMemory
+    speechEndpoint: speech.outputs.speechEndpoint
+    speechRegion: speech.outputs.speechRegion
+    irEndpoint: immersiveReader.outputs.irEndpoint
+    docIntelEndpoint: documentIntelligence.outputs.docIntelEndpoint
   }
 }
 
@@ -225,17 +273,20 @@ module containerApps 'modules/container-apps.bicep' = {
 module security 'modules/security.bicep' = {
   name: 'security-deployment'
   params: {
-    containerAppPrincipalId: containerApps.outputs.containerAppPrincipalId
-    containerRegistryName: containerRegistry.outputs.registryName
+    localDevMode: localDevMode
+    containerAppPrincipalId: localDevMode ? '' : containerApps.outputs.containerAppPrincipalId
+    containerRegistryName: localDevMode ? '' : containerRegistry.outputs.registryName
     hubPrincipalId: aiFoundryHub.outputs.hubPrincipalId
     projectPrincipalId: aiFoundryProject.outputs.projectPrincipalId
+    speechName: speech.outputs.speechName
+    irName: immersiveReader.outputs.irName
     cosmosDbName: cosmosDb.outputs.cosmosDbName
     storageAccountName: storage.outputs.storageAccountName
     keyVaultName: keyVault.outputs.keyVaultName
     openAiName: openAi.outputs.openAiName
     searchName: search.outputs.searchName
     aiServicesName: aiServices.outputs.aiServicesName
-    serviceBusName: serviceBus.outputs.serviceBusName
+    serviceBusName: localDevMode ? '' : serviceBus.outputs.serviceBusName
     aiProjectName: aiFoundryProject.outputs.projectName
   }
 }
@@ -247,12 +298,12 @@ module security 'modules/security.bicep' = {
 output RESOURCE_GROUP string = resourceGroup().name
 output AZURE_LOCATION string = location
 
-// Compute
-output CONTAINER_APP_NAME string = containerApps.outputs.containerAppName
-output CONTAINER_APP_HOSTNAME string = containerApps.outputs.containerAppHostname
-output CONTAINER_REGISTRY_LOGIN_SERVER string = containerRegistry.outputs.registryLoginServer
-output STATIC_WEB_APP_NAME string = staticWebApp.outputs.staticWebAppName
-output STATIC_WEB_APP_HOSTNAME string = staticWebApp.outputs.staticWebAppHostname
+// Compute (empty in localDevMode — backend and frontend run locally)
+output CONTAINER_APP_NAME string = localDevMode ? '' : containerApps.outputs.containerAppName
+output CONTAINER_APP_HOSTNAME string = localDevMode ? '' : containerApps.outputs.containerAppHostname
+output CONTAINER_REGISTRY_LOGIN_SERVER string = localDevMode ? '' : containerRegistry.outputs.registryLoginServer
+output STATIC_WEB_APP_NAME string = localDevMode ? '' : staticWebApp.outputs.staticWebAppName
+output STATIC_WEB_APP_HOSTNAME string = localDevMode ? '' : staticWebApp.outputs.staticWebAppHostname
 
 // AI
 output AZURE_OPENAI_ENDPOINT string = openAi.outputs.openAiEndpoint
@@ -264,6 +315,14 @@ output AZURE_SEARCH_ENDPOINT string = search.outputs.searchEndpoint
 
 // Monitoring
 output APP_INSIGHTS_NAME string = monitoring.outputs.appInsightsName
+
+// Speech + Immersive Reader
+output SPEECH_ENDPOINT string = speech.outputs.speechEndpoint
+output SPEECH_REGION string = speech.outputs.speechRegion
+output IR_ENDPOINT string = immersiveReader.outputs.irEndpoint
+
+// Document Intelligence
+output DOC_INTELLIGENCE_ENDPOINT string = documentIntelligence.outputs.docIntelEndpoint
 
 // Storage
 output STORAGE_ACCOUNT_NAME string = storage.outputs.storageAccountName

@@ -4,11 +4,14 @@
 // All services communicate via managed identity — zero secrets in code.
 // ============================================================================
 
-@description('Principal ID of the Container App system-assigned managed identity')
-param containerAppPrincipalId string
+@description('Local development mode — skip Container App and compute-related role assignments')
+param localDevMode bool = false
 
-@description('Name of the Azure Container Registry (for AcrPull role assignment)')
-param containerRegistryName string
+@description('Principal ID of the Container App system-assigned managed identity. Empty in localDevMode.')
+param containerAppPrincipalId string = ''
+
+@description('Name of the Azure Container Registry (for AcrPull role assignment). Empty in localDevMode.')
+param containerRegistryName string = ''
 
 @description('Principal ID of the AI Foundry Hub managed identity')
 param hubPrincipalId string
@@ -35,11 +38,17 @@ param searchName string
 @description('Azure AI Services account name')
 param aiServicesName string
 
-@description('Service Bus namespace name')
-param serviceBusName string
+@description('Service Bus namespace name. Empty in localDevMode.')
+param serviceBusName string = ''
 
 @description('AI Foundry Project name')
 param aiProjectName string
+
+@description('Azure Speech Service name')
+param speechName string = ''
+
+@description('Azure Immersive Reader name')
+param irName string = ''
 
 // ============================================================================
 // Built-in Role Definition IDs
@@ -85,7 +94,7 @@ resource aiServices 'Microsoft.CognitiveServices/accounts@2024-04-01-preview' ex
   name: aiServicesName
 }
 
-resource serviceBus 'Microsoft.ServiceBus/namespaces@2022-10-01-preview' existing = {
+resource serviceBus 'Microsoft.ServiceBus/namespaces@2022-10-01-preview' existing = if (!localDevMode) {
   name: serviceBusName
 }
 
@@ -93,14 +102,22 @@ resource aiProject 'Microsoft.MachineLearningServices/workspaces@2024-04-01' exi
   name: aiProjectName
 }
 
-resource containerRegistry 'Microsoft.ContainerRegistry/registries@2023-07-01' existing = {
+resource containerRegistry 'Microsoft.ContainerRegistry/registries@2023-07-01' existing = if (!localDevMode) {
   name: containerRegistryName
+}
+
+resource speechService 'Microsoft.CognitiveServices/accounts@2024-04-01-preview' existing = if (!empty(speechName)) {
+  name: speechName
+}
+
+resource immersiveReader 'Microsoft.CognitiveServices/accounts@2024-04-01-preview' existing = if (!empty(irName)) {
+  name: irName
 }
 
 // ============================================================================
 // Container App → Container Registry (AcrPull — image pull via managed identity)
 // ============================================================================
-resource appAcrPullRole 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
+resource appAcrPullRole 'Microsoft.Authorization/roleAssignments@2022-04-01' = if (!localDevMode) {
   name: guid(containerRegistry.id, containerAppPrincipalId, roles.acrPull)
   scope: containerRegistry
   properties: {
@@ -113,7 +130,7 @@ resource appAcrPullRole 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
 // ============================================================================
 // Container App → Cosmos DB (Data Contributor)
 // ============================================================================
-resource funcCosmosRole 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
+resource funcCosmosRole 'Microsoft.Authorization/roleAssignments@2022-04-01' = if (!localDevMode) {
   name: guid(cosmosDb.id, containerAppPrincipalId, roles.cosmosDbDataContributor)
   scope: cosmosDb
   properties: {
@@ -126,7 +143,7 @@ resource funcCosmosRole 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
 // ============================================================================
 // Container App → Storage (Blob Data Contributor)
 // ============================================================================
-resource funcStorageRole 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
+resource funcStorageRole 'Microsoft.Authorization/roleAssignments@2022-04-01' = if (!localDevMode) {
   name: guid(storageAccount.id, containerAppPrincipalId, roles.storageBlobDataContributor)
   scope: storageAccount
   properties: {
@@ -139,7 +156,7 @@ resource funcStorageRole 'Microsoft.Authorization/roleAssignments@2022-04-01' = 
 // ============================================================================
 // Container App → Key Vault (Secrets User)
 // ============================================================================
-resource funcKeyVaultRole 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
+resource funcKeyVaultRole 'Microsoft.Authorization/roleAssignments@2022-04-01' = if (!localDevMode) {
   name: guid(keyVault.id, containerAppPrincipalId, roles.keyVaultSecretsUser)
   scope: keyVault
   properties: {
@@ -153,7 +170,7 @@ resource funcKeyVaultRole 'Microsoft.Authorization/roleAssignments@2022-04-01' =
 // Container App → Azure OpenAI (OpenAI User + Cognitive Services User)
 // Both roles required: OpenAI User for chat/realtime, CS User for Content Safety
 // ============================================================================
-resource funcOpenAiRole 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
+resource funcOpenAiRole 'Microsoft.Authorization/roleAssignments@2022-04-01' = if (!localDevMode) {
   name: guid(openAi.id, containerAppPrincipalId, roles.cognitiveServicesOpenAIUser)
   scope: openAi
   properties: {
@@ -166,7 +183,7 @@ resource funcOpenAiRole 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
 // ============================================================================
 // Container App → AI Search (Index Data Contributor + Service Contributor)
 // ============================================================================
-resource funcSearchDataRole 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
+resource funcSearchDataRole 'Microsoft.Authorization/roleAssignments@2022-04-01' = if (!localDevMode) {
   name: guid(search.id, containerAppPrincipalId, roles.searchIndexDataContributor)
   scope: search
   properties: {
@@ -176,7 +193,7 @@ resource funcSearchDataRole 'Microsoft.Authorization/roleAssignments@2022-04-01'
   }
 }
 
-resource funcSearchServiceRole 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
+resource funcSearchServiceRole 'Microsoft.Authorization/roleAssignments@2022-04-01' = if (!localDevMode) {
   name: guid(search.id, containerAppPrincipalId, roles.searchServiceContributor)
   scope: search
   properties: {
@@ -189,7 +206,7 @@ resource funcSearchServiceRole 'Microsoft.Authorization/roleAssignments@2022-04-
 // ============================================================================
 // Container App → AI Services (Cognitive Services User — Content Safety)
 // ============================================================================
-resource funcAiServicesRole 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
+resource funcAiServicesRole 'Microsoft.Authorization/roleAssignments@2022-04-01' = if (!localDevMode) {
   name: guid(aiServices.id, containerAppPrincipalId, roles.cognitiveServicesUser)
   scope: aiServices
   properties: {
@@ -202,7 +219,7 @@ resource funcAiServicesRole 'Microsoft.Authorization/roleAssignments@2022-04-01'
 // ============================================================================
 // Container App → Service Bus (Data Owner)
 // ============================================================================
-resource funcServiceBusRole 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
+resource funcServiceBusRole 'Microsoft.Authorization/roleAssignments@2022-04-01' = if (!localDevMode) {
   name: guid(serviceBus.id, containerAppPrincipalId, roles.serviceBusDataOwner)
   scope: serviceBus
   properties: {
@@ -215,7 +232,7 @@ resource funcServiceBusRole 'Microsoft.Authorization/roleAssignments@2022-04-01'
 // ============================================================================
 // Container App → AI Foundry Project (Data Scientist — Agent Service access)
 // ============================================================================
-resource funcAiProjectRole 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
+resource funcAiProjectRole 'Microsoft.Authorization/roleAssignments@2022-04-01' = if (!localDevMode) {
   name: guid(aiProject.id, containerAppPrincipalId, roles.azureMLDataScientist)
   scope: aiProject
   properties: {
@@ -273,6 +290,32 @@ resource projectOpenAiRole 'Microsoft.Authorization/roleAssignments@2022-04-01' 
   properties: {
     principalId: projectPrincipalId
     roleDefinitionId: subscriptionResourceId('Microsoft.Authorization/roleDefinitions', roles.cognitiveServicesOpenAIUser)
+    principalType: 'ServicePrincipal'
+  }
+}
+
+// ============================================================================
+// Container App → Azure Speech Service (Cognitive Services User)
+// ============================================================================
+resource funcSpeechRole 'Microsoft.Authorization/roleAssignments@2022-04-01' = if (!empty(speechName) && !localDevMode) {
+  name: guid(speechService.id, containerAppPrincipalId, roles.cognitiveServicesUser)
+  scope: speechService
+  properties: {
+    principalId: containerAppPrincipalId
+    roleDefinitionId: subscriptionResourceId('Microsoft.Authorization/roleDefinitions', roles.cognitiveServicesUser)
+    principalType: 'ServicePrincipal'
+  }
+}
+
+// ============================================================================
+// Container App → Azure Immersive Reader (Cognitive Services User)
+// ============================================================================
+resource funcIrRole 'Microsoft.Authorization/roleAssignments@2022-04-01' = if (!empty(irName) && !localDevMode) {
+  name: guid(immersiveReader.id, containerAppPrincipalId, roles.cognitiveServicesUser)
+  scope: immersiveReader
+  properties: {
+    principalId: containerAppPrincipalId
+    roleDefinitionId: subscriptionResourceId('Microsoft.Authorization/roleDefinitions', roles.cognitiveServicesUser)
     principalType: 'ServicePrincipal'
   }
 }

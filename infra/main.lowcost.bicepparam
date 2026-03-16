@@ -32,5 +32,5 @@ param deployVoice = false
 param containerCpu    = '0.25'
 param containerMemory = '0.5Gi'
 
-// Logs — 7 days is sufficient for debugging; free tier covers 5 GB/mo
-param logRetentionDays = 7
+// Logs — 30 days is required for the chosen Log Analytics SKU; keeps free-tier ingestion cap in place
+param logRetentionDays = 30

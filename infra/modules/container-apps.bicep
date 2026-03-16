@@ -51,14 +51,29 @@ param staticWebAppHostname string = ''
 @description('Entra ID Client ID for token validation')
 param entraClientId string = ''
 
+@description('AI Foundry endpoint (discovery URL) for Agent Service')
+param aiFoundryEndpoint string = ''
+
+@description('Azure Speech Service endpoint')
+param speechEndpoint string = ''
+
+@description('Azure Speech Service region')
+param speechRegion string = 'eastus'
+
+@description('Azure Immersive Reader endpoint')
+param irEndpoint string = ''
+
+@description('Azure Document Intelligence endpoint')
+param docIntelEndpoint string = ''
+
 @description('Container vCPU allocation. Valid: 0.25, 0.5, 0.75, 1.0. Use 0.25 in low-cost mode (0.25 CPU must pair with 0.5Gi memory).')
 param containerCpu string = '0.5'
 
 @description('Container memory allocation. Must match CPU tier: 0.25→0.5Gi, 0.5→1Gi, 0.75→1.5Gi, 1.0→2Gi.')
 param containerMemory string = '1Gi'
 
-var environmentName = 'cae-${resourceToken}'
-var appName = 'ca-${resourceToken}'
+var environmentName = 'container-apps-environment-${resourceToken}'
+var appName = 'container-apps-${resourceToken}'
 
 // Placeholder image — replaced on first `az acr build` + `az containerapp update`
 var placeholderImage = 'mcr.microsoft.com/azuredocs/containerapps-helloworld:latest'
@@ -145,6 +160,11 @@ resource containerApp 'Microsoft.App/containerApps@2024-03-01' = {
             { name: 'SERVICE_BUS_NAMESPACE',      value: serviceBusNamespace }
             { name: 'KEY_VAULT_URI',              value: keyVaultUri }
             { name: 'AI_PROJECT_NAME',            value: aiProjectName }
+            { name: 'AI_FOUNDRY_ENDPOINT',        value: aiFoundryEndpoint }
+            { name: 'SPEECH_ENDPOINT',             value: speechEndpoint }
+            { name: 'SPEECH_REGION',               value: speechRegion }
+            { name: 'IR_ENDPOINT',                 value: irEndpoint }
+            { name: 'DOC_INTELLIGENCE_ENDPOINT',   value: docIntelEndpoint }
             { name: 'ENTRA_CLIENT_ID',            value: entraClientId }
           ]
         }

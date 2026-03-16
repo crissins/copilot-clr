@@ -17,7 +17,7 @@ param tags object = {}
 @description('AI Foundry Hub resource ID (parent)')
 param hubId string
 
-var projectName = 'aiproj-${resourceToken}'
+var projectName = 'ai-project-${resourceToken}'
 
 resource project 'Microsoft.MachineLearningServices/workspaces@2024-04-01' = {
   name: projectName

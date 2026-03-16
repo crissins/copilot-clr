@@ -1,7 +1,7 @@
 // ============================================================================
 // Azure AI Services (Multi-service)
 // Used by: Content Safety (input/output filtering), Language (PII detection)
-// Tier: S0 (pay-per-transaction, free tier F0 limited to one per subscription)
+// Tier: F0 (free, 20 calls/min) or S0 (pay-per-transaction)
 // ============================================================================
 
 @description('Azure region')
@@ -13,6 +13,9 @@ param resourceToken string
 @description('Tags to apply')
 param tags object = {}
 
+@description('SKU name. Use F0 for free tier (20 calls/min) or S0 for production.')
+param skuName string = 'S0'
+
 var aiServicesName = 'ais-${resourceToken}'
 
 resource aiServices 'Microsoft.CognitiveServices/accounts@2024-04-01-preview' = {
@@ -21,7 +24,8 @@ resource aiServices 'Microsoft.CognitiveServices/accounts@2024-04-01-preview' = 
   tags: tags
   kind: 'CognitiveServices'
   sku: {
-    name: 'S0'
+    name: skuName
+    tier: skuName == 'F0' ? 'Free' : 'Standard'
   }
   properties: {
     customSubDomainName: aiServicesName

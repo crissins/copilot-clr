@@ -17,7 +17,7 @@ param tags object = {}
 @description('Tenant ID for Key Vault')
 param tenantId string = subscription().tenantId
 
-var keyVaultName = 'kv-${resourceToken}'
+var keyVaultName = 'kv-app-${resourceToken}'
 
 resource keyVault 'Microsoft.KeyVault/vaults@2023-07-01' = {
   name: keyVaultName
@@ -32,7 +32,7 @@ resource keyVault 'Microsoft.KeyVault/vaults@2023-07-01' = {
     enableRbacAuthorization: true
     enableSoftDelete: true
     softDeleteRetentionInDays: 7
-    enablePurgeProtection: false // Allow purge in dev for easy cleanup
+    enablePurgeProtection: true // Required by platform; once enabled it cannot be disabled
     networkAcls: {
       defaultAction: 'Allow'
       bypass: 'AzureServices'

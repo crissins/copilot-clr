@@ -36,7 +36,7 @@ param searchServiceId string = ''
 @description('Azure AI Search resource name')
 param searchServiceName string = ''
 
-var hubName = 'aihub-${resourceToken}'
+var hubName = 'ai-hub-${resourceToken}'
 
 resource hub 'Microsoft.MachineLearningServices/workspaces@2024-04-01' = {
   name: hubName

@@ -13,7 +13,7 @@ param resourceToken string
 @description('Tags to apply to all resources')
 param tags object = {}
 
-var storageAccountName = 'st${resourceToken}'
+var storageAccountName = 'staccount${resourceToken}'
 
 resource storageAccount 'Microsoft.Storage/storageAccounts@2023-05-01' = {
   name: storageAccountName

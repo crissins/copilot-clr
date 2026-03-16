@@ -124,6 +124,58 @@ resource usersContainer 'Microsoft.DocumentDB/databaseAccounts/sqlDatabases/cont
   }
 }
 
+// User accessibility preferences container
+resource preferencesContainer 'Microsoft.DocumentDB/databaseAccounts/sqlDatabases/containers@2024-02-15-preview' = {
+  parent: database
+  name: 'preferences'
+  properties: {
+    resource: {
+      id: 'preferences'
+      partitionKey: {
+        paths: ['/userId']
+        kind: 'Hash'
+        version: 2
+      }
+      indexingPolicy: {
+        indexingMode: 'consistent'
+        includedPaths: [
+          { path: '/userId/?' }
+        ]
+        excludedPaths: [
+          { path: '/*' }
+        ]
+      }
+    }
+  }
+}
+
+// RAI flagged response reports container
+resource reportsContainer 'Microsoft.DocumentDB/databaseAccounts/sqlDatabases/containers@2024-02-15-preview' = {
+  parent: database
+  name: 'reports'
+  properties: {
+    resource: {
+      id: 'reports'
+      partitionKey: {
+        paths: ['/userId']
+        kind: 'Hash'
+        version: 2
+      }
+      defaultTtl: 7776000
+      indexingPolicy: {
+        indexingMode: 'consistent'
+        includedPaths: [
+          { path: '/userId/?' }
+          { path: '/createdAt/?' }
+        ]
+        excludedPaths: [
+          { path: '/*' }
+        ]
+      }
+    }
+  }
+}
+
 // Audit log container
 resource auditContainer 'Microsoft.DocumentDB/databaseAccounts/sqlDatabases/containers@2024-02-15-preview' = {
   parent: database

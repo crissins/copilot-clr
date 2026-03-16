@@ -23,7 +23,7 @@ param embeddingModelCapacity int = 10
 @description('Deploy gpt-4o-mini-realtime-preview for voice. Realtime API costs ~$0.06/min input + $0.24/min output audio — set false in low-cost mode.')
 param deployRealtimeModel bool = true
 
-var openAiName = 'oai-${resourceToken}'
+var openAiName = 'open-ai-${resourceToken}'
 
 resource openAi 'Microsoft.CognitiveServices/accounts@2024-04-01-preview' = {
   name: openAiName
@@ -32,6 +32,7 @@ resource openAi 'Microsoft.CognitiveServices/accounts@2024-04-01-preview' = {
   kind: 'OpenAI'
   sku: {
     name: 'S0'
+    tier: 'Standard'
   }
   properties: {
     customSubDomainName: openAiName
