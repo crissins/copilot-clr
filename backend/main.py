@@ -1,9 +1,5 @@
-﻿"""
+"""
 FastAPI backend — Azure Container Apps entrypoint.
-
-Replaces Azure Functions (function_app.py) as the compute layer.
-Container Apps supports persistent WebSocket connections required by
-the Azure OpenAI GPT Realtime API for voice interactions.
 
 HTTP Endpoints:
   POST   /api/chat                — Text chat via AI Foundry Agent Framework
@@ -18,6 +14,11 @@ WebSocket Endpoint:
                                     GPT Realtime API (gpt-4o-mini-realtime-preview)
                                     Audio format: PCM16 mono 24kHz
                                     VAD: semantic_vad (natural speech detection)
+
+Changes vs original:
+  - _VOICE_INSTRUCTIONS updated to CognitiveClear calm/supportive persona
+  - Content Safety check integrated into _openai_to_client (was TODO P0)
+  - _build_content_safety_client / _check_content_safety helpers added
 """
 
 import asyncio
@@ -29,8 +30,7 @@ import uuid
 from datetime import datetime, timezone
 
 import websockets
-from azure.cosmos import CosmosClient
-from azure.cosmos import ContainerProxy
+from azure.cosmos import CosmosClient, ContainerProxy
 from azure.identity import DefaultAzureCredential
 from azure.identity.aio import DefaultAzureCredential as AsyncDefaultAzureCredential
 from fastapi import FastAPI, Request, WebSocket, WebSocketDisconnect
@@ -47,10 +47,10 @@ logger = logging.getLogger(__name__)
 # and the realtime WebSocket endpoint stubs out the OpenAI connection.
 _LOCAL_DEV = os.environ.get("LOCAL_DEV", "").lower() in ("1", "true", "yes")
 
-app = FastAPI(title="Azure Innovation Challenge API", version="1.0.0")
+app = FastAPI(title="CognitiveClear API", version="1.0.0")
 
 # ---------------------------------------------------------------------------
-# CORS — allowed origins from env or local dev default
+# CORS
 # ---------------------------------------------------------------------------
 _swa_hostname = os.environ.get("STATIC_WEB_APP_HOSTNAME", "")
 _allowed_origins = (
@@ -112,7 +112,6 @@ class _InMemoryContainer:
             docs.sort(key=lambda d: d.get("updatedAt", ""), reverse=True)
         elif "ORDER BY c.createdAt ASC" in query:
             docs.sort(key=lambda d: d.get("createdAt", ""))
-        # Strip SELECT c.id projections — return full docs; callers only use .id
         return docs
 
     def patch_item(
@@ -120,7 +119,7 @@ class _InMemoryContainer:
     ) -> dict:
         doc = self._store.get(item, {})
         for op in patch_operations:
-            if op.get("op") == "replace":
+            if op.get("op") in ("replace", "add"):
                 doc[op["path"].lstrip("/")] = op["value"]
         self._store[item] = doc
         return doc
@@ -148,12 +147,8 @@ else:
 def _get_user_id(authorization: str | None) -> str:
     """Extract and validate user OID from Entra ID Bearer token.
 
-    Args:
-        authorization: Raw Authorization header value or None.
-
     Returns:
-        User OID string. Falls back to 'anonymous' when ENTRA_CLIENT_ID unset
-        (local dev mode).
+        User OID string. Falls back to 'local-dev-user' in LOCAL_DEV mode.
 
     Raises:
         AuthError: Token missing, expired, wrong audience, or invalid signature.
@@ -178,15 +173,7 @@ def _get_user_id(authorization: str | None) -> str:
 
 @app.post("/api/chat")
 async def chat(req: Request) -> JSONResponse:
-    """Send a user message, receive an agent response.
-
-    Args:
-        req: HTTP request carrying JSON body {message, sessionId?}
-             and Authorization header.
-
-    Returns:
-        JSON {sessionId, message: {id, role, content, createdAt}, meta: {latencyMs}}
-    """
+    """Send a user message, receive an agent response."""
     try:
         user_id = _get_user_id(req.headers.get("Authorization"))
     except AuthError as e:
@@ -231,7 +218,10 @@ async def chat(req: Request) -> JSONResponse:
         )
     except Exception:
         logger.exception("Agent error for session=%s", session_id)
-        agent_response = "I am sorry, I encountered an error processing your request. Please try again."
+        agent_response = (
+            "I'm sorry, I had a little trouble with that. "
+            "Let's try again — feel free to rephrase your question."
+        )
 
     duration_ms = int((time.monotonic() - start) * 1000)
     logger.info("chat_request_duration_ms=%d session=%s", duration_ms, session_id)
@@ -343,7 +333,9 @@ def get_session(session_id: str, req: Request) -> JSONResponse:
     ))
     return JSONResponse({
         "session": {k: v for k, v in session.items() if not k.startswith("_")},
-        "messages": [{k: v for k, v in m.items() if not k.startswith("_")} for m in messages],
+        "messages": [
+            {k: v for k, v in m.items() if not k.startswith("_")} for m in messages
+        ],
     })
 
 
@@ -402,26 +394,108 @@ def health() -> JSONResponse:
 #   5. All subsequent frames relayed bidirectionally as Azure OpenAI events
 #   6. Audio format:     PCM16, mono, 24kHz, base64-encoded chunks
 #   7. VAD mode:         semantic_vad — waits for natural end of speech
-#   8. Transcripts from response.audio_transcript.done are logged and will
-#      route through Content Safety once that integration is complete
+#   8. Transcripts from response.audio_transcript.done are screened by
+#      Azure AI Content Safety before being forwarded to the client
 #   9. On disconnect from either side — both connections are torn down cleanly
 # ============================================================================
 
+# Updated to CognitiveClear calm/supportive persona (Responsible AI requirement)
 _VOICE_INSTRUCTIONS = (
-    "You are a helpful, friendly AI assistant. "
-    "Answer concisely, be honest, and say so clearly if you do not know something."
+    "You are CognitiveClear — a calm, warm, and patient voice assistant designed "
+    "for people who find complex information challenging to process, including those "
+    "with ADHD, autism, or dyslexia. "
+    "Speak in short, clear sentences. Pause naturally between steps. "
+    "Never use urgent, alarming, or pressuring language. "
+    "When explaining something complex, always break it into numbered steps. "
+    "Acknowledge the user's question before answering. "
+    "If you don't know something, say so kindly and suggest a helpful next step."
 )
 
 _REALTIME_API_VERSION = "2025-04-01-preview"
 _REALTIME_MODEL = "gpt-4o-mini-realtime-preview"
 
+# Content Safety severity threshold (0–6). Flag at 2+ (low severity and above).
+_CONTENT_SAFETY_THRESHOLD = 2
 
-async def _get_openai_bearer_token() -> str:
-    """Acquire a short-lived bearer token for Azure OpenAI via managed identity.
+# Calm fallback returned to the client when a response is moderated.
+_CONTENT_SAFETY_FALLBACK = (
+    "I'm sorry, I wasn't able to process that response. "
+    "Please try rephrasing your question."
+)
+
+
+def _build_content_safety_client():
+    """Build Azure AI Content Safety client via Managed Identity.
+
+    Returns None when AZURE_CONTENT_SAFETY_ENDPOINT is not set (e.g. LOCAL_DEV).
+    Imports are deferred so the module loads cleanly even when the SDK is absent.
+    """
+    endpoint = os.environ.get("AZURE_CONTENT_SAFETY_ENDPOINT", "")
+    if not endpoint:
+        return None
+    from azure.ai.contentsafety import ContentSafetyClient  # noqa: PLC0415
+    return ContentSafetyClient(endpoint=endpoint, credential=DefaultAzureCredential())
+
+
+def _check_content_safety(text: str, user_id: str) -> tuple[bool, str]:
+    """Run Azure AI Content Safety on text synchronously.
+
+    Called from an async context via asyncio.to_thread() when used in the
+    voice relay — keep this function fully synchronous.
+
+    Args:
+        text:    Text to screen (first 10 000 chars checked; API limit).
+        user_id: Used only for logging — never sent to Content Safety.
 
     Returns:
-        Raw token string for use in Authorization header.
+        (is_safe, reason) — is_safe=False means at least one category exceeded
+        the threshold and the content should be replaced with the safe fallback.
     """
+    cs_client = _build_content_safety_client()
+
+    if cs_client is None:
+        if not _LOCAL_DEV:
+            logger.warning(
+                "AZURE_CONTENT_SAFETY_ENDPOINT not set — "
+                "skipping safety check for user=%s", user_id,
+            )
+        return True, ""
+
+    from azure.ai.contentsafety.models import AnalyzeTextOptions, TextCategory  # noqa: PLC0415
+
+    try:
+        response = cs_client.analyze_text(
+            AnalyzeTextOptions(
+                text=text[:10_000],
+                categories=[
+                    TextCategory.HATE,
+                    TextCategory.SELF_HARM,
+                    TextCategory.SEXUAL,
+                    TextCategory.VIOLENCE,
+                ],
+            )
+        )
+        for result in response.categories_analysis:
+            if result.severity >= _CONTENT_SAFETY_THRESHOLD:
+                reason = f"{result.category} (severity={result.severity})"
+                logger.warning(
+                    "content_safety_flag user=%s category=%s severity=%d",
+                    user_id, result.category, result.severity,
+                )
+                return False, reason
+        return True, ""
+
+    except Exception:
+        # Fail open with a warning so a transient CS outage doesn't
+        # break voice sessions entirely — log for investigation.
+        logger.exception(
+            "Content Safety check failed for user=%s — allowing through", user_id
+        )
+        return True, ""
+
+
+async def _get_openai_bearer_token() -> str:
+    """Acquire a short-lived bearer token for Azure OpenAI via managed identity."""
     async with AsyncDefaultAzureCredential() as credential:
         token = await credential.get_token("https://cognitiveservices.azure.com/.default")
         return token.token
@@ -429,17 +503,10 @@ async def _get_openai_bearer_token() -> str:
 
 @app.websocket("/ws/realtime")
 async def realtime_voice(websocket: WebSocket) -> None:
-    """Relay audio between browser client and Azure OpenAI GPT Realtime API.
-
-    Side effects:
-        - Opens and tears down a WebSocket to Azure OpenAI per session.
-        - Logs transcript events and voice session duration to stdout
-          (captured by Container Apps → Log Analytics).
-        - TODO: route transcripts through Azure AI Services Content Safety.
-    """
+    """Relay audio between browser client and Azure OpenAI GPT Realtime API."""
     await websocket.accept()
 
-    # ---- Auth: first message must be {"type":"auth","token":"Bearer <jwt>"} --
+    # ── Auth: first message must be {"type":"auth","token":"Bearer <jwt>"} ──
     try:
         auth_frame = await asyncio.wait_for(websocket.receive_json(), timeout=10.0)
     except asyncio.TimeoutError:
@@ -467,8 +534,7 @@ async def realtime_voice(websocket: WebSocket) -> None:
 
     logger.info("voice_session_start user=%s", user_id)
 
-    # Local dev stub — echo audio events so the UI can be exercised without
-    # a real Azure OpenAI Realtime connection or deployed infrastructure.
+    # ── LOCAL_DEV stub ───────────────────────────────────────────────────────
     if _LOCAL_DEV:
         await websocket.send_json({"type": "ready", "userId": user_id})
         try:
@@ -477,7 +543,11 @@ async def realtime_voice(websocket: WebSocket) -> None:
                 if event.get("type") == "input_audio_buffer.commit":
                     await websocket.send_text(json.dumps({
                         "type": "response.audio_transcript.done",
-                        "transcript": "[Local dev mode \u2014 voice relay disabled. Set deployVoice=true and point AZURE_OPENAI_ENDPOINT at a real deployment to enable.]",
+                        "transcript": (
+                            "[Local dev mode — voice relay disabled. "
+                            "Set deployVoice=true and point AZURE_OPENAI_ENDPOINT "
+                            "at a real deployment to enable.]"
+                        ),
                     }))
         except WebSocketDisconnect:
             pass
@@ -485,7 +555,7 @@ async def realtime_voice(websocket: WebSocket) -> None:
             logger.info("voice_session_end user=%s duration_s=0 (local-dev)", user_id)
         return
 
-    # ---- Connect to Azure OpenAI Realtime API via WebSocket ----------------
+    # ── Connect to Azure OpenAI Realtime API ─────────────────────────────────
     endpoint = os.environ["AZURE_OPENAI_ENDPOINT"].rstrip("/")
     host = endpoint.replace("https://", "")
     realtime_url = (
@@ -529,16 +599,16 @@ async def realtime_voice(websocket: WebSocket) -> None:
 
             await websocket.send_json({"type": "ready", "userId": user_id})
 
+            # ── Relay: client → OpenAI ───────────────────────────────────────
             async def _client_to_openai() -> None:
-                """Forward all client frames to Azure OpenAI."""
                 try:
                     async for frame in websocket.iter_text():
                         await openai_ws.send(frame)
                 except WebSocketDisconnect:
                     pass
 
+            # ── Relay: OpenAI → client (with Content Safety check) ───────────
             async def _openai_to_client() -> None:
-                """Forward Azure OpenAI events to client; log transcripts."""
                 try:
                     async for raw in openai_ws:
                         try:
@@ -549,14 +619,37 @@ async def realtime_voice(websocket: WebSocket) -> None:
 
                         if event.get("type") == "response.audio_transcript.done":
                             transcript = event.get("transcript", "")
-                            # TODO (P0): call Azure AI Services Content Safety on transcript
-                            # before forwarding — see docs/03-responsible-ai.md
-                            logger.info(
-                                "voice_transcript user=%s chars=%d",
-                                user_id, len(transcript),
+
+                            # ── Content Safety check (was TODO P0) ──────────
+                            # Run synchronous SDK call in a thread to avoid
+                            # blocking the event loop.
+                            is_safe, reason = await asyncio.to_thread(
+                                _check_content_safety, transcript, user_id
                             )
 
+                            if not is_safe:
+                                logger.warning(
+                                    "voice_transcript_blocked user=%s reason=%s chars=%d",
+                                    user_id, reason, len(transcript),
+                                )
+                                # Replace flagged content with safe fallback
+                                safe_event = {
+                                    **event,
+                                    "transcript": _CONTENT_SAFETY_FALLBACK,
+                                    "_moderated": True,
+                                }
+                                await websocket.send_text(json.dumps(safe_event))
+                                continue  # Don't forward the original event
+
+                            # Log transcript metadata only (not raw content)
+                            logger.info(
+                                "voice_transcript user=%s chars=%d safe=True",
+                                user_id, len(transcript),
+                            )
+                            # ────────────────────────────────────────────────
+
                         await websocket.send_text(raw)
+
                 except websockets.exceptions.ConnectionClosed:
                     pass
 

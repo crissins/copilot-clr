@@ -1,13 +1,11 @@
-# ASGI Runtime — Container Apps (replaces azure-functions)
+# ASGI Runtime — Container Apps
 fastapi
 uvicorn[standard]
+python-multipart
 websockets
 
 # Azure Runtime
 azure-identity
-
-# azure-functions retained for local reference only — not used in Container App
-# azure-functions
 
 # Azure AI Agent Framework
 azure-ai-projects
@@ -21,7 +19,29 @@ azure-servicebus
 # Azure AI Services
 azure-ai-contentsafety
 azure-search-documents
+azure-cognitiveservices-speech
+
+# Azure Document Intelligence + Computer Vision
+azure-ai-documentintelligence
+azure-ai-vision-imageanalysis
+
+# Azure Communication Services (email + SMS reminders)
+azure-communication-email
+azure-communication-sms
+
+# HTTP client for Video Indexer REST API
+requests
+
+# OpenTelemetry — App Insights SDK instrumentation
+azure-monitor-opentelemetry
+opentelemetry-instrumentation-fastapi
+
+# Text analysis
+textstat
 
 # Auth
 PyJWT
 cryptography
+
+# PDF parsing
+pypdf2
