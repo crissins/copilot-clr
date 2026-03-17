@@ -1,5 +1,5 @@
 {
-  "name": "azure-chat-app",
+  "name": "cognitiveclear",
   "private": true,
   "version": "1.0.0",
   "type": "module",
@@ -11,6 +11,8 @@
   "dependencies": {
     "@azure/msal-browser": "^3.6.0",
     "@azure/msal-react": "^2.0.0",
+    "@fluentui/react-components": "^9.54.0",
+    "@fluentui/react-icons": "^2.0.245",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
     "react-markdown": "^9.0.1"

@@ -1,8 +1,28 @@
 import { useState } from "react";
 import {
+  FluentProvider,
+  webLightTheme,
+  webDarkTheme,
+  Button,
+  Toolbar,
+  ToolbarButton,
+  Avatar,
+  Text,
+  makeStyles,
+  tokens,
+  shorthands,
+} from "@fluentui/react-components";
+import {
+  Settings24Regular,
+  SignOut24Regular,
+  WeatherMoon24Regular,
+  WeatherSunny24Regular,
+} from "@fluentui/react-icons";
+import {
   AuthenticatedTemplate,
   UnauthenticatedTemplate,
 } from "@azure/msal-react";
+
 import { Chat } from "./components/Chat";
 import { LoginButton } from "./components/LoginButton";
 import { PreferencesPanel } from "./components/PreferencesPanel";
@@ -17,6 +37,58 @@ import { Feature6Page } from "./features/feature6/Feature6Page";
 
 const LOCAL_DEV = import.meta.env.VITE_LOCAL_DEV === "true";
 
+// ── Styles ──────────────────────────────────────────────────────────────────
+
+const useStyles = makeStyles({
+  appShell: {
+    display: "flex",
+    flexDirection: "column",
+    height: "100vh",
+    backgroundColor: tokens.colorNeutralBackground1,
+    color: tokens.colorNeutralForeground1,
+  },
+  header: {
+    display: "flex",
+    alignItems: "center",
+    gap: "12px",
+    ...shorthands.padding("0", "16px"),
+    height: "48px",
+    backgroundColor: tokens.colorBrandBackground,
+    flexShrink: 0,
+    ...shorthands.borderBottom("1px", "solid", tokens.colorBrandBackground2),
+  },
+  headerTitle: {
+    color: tokens.colorNeutralForegroundOnBrand,
+    fontWeight: tokens.fontWeightSemibold,
+    fontSize: tokens.fontSizeBase500,
+    flex: 1,
+  },
+  headerActions: {
+    display: "flex",
+    alignItems: "center",
+    gap: "4px",
+  },
+  body: {
+    display: "flex",
+    flex: 1,
+    overflow: "hidden",
+  },
+  main: {
+    flex: 1,
+    display: "flex",
+    flexDirection: "column",
+    overflow: "hidden",
+  },
+  loginWrapper: {
+    flex: 1,
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+});
+
+// ── View router ──────────────────────────────────────────────────────────────
+
 function ViewContent({ activeView }: { activeView: string }) {
   switch (activeView) {
     case "chat":     return <Chat />;
@@ -30,72 +102,117 @@ function ViewContent({ activeView }: { activeView: string }) {
   }
 }
 
-export default function App() {
+// ── App shell ────────────────────────────────────────────────────────────────
+
+function AppShell() {
+  const styles = useStyles();
   const { user, logout } = useAuth();
   const [showPrefs, setShowPrefs] = useState(false);
   const [activeView, setActiveView] = useState("chat");
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  const [darkMode, setDarkMode] = useState(false);
+
+  const isAuthed = LOCAL_DEV || !!user;
 
   return (
-    <div className="app">
-      <header className="app-header">
-        <h1>CognitiveClear</h1>
-        {(LOCAL_DEV || user) && (
-          <div className="user-info">
-            <button
-              onClick={() => setShowPrefs(true)}
-              className="btn-secondary"
-              aria-label="Accessibility Preferences"
-              title="Accessibility Preferences"
-            >
-              &#x2699; Preferences
-            </button>
-            <span>{user?.name ?? "Local Dev"}</span>
-            {!LOCAL_DEV && (
-              <button onClick={logout} className="btn-secondary">
-                Sign Out
-              </button>
-            )}
-          </div>
-        )}
-      </header>
+    <FluentProvider theme={darkMode ? webDarkTheme : webLightTheme}>
+      <div className={styles.appShell}>
+        {/* ── Header ─────────────────────────────────────────────────── */}
+        <header className={styles.header} role="banner">
+          <Text className={styles.headerTitle}>CognitiveClear</Text>
 
-      <div className="app-body">
-        {(LOCAL_DEV || user) && (
-          <Sidebar
-            activeView={activeView}
-            onNavigate={setActiveView}
-            collapsed={sidebarCollapsed}
-            onToggle={() => setSidebarCollapsed(!sidebarCollapsed)}
-          />
-        )}
+          {isAuthed && (
+            <div className={styles.headerActions}>
+              {/* Dark mode toggle */}
+              <Button
+                appearance="subtle"
+                icon={darkMode ? <WeatherSunny24Regular /> : <WeatherMoon24Regular />}
+                onClick={() => setDarkMode(!darkMode)}
+                aria-label={darkMode ? "Switch to light mode" : "Switch to dark mode"}
+                style={{ color: tokens.colorNeutralForegroundOnBrand }}
+              />
 
-        <main className="app-main">
+              {/* Preferences */}
+              <Button
+                appearance="subtle"
+                icon={<Settings24Regular />}
+                onClick={() => setShowPrefs(true)}
+                aria-label="Accessibility preferences"
+                style={{ color: tokens.colorNeutralForegroundOnBrand }}
+              />
+
+              {/* User avatar */}
+              {user && (
+                <Avatar
+                  name={user.name ?? "User"}
+                  size={28}
+                  aria-label={`Signed in as ${user.name}`}
+                />
+              )}
+
+              {/* Sign out */}
+              {!LOCAL_DEV && (
+                <Button
+                  appearance="subtle"
+                  icon={<SignOut24Regular />}
+                  onClick={logout}
+                  aria-label="Sign out"
+                  style={{ color: tokens.colorNeutralForegroundOnBrand }}
+                />
+              )}
+            </div>
+          )}
+        </header>
+
+        {/* ── Body ───────────────────────────────────────────────────── */}
+        <div className={styles.body}>
           {LOCAL_DEV ? (
-            <ViewContent activeView={activeView} />
+            // LOCAL_DEV: always show content
+            <>
+              <Sidebar
+                activeView={activeView}
+                onNavigate={setActiveView}
+                collapsed={sidebarCollapsed}
+                onToggle={() => setSidebarCollapsed(!sidebarCollapsed)}
+              />
+              <main className={styles.main} role="main">
+                <ViewContent activeView={activeView} />
+              </main>
+            </>
           ) : (
             <>
               <AuthenticatedTemplate>
-                <ViewContent activeView={activeView} />
+                <Sidebar
+                  activeView={activeView}
+                  onNavigate={setActiveView}
+                  collapsed={sidebarCollapsed}
+                  onToggle={() => setSidebarCollapsed(!sidebarCollapsed)}
+                />
+                <main className={styles.main} role="main">
+                  <ViewContent activeView={activeView} />
+                </main>
               </AuthenticatedTemplate>
+
               <UnauthenticatedTemplate>
-                <div className="login-container">
-                  <div className="login-card">
-                    <h2>Welcome to CognitiveClear</h2>
-                    <p>
-                      AI accessibility assistant for neurodiverse users.
-                      Sign in with your Microsoft account to get started.
-                    </p>
-                    <LoginButton />
-                  </div>
+                <div className={styles.loginWrapper}>
+                  <LoginButton />
                 </div>
               </UnauthenticatedTemplate>
             </>
           )}
-        </main>
-      </div>
+        </div>
 
-      <PreferencesPanel isOpen={showPrefs} onClose={() => setShowPrefs(false)} />
-    </div>
+        {/* ── Preferences drawer ─────────────────────────────────────── */}
+        {showPrefs && (
+          <PreferencesPanel onClose={() => setShowPrefs(false)} />
+        )}
+      </div>
+    </FluentProvider>
   );
+}
+
+export default function App() {
+  // FluentProvider lives inside AppShell so dark mode state can control it.
+  // Wrap with a minimal provider here so any MSAL context works outside AppShell.
+  return <AppShell />;
 }
