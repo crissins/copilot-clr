@@ -16,7 +16,7 @@ WebSocket Endpoint:
                                     VAD: semantic_vad (natural speech detection)
 
 Changes vs original:
-  - _VOICE_INSTRUCTIONS updated to CognitiveClear calm/supportive persona
+  - _VOICE_INSTRUCTIONS updated to Copilot CLR calm/supportive persona
   - Content Safety check integrated into _openai_to_client (was TODO P0)
   - _build_content_safety_client / _check_content_safety helpers added
 """
@@ -47,7 +47,7 @@ logger = logging.getLogger(__name__)
 # and the realtime WebSocket endpoint stubs out the OpenAI connection.
 _LOCAL_DEV = os.environ.get("LOCAL_DEV", "").lower() in ("1", "true", "yes")
 
-app = FastAPI(title="CognitiveClear API", version="1.0.0")
+app = FastAPI(title="Copilot CLR API", version="1.0.0")
 
 # ---------------------------------------------------------------------------
 # CORS
@@ -399,9 +399,9 @@ def health() -> JSONResponse:
 #   9. On disconnect from either side — both connections are torn down cleanly
 # ============================================================================
 
-# Updated to CognitiveClear calm/supportive persona (Responsible AI requirement)
+# Updated to Copilot CLR calm/supportive persona (Responsible AI requirement)
 _VOICE_INSTRUCTIONS = (
-    "You are CognitiveClear — a calm, warm, and patient voice assistant designed "
+    "You are Copilot CLR — a calm, warm, and patient voice assistant designed "
     "for people who find complex information challenging to process, including those "
     "with ADHD, autism, or dyslexia. "
     "Speak in short, clear sentences. Pause naturally between steps. "

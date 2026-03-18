@@ -24,7 +24,7 @@ PROJECT_NAME="chatapp"
 RESOURCE_GROUP="rg-${PROJECT_NAME}-dev"
 
 echo "=========================================="
-echo "  CognitiveClear — Dev Deploy (API Only)"
+echo "  Copilot CLR — Dev Deploy (API Only)"
 echo "  No compute — backend + frontend run locally"
 echo "=========================================="
 echo "  Location:    ${LOCATION}"

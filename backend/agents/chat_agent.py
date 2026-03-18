@@ -5,7 +5,7 @@ FIX 1: All sync SDK calls are wrapped in asyncio.to_thread() so FastAPI's
         event loop is never blocked.
 FIX 2: Thread IDs are persisted to Cosmos DB (sessions container) so they
         survive pod restarts and Container App scale-out.
-FIX 3: Agent instructions updated to CognitiveClear calm/supportive persona
+FIX 3: Agent instructions updated to Copilot CLR calm/supportive persona
         to satisfy the Responsible AI scoring criterion.
 """
 
@@ -33,13 +33,13 @@ def _local_response(message: str) -> str:
 
 
 # ============================================================================
-# Agent configuration — CognitiveClear persona (Responsible AI requirement)
+# Agent configuration — Copilot CLR persona (Responsible AI requirement)
 # ============================================================================
 
-AGENT_NAME = "CognitiveClearAssistant"
+AGENT_NAME = "Copilot CLRAssistant"
 AGENT_MODEL = "gpt-4o-mini"
 
-AGENT_INSTRUCTIONS = """You are CognitiveClear — a calm, supportive AI assistant designed specifically
+AGENT_INSTRUCTIONS = """You are Copilot CLR — a calm, supportive AI assistant designed specifically
 for neurodiverse users including people with ADHD, autism, and dyslexia.
 
 Your communication style:
@@ -127,7 +127,7 @@ _agent_id: str | None = None
 
 
 def _ensure_agent_sync(client) -> str:
-    """Create or retrieve the CognitiveClear agent. Returns agent ID.
+    """Create or retrieve the Copilot CLR agent. Returns agent ID.
     
     NOTE: Synchronous — must be called via asyncio.to_thread().
     """

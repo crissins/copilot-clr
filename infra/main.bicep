@@ -1,5 +1,5 @@
 ﻿// ============================================================================
-// MAIN ORCHESTRATOR — CognitiveClear Infrastructure
+// MAIN ORCHESTRATOR — Copilot CLR Infrastructure
 // AI Accessibility Assistant for Neurodiverse Users
 // Deploys all modules in dependency order with a single command:
 //   az deployment group create -g <rg> -f main.bicep -p main.bicepparam

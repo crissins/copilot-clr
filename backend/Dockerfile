@@ -1,5 +1,5 @@
 ﻿# ============================================================================
-# CognitiveClear API — Azure Container Apps
+# Copilot CLR API — Azure Container Apps
 # Python 3.11 slim, uvicorn ASGI server
 # Includes system deps for Azure Speech SDK (libssl, libasound)
 # ============================================================================
