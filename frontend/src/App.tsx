@@ -119,7 +119,7 @@ function AppShell() {
       <div className={styles.appShell}>
         {/* ── Header ─────────────────────────────────────────────────── */}
         <header className={styles.header} role="banner">
-          <Text className={styles.headerTitle}>CognitiveClear</Text>
+          <Text className={styles.headerTitle}>Copilot CLR</Text>
 
           {isAuthed && (
             <div className={styles.headerActions}>

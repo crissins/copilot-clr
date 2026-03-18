@@ -127,7 +127,7 @@ function MessageBubble({ msg, sessionId }: { msg: Message; sessionId: string | n
         icon={isUser ? <Person24Regular /> : <BotSparkle24Regular />}
         color={isUser ? "dark-red" : "brand"}
         size={32}
-        aria-label={isUser ? "You" : "CognitiveClear AI"}
+        aria-label={isUser ? "You" : "Copilot CLR AI"}
       />
 
       <div className={styles.content}>
@@ -159,7 +159,7 @@ function MessageBubble({ msg, sessionId }: { msg: Message; sessionId: string | n
 
               <div className={styles.actions}>
                 <TTSButton text={msg.content} />
-                <ImmersiveReaderButton title="CognitiveClear Response" text={msg.content} />
+                <ImmersiveReaderButton title="Copilot CLR Response" text={msg.content} />
                 <ReportButton messageId={msg.id} sessionId={sessionId ?? ""} />
               </div>
             </>

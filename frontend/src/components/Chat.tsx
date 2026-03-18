@@ -191,7 +191,7 @@ export function Chat() {
       <div className={styles.messageArea} role="log" aria-live="polite" aria-label="Chat messages">
         {isEmpty ? (
           <div className={styles.welcome}>
-            <div className={styles.welcomeTitle}>Welcome to CognitiveClear</div>
+            <div className={styles.welcomeTitle}>Welcome to Copilot CLR</div>
             <div className={styles.welcomeBody}>
               I help reduce cognitive load by breaking down complex tasks,
               simplifying documents, and adapting to your accessibility
