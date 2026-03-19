@@ -9,10 +9,10 @@
 //   Low-cost:     main.lowcost.bicepparam  — same 18 services, reduced capacity (~$6-8/mo)
 //   Development:  main.dev.bicepparam      — API services only, no compute (~$0-2/mo)
 //
-// Services deployed (18 in prod/low-cost, 14 in dev — no ACR, Container Apps, SWA, Service Bus):
+// Services deployed (18 in prod/low-cost, 14 in dev — no ACR, Container Apps, App Service, Service Bus):
 //   1.  Storage Account           10. Container Registry (Basic)*
 //   2.  Key Vault                 11. Container Apps (Consumption)*
-//   3.  Log Analytics + AppInsights 12. Static Web App (Free)*
+//   3.  Log Analytics + AppInsights 12. App Service (Free F1)*
 //   4.  Azure OpenAI              13. Cosmos DB (Serverless)
 //   5.  AI Foundry Hub            14. RBAC Role Assignments
 //   6.  AI Foundry Project        15. Azure Speech Service
@@ -20,6 +20,11 @@
 //   8.  AI Services (Content Safety) 17. Entra ID (external)
 //   9.  Service Bus (Basic)*      18. Managed Identity (system-assigned)
 //   * Skipped when localDevMode=true (dev tier)
+//
+// NOTE: If Cognitive Services deployment fails with FlagMustBeSetForRestore,
+// a soft-deleted account exists. Purge it first:
+//   az cognitiveservices account purge \
+//     --name <account-name> --resource-group <rg> --location <location>
 // ============================================================================
 
 @description('Primary Azure region for all resources')
@@ -58,11 +63,12 @@ param containerMemory string = '1Gi'
 @description('Log Analytics and App Insights retention in days. Set 7 in low-cost mode.')
 param logRetentionDays int = 30
 
-@description('Local development mode — skip compute/hosting resources (Container Apps, ACR, Static Web App, Service Bus). Backend and frontend run locally. Use with main.dev.bicepparam.')
+@description('Local development mode — skip compute/hosting resources (Container Apps, ACR, App Service, Service Bus). Backend and frontend run locally. Use with main.dev.bicepparam.')
 param localDevMode bool = false
 
-// Generate a unique token for resource naming to avoid conflicts
-var resourceToken = substring(toLower(uniqueString(subscription().id, resourceGroup().id, projectName, environmentName)), 0, 3)
+// FIX BCP334: resourceToken expanded to 5 chars — Container Registry requires
+// a minimum name length of 5. Longer token also reduces naming collision risk.
+var resourceToken = substring(toLower(uniqueString(subscription().id, resourceGroup().id, projectName, environmentName)), 0, 5)
 
 var tags = {
   project: projectName
@@ -146,7 +152,7 @@ module speech 'modules/speech.bicep' = {
     location: location
     resourceToken: resourceToken
     tags: tags
-    skuName: 'F0' // Free tier: 5K chars TTS, 5hr STT/month
+    skuName: 'S0' // Use S0 for paid tier to avoid free-account limit
   }
 }
 
@@ -165,13 +171,25 @@ module documentIntelligence 'modules/document-intelligence.bicep' = {
     location: location
     resourceToken: resourceToken
     tags: tags
-    skuName: 'F0' // Free tier: 500 pages/month
+    skuName: 'S0' // Use S0 to avoid free-account limit
   }
 }
 
 // Container Registry — skipped in localDevMode (no containers in local development)
 module containerRegistry 'modules/container-registry.bicep' = if (!localDevMode) {
   name: 'container-registry-deployment'
+  params: {
+    location: location
+    resourceToken: resourceToken
+    tags: tags
+  }
+}
+
+// App Service (Free F1) — replaces Static Web App.
+// F1 is available in all regions including eastus.
+// Skipped in localDevMode — frontend runs locally via `npm run dev`.
+module appService 'modules/appservice.bicep' = if (!localDevMode) {
+  name: 'appservice-deployment'
   params: {
     location: location
     resourceToken: resourceToken
@@ -225,15 +243,6 @@ module aiFoundryProject 'modules/ai-foundry-project.bicep' = {
 // Phase 3: Compute (depends on foundation + AI layer + container registry)
 // ============================================================================
 
-module staticWebApp 'modules/staticwebapp.bicep' = if (!localDevMode) {
-  name: 'staticwebapp-deployment'
-  params: {
-    location: location
-    resourceToken: resourceToken
-    tags: tags
-  }
-}
-
 // Container Apps replaces Azure Functions as the API compute layer.
 // Reasons: native WebSocket support for Azure OpenAI GPT Realtime API voice
 // sessions (up to 30 min), scale-to-zero on Consumption plan ($0 idle cost),
@@ -244,6 +253,10 @@ module containerApps 'modules/container-apps.bicep' = if (!localDevMode) {
     location: location
     resourceToken: resourceToken
     tags: tags
+    // FIX BCP318: All conditional module outputs below are guarded by the same
+    // !localDevMode condition as this module itself, so they are guaranteed
+    // non-null at runtime. #disable-next-line suppresses the false-positive warning.
+    #disable-next-line BCP318
     registryLoginServer: containerRegistry.outputs.registryLoginServer
     logAnalyticsWorkspaceId: monitoring.outputs.logAnalyticsId
     appInsightsConnectionString: monitoring.outputs.appInsightsConnectionString
@@ -251,11 +264,13 @@ module containerApps 'modules/container-apps.bicep' = if (!localDevMode) {
     openAiEndpoint: openAi.outputs.openAiEndpoint
     searchEndpoint: search.outputs.searchEndpoint
     aiServicesEndpoint: aiServices.outputs.aiServicesEndpoint
+    #disable-next-line BCP318
     serviceBusNamespace: '${serviceBus.outputs.serviceBusName}.servicebus.windows.net'
     keyVaultUri: keyVault.outputs.keyVaultUri
     aiProjectName: aiFoundryProject.outputs.projectName
     aiFoundryEndpoint: aiFoundryProject.outputs.projectDiscoveryUrl
-    staticWebAppHostname: staticWebApp.outputs.staticWebAppHostname
+    #disable-next-line BCP318
+    staticWebAppHostname: appService.outputs.appServiceHostname
     entraClientId: entraClientId
     containerCpu: containerCpu
     containerMemory: containerMemory
@@ -274,7 +289,9 @@ module security 'modules/security.bicep' = {
   name: 'security-deployment'
   params: {
     localDevMode: localDevMode
+    #disable-next-line BCP318
     containerAppPrincipalId: localDevMode ? '' : containerApps.outputs.containerAppPrincipalId
+    #disable-next-line BCP318
     containerRegistryName: localDevMode ? '' : containerRegistry.outputs.registryName
     hubPrincipalId: aiFoundryHub.outputs.hubPrincipalId
     projectPrincipalId: aiFoundryProject.outputs.projectPrincipalId
@@ -286,6 +303,7 @@ module security 'modules/security.bicep' = {
     openAiName: openAi.outputs.openAiName
     searchName: search.outputs.searchName
     aiServicesName: aiServices.outputs.aiServicesName
+    #disable-next-line BCP318
     serviceBusName: localDevMode ? '' : serviceBus.outputs.serviceBusName
     aiProjectName: aiFoundryProject.outputs.projectName
   }
@@ -299,11 +317,16 @@ output RESOURCE_GROUP string = resourceGroup().name
 output AZURE_LOCATION string = location
 
 // Compute (empty in localDevMode — backend and frontend run locally)
+#disable-next-line BCP318
 output CONTAINER_APP_NAME string = localDevMode ? '' : containerApps.outputs.containerAppName
+#disable-next-line BCP318
 output CONTAINER_APP_HOSTNAME string = localDevMode ? '' : containerApps.outputs.containerAppHostname
+#disable-next-line BCP318
 output CONTAINER_REGISTRY_LOGIN_SERVER string = localDevMode ? '' : containerRegistry.outputs.registryLoginServer
-output STATIC_WEB_APP_NAME string = localDevMode ? '' : staticWebApp.outputs.staticWebAppName
-output STATIC_WEB_APP_HOSTNAME string = localDevMode ? '' : staticWebApp.outputs.staticWebAppHostname
+#disable-next-line BCP318
+output APP_SERVICE_NAME string = localDevMode ? '' : appService.outputs.appServiceName
+#disable-next-line BCP318
+output APP_SERVICE_HOSTNAME string = localDevMode ? '' : appService.outputs.appServiceHostname
 
 // AI
 output AZURE_OPENAI_ENDPOINT string = openAi.outputs.openAiEndpoint

@@ -9,12 +9,13 @@
 param location string
 
 @description('Unique suffix for resource naming')
+@minLength(5)
 param resourceToken string
 
 @description('Tags to apply')
 param tags object = {}
 
-var acrName = 'acr${resourceToken}'
+var acrName = 'container-registry${resourceToken}'
 
 resource containerRegistry 'Microsoft.ContainerRegistry/registries@2023-07-01' = {
   name: acrName
