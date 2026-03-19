@@ -19,11 +19,11 @@ resource appServicePlan 'Microsoft.Web/serverfarms@2023-01-01' = {
   location: location
   tags: tags
   sku: {
-    name: 'F1'   // Free: 60 CPU-min/day, 1 GB RAM, shared infrastructure
-    tier: 'Free'
+    name: 'S1'   // Standard Linux: ~$54/mo
+    tier: 'Standard'
   }
   properties: {
-    reserved: false // Windows host; set true for Linux
+    reserved: true // Linux host — uses separate VM quota pool from Windows
   }
 }
 

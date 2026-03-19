@@ -1,4 +1,4 @@
-﻿// ============================================================================
+// ============================================================================
 // Azure Container Registry (Basic)
 // Used by: Container Apps — stores the backend container image
 // Tier: Basic (~$5/month) — sufficient for dev/hackathon
@@ -15,7 +15,7 @@ param resourceToken string
 @description('Tags to apply')
 param tags object = {}
 
-var acrName = 'container-registry${resourceToken}'
+var acrName = 'containerregistry${resourceToken}'
 
 resource containerRegistry 'Microsoft.ContainerRegistry/registries@2023-07-01' = {
   name: acrName

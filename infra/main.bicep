@@ -1,4 +1,4 @@
-﻿// ============================================================================
+// ============================================================================
 // MAIN ORCHESTRATOR — Copilot CLR Infrastructure
 // AI Accessibility Assistant for Neurodiverse Users
 // Deploys all modules in dependency order with a single command:
@@ -185,13 +185,13 @@ module containerRegistry 'modules/container-registry.bicep' = if (!localDevMode)
   }
 }
 
-// App Service (Free F1) — replaces Static Web App.
-// F1 is available in all regions including eastus.
+// Static Web App (Free) — frontend hosting.
+// Free tier does not use any VM quota.
 // Skipped in localDevMode — frontend runs locally via `npm run dev`.
-module appService 'modules/appservice.bicep' = if (!localDevMode) {
-  name: 'appservice-deployment'
+module staticWebApp 'modules/staticwebapp.bicep' = if (!localDevMode) {
+  name: 'staticwebapp-deployment'
   params: {
-    location: location
+    location: 'eastus2' // Static Web Apps Free tier requires specific regions
     resourceToken: resourceToken
     tags: tags
   }
@@ -270,7 +270,7 @@ module containerApps 'modules/container-apps.bicep' = if (!localDevMode) {
     aiProjectName: aiFoundryProject.outputs.projectName
     aiFoundryEndpoint: aiFoundryProject.outputs.projectDiscoveryUrl
     #disable-next-line BCP318
-    staticWebAppHostname: appService.outputs.appServiceHostname
+    staticWebAppHostname: staticWebApp.outputs.staticWebAppHostname
     entraClientId: entraClientId
     containerCpu: containerCpu
     containerMemory: containerMemory
@@ -324,9 +324,9 @@ output CONTAINER_APP_HOSTNAME string = localDevMode ? '' : containerApps.outputs
 #disable-next-line BCP318
 output CONTAINER_REGISTRY_LOGIN_SERVER string = localDevMode ? '' : containerRegistry.outputs.registryLoginServer
 #disable-next-line BCP318
-output APP_SERVICE_NAME string = localDevMode ? '' : appService.outputs.appServiceName
+output STATIC_WEB_APP_NAME string = localDevMode ? '' : staticWebApp.outputs.staticWebAppName
 #disable-next-line BCP318
-output APP_SERVICE_HOSTNAME string = localDevMode ? '' : appService.outputs.appServiceHostname
+output STATIC_WEB_APP_HOSTNAME string = localDevMode ? '' : staticWebApp.outputs.staticWebAppHostname
 
 // AI
 output AZURE_OPENAI_ENDPOINT string = openAi.outputs.openAiEndpoint

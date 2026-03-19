@@ -58,6 +58,7 @@ var roles = {
   cosmosDbDataContributor: 'b24988ac-6180-42a0-ab88-20f7382dd24c' // Contributor (for serverless, data plane RBAC not yet GA)
   storageBlobDataContributor: 'ba92f5b4-2d11-453d-a403-e96b0029c9fe'
   keyVaultSecretsUser: '4633458b-17de-408a-b874-0445c86b69e6'
+  azureAIDeveloper: '64702f94-c441-49e6-a78b-ef80e0188fee' // Needed for Project to connect to OpenAI
   cognitiveServicesOpenAIUser: '5e0bd9bd-7b93-4f28-af87-19fc36ad61bd'
   cognitiveServicesUser: 'a97b65f3-24c7-4388-baec-2e87135dc908'
   searchIndexDataContributor: '8ebe5a00-799e-43f5-93ac-243d3dce84a7'
@@ -285,11 +286,11 @@ resource hubOpenAiRole 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
 // AI Foundry Project → OpenAI (OpenAI User)
 // ============================================================================
 resource projectOpenAiRole 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
-  name: guid(openAi.id, projectPrincipalId, roles.cognitiveServicesOpenAIUser)
+  name: guid(openAi.id, projectPrincipalId, roles.azureAIDeveloper)
   scope: openAi
   properties: {
     principalId: projectPrincipalId
-    roleDefinitionId: subscriptionResourceId('Microsoft.Authorization/roleDefinitions', roles.cognitiveServicesOpenAIUser)
+    roleDefinitionId: subscriptionResourceId('Microsoft.Authorization/roleDefinitions', roles.azureAIDeveloper)
     principalType: 'ServicePrincipal'
   }
 }

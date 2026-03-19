@@ -83,7 +83,10 @@ resource realtimeDeployment 'Microsoft.CognitiveServices/accounts/deployments@20
   parent: openAi
   name: 'gpt-4o-mini-realtime-preview'
   dependsOn: [embeddingDeployment]
-  capacity: 6 // 6K tokens per minute (min capacity for realtime preview)
+  sku: {
+    name: 'GlobalStandard'
+    capacity: 6 // 6K tokens per minute (min capacity for realtime preview)
+  }
   properties: {
     model: {
       format: 'OpenAI'
