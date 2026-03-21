@@ -148,20 +148,14 @@ class ApiClient {
     return res.blob();
   }
 
-  async speechRecognize(
-    audioBlob: Blob,
+  async getSpeechToken(
     token: string | null
-  ): Promise<{ text: string; confidence: number; durationMs: number }> {
-    const formData = new FormData();
-    formData.append("audio", audioBlob, "recording.webm");
-    const headers: Record<string, string> = {};
-    if (token) headers["Authorization"] = `Bearer ${token}`;
-    const res = await fetch(`${API_BASE}/api/speech/recognize`, {
+  ): Promise<{ authToken: string; region: string }> {
+    const res = await fetch(`${API_BASE}/api/speech/token`, {
       method: "POST",
-      headers,
-      body: formData,
+      headers: this.getHeaders(token),
     });
-    if (!res.ok) throw new Error(`Speech recognition failed: ${res.status}`);
+    if (!res.ok) throw new Error(`Speech token failed: ${res.status}`);
     return res.json();
   }
 

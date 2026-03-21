@@ -23,7 +23,7 @@ import {
 export interface NavItem {
   id: string;
   label: string;
-  icon: ReactNode;
+  icon: JSX.Element;
 }
 
 const NAV_ITEMS: NavItem[] = [
