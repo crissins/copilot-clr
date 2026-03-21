@@ -66,6 +66,10 @@ param logRetentionDays int = 30
 @description('Local development mode — skip compute/hosting resources (Container Apps, ACR, App Service, Service Bus). Backend and frontend run locally. Use with main.dev.bicepparam.')
 param localDevMode bool = false
 
+@description('Static Web App SKU. Standard enables linked backend (API proxying to Container Apps). Free requires VITE_API_BASE for direct CORS calls.')
+@allowed(['Free', 'Standard'])
+param swaSkuName string = 'Standard'
+
 // FIX BCP334: resourceToken expanded to 5 chars — Container Registry requires
 // a minimum name length of 5. Longer token also reduces naming collision risk.
 var resourceToken = substring(toLower(uniqueString(subscription().id, resourceGroup().id, projectName, environmentName)), 0, 5)
@@ -191,9 +195,10 @@ module containerRegistry 'modules/container-registry.bicep' = if (!localDevMode)
 module staticWebApp 'modules/staticwebapp.bicep' = if (!localDevMode) {
   name: 'staticwebapp-deployment'
   params: {
-    location: 'eastus2' // Static Web Apps Free tier requires specific regions
+    location: 'eastus2'
     resourceToken: resourceToken
     tags: tags
+    skuName: swaSkuName
   }
 }
 
@@ -278,6 +283,19 @@ module containerApps 'modules/container-apps.bicep' = if (!localDevMode) {
     speechRegion: speech.outputs.speechRegion
     irEndpoint: immersiveReader.outputs.irEndpoint
     docIntelEndpoint: documentIntelligence.outputs.docIntelEndpoint
+  }
+}
+
+// Link SWA → Container Apps backend for transparent /api/* proxying.
+// Requires SWA Standard tier. Conditional on both SWA and Container Apps existing.
+module swaLinkedBackend 'modules/swa-linked-backend.bicep' = if (!localDevMode && swaSkuName == 'Standard') {
+  name: 'swa-linked-backend-deployment'
+  params: {
+    #disable-next-line BCP318
+    staticWebAppName: staticWebApp.outputs.staticWebAppName
+    #disable-next-line BCP318
+    containerAppResourceId: containerApps.outputs.containerAppId
+    location: location
   }
 }
 
