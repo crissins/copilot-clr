@@ -34,6 +34,7 @@ import { Feature3Page } from "./features/feature3/Feature3Page";
 import { Feature4Page } from "./features/feature4/Feature4Page";
 import { Feature5Page } from "./features/feature5/Feature5Page";
 import { Feature6Page } from "./features/feature6/Feature6Page";
+import { Feature7Page } from "./features/feature7/Feature7Page";
 
 const LOCAL_DEV = import.meta.env.VITE_LOCAL_DEV === "true";
 
@@ -98,6 +99,7 @@ function ViewContent({ activeView }: { activeView: string }) {
     case "feature4": return <Feature4Page />;
     case "feature5": return <Feature5Page />;
     case "feature6": return <Feature6Page />;
+    case "feature7": return <Feature7Page />;
     default:         return <Chat />;
   }
 }

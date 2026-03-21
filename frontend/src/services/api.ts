@@ -148,6 +148,52 @@ class ApiClient {
     return res.blob();
   }
 
+  async speechRecognize(
+    audioBlob: Blob,
+    token: string | null
+  ): Promise<{ text: string; confidence: number; durationMs: number }> {
+    const formData = new FormData();
+    formData.append("audio", audioBlob, "recording.webm");
+    const headers: Record<string, string> = {};
+    if (token) headers["Authorization"] = `Bearer ${token}`;
+    const res = await fetch(`${API_BASE}/api/speech/recognize`, {
+      method: "POST",
+      headers,
+      body: formData,
+    });
+    if (!res.ok) throw new Error(`Speech recognition failed: ${res.status}`);
+    return res.json();
+  }
+
+  async speechChat(
+    message: string,
+    sessionId: string | null,
+    token: string | null
+  ): Promise<{ sessionId: string; message: { role: string; content: string }; audio_base64: string }> {
+    const res = await fetch(`${API_BASE}/api/speech/chat`, {
+      method: "POST",
+      headers: this.getHeaders(token),
+      body: JSON.stringify({ message, sessionId }),
+    });
+    if (!res.ok) throw new Error(`Speech chat failed: ${res.status}`);
+    return res.json();
+  }
+
+  async speechSynthesize(
+    text: string,
+    token: string | null,
+    style: string = "calm",
+    rate: string = "slow"
+  ): Promise<Blob> {
+    const res = await fetch(`${API_BASE}/api/speech/synthesize`, {
+      method: "POST",
+      headers: this.getHeaders(token),
+      body: JSON.stringify({ text, style, rate }),
+    });
+    if (!res.ok) throw new Error(`Speech synthesis failed: ${res.status}`);
+    return res.blob();
+  }
+
   async getIRToken(token: string | null): Promise<{ token: string; subdomain: string }> {
     const res = await fetch(`${API_BASE}/api/ir-token`, {
       method: "POST",

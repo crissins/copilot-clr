@@ -12,10 +12,6 @@ FIX 3: Agent instructions updated to Copilot CLR calm/supportive persona
 import asyncio
 import logging
 import os
-from typing import TYPE_CHECKING
-
-if TYPE_CHECKING:
-    from azure.ai.projects import AIProjectClient
 
 logger = logging.getLogger(__name__)
 
@@ -26,8 +22,8 @@ logger = logging.getLogger(__name__)
 def _local_response(message: str) -> str:
     """Canned response for LOCAL_DEV mode (no Azure connection required)."""
     return (
-        f"**[Local dev mode]** No AI Foundry project configured. "
-        f"Set `AI_FOUNDRY_ENDPOINT` to connect to Azure.\n\n"
+        f"**[Local dev mode]** No Azure OpenAI endpoint configured. "
+        f"Set `AZURE_OPENAI_ENDPOINT` to connect to Azure.\n\n"
         f"You said: *{message}*"
     )
 
@@ -108,54 +104,54 @@ def _write_thread_id_sync(session_id: str, user_id: str, thread_id: str) -> None
 
 
 # ============================================================================
-# Azure AI Projects client
+# Azure OpenAI Assistants client
 # ============================================================================
 
-def _get_project_client_sync():
-    """Create AI Project client (synchronous — always call via asyncio.to_thread)."""
-    from azure.identity import DefaultAzureCredential  # noqa: PLC0415
-    from azure.ai.projects import AIProjectClient  # noqa: PLC0415
-    return AIProjectClient(
-        endpoint=os.environ.get("AI_FOUNDRY_ENDPOINT", ""),
-        credential=DefaultAzureCredential(),
+def _get_openai_client_sync():
+    """Create AzureOpenAI client (synchronous — always call via asyncio.to_thread)."""
+    from azure.identity import DefaultAzureCredential, get_bearer_token_provider  # noqa: PLC0415
+    from openai import AzureOpenAI  # noqa: PLC0415
+    token_provider = get_bearer_token_provider(
+        DefaultAzureCredential(), "https://cognitiveservices.azure.com/.default"
+    )
+    return AzureOpenAI(
+        azure_endpoint=os.environ.get("AZURE_OPENAI_ENDPOINT", ""),
+        azure_ad_token_provider=token_provider,
+        api_version="2025-03-01-preview",
     )
 
 
 # Agent ID cached in-process for the lifetime of this replica only.
 # Thread IDs are persisted to Cosmos so restarts don't lose session continuity.
-_agent_id: str | None = None
+_assistant_id: str | None = None
 
 
-def _ensure_agent_sync(client) -> str:
-    """Create or retrieve the Copilot CLR agent. Returns agent ID.
+def _ensure_assistant_sync(client) -> str:
+    """Create or retrieve the Copilot CLR assistant. Returns assistant ID.
     
     NOTE: Synchronous — must be called via asyncio.to_thread().
     """
-    global _agent_id
-    if _agent_id:
-        return _agent_id
+    global _assistant_id
+    if _assistant_id:
+        return _assistant_id
 
-    # Check if agent already exists in AI Foundry
-    agents = client.agents.list_agents()
-    for agent in agents.data:
-        if agent.name == AGENT_NAME:
-            _agent_id = agent.id
-            logger.info("Found existing agent: %s", _agent_id)
-            return _agent_id
+    # Check if assistant already exists
+    assistants = client.beta.assistants.list()
+    for assistant in assistants.data:
+        if assistant.name == AGENT_NAME:
+            _assistant_id = assistant.id
+            logger.info("Found existing assistant: %s", _assistant_id)
+            return _assistant_id
 
-    # Create new agent with file_search + code_interpreter + custom tools
-    agent = client.agents.create_agent(
+    # Create new assistant
+    assistant = client.beta.assistants.create(
         model=AGENT_MODEL,
         name=AGENT_NAME,
         instructions=AGENT_INSTRUCTIONS,
-        tools=[
-            {"type": "code_interpreter"},
-            {"type": "file_search"},
-        ],
     )
-    _agent_id = agent.id
-    logger.info("Created new agent: %s", _agent_id)
-    return _agent_id
+    _assistant_id = assistant.id
+    logger.info("Created new assistant: %s", _assistant_id)
+    return _assistant_id
 
 
 def _get_or_create_thread_sync(client, session_id: str, user_id: str) -> str:
@@ -170,44 +166,44 @@ def _get_or_create_thread_sync(client, session_id: str, user_id: str) -> str:
         return thread_id
 
     # Create new thread and persist its ID
-    thread = client.agents.create_thread()
+    thread = client.beta.threads.create()
     thread_id = thread.id
     logger.info("Created thread %s for session %s", thread_id, session_id)
     _write_thread_id_sync(session_id, user_id, thread_id)
     return thread_id
 
 
-def _run_agent_sync(client, agent_id: str, thread_id: str, message: str) -> str:
-    """Add message, run agent, return response text.
+def _run_assistant_sync(client, assistant_id: str, thread_id: str, message: str) -> str:
+    """Add message, run assistant, return response text.
 
     NOTE: Synchronous — must be called via asyncio.to_thread().
     """
     # Add user message
-    client.agents.create_message(
+    client.beta.threads.messages.create(
         thread_id=thread_id,
         role="user",
         content=message,
     )
 
-    # Run the agent (blocks until complete)
-    run = client.agents.create_and_process_run(
+    # Run the assistant and poll until complete
+    run = client.beta.threads.runs.create_and_poll(
         thread_id=thread_id,
-        agent_id=agent_id,
+        assistant_id=assistant_id,
     )
 
     if run.status == "failed":
-        logger.error("Agent run failed: %s", run.last_error)
+        logger.error("Assistant run failed: %s", run.last_error)
         return (
             "I'm sorry, I had trouble processing that. "
             "Let's try a different approach — could you rephrase your question?"
         )
 
     # Extract the latest assistant message
-    messages = client.agents.list_messages(thread_id=thread_id)
+    messages = client.beta.threads.messages.list(thread_id=thread_id, limit=1)
     for msg in messages.data:
-        if msg.role in ("assistant", "agent"):
+        if msg.role == "assistant":
             for block in msg.content:
-                if hasattr(block, "text"):
+                if block.type == "text":
                     return block.text.value
 
     return "I wasn't able to generate a response. Please try again."
@@ -235,16 +231,16 @@ async def get_agent_response(
     Returns:
         The agent's text response.
     """
-    if not os.environ.get("AI_FOUNDRY_ENDPOINT"):
+    if not os.environ.get("AZURE_OPENAI_ENDPOINT"):
         return _local_response(message)
 
     # FIX 1: All sync SDK calls wrapped in asyncio.to_thread()
-    client = await asyncio.to_thread(_get_project_client_sync)
-    agent_id = await asyncio.to_thread(_ensure_agent_sync, client)
+    client = await asyncio.to_thread(_get_openai_client_sync)
+    assistant_id = await asyncio.to_thread(_ensure_assistant_sync, client)
     thread_id = await asyncio.to_thread(
         _get_or_create_thread_sync, client, session_id, user_id
     )
     response = await asyncio.to_thread(
-        _run_agent_sync, client, agent_id, thread_id, message
+        _run_assistant_sync, client, assistant_id, thread_id, message
     )
     return response

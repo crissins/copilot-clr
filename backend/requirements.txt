@@ -8,6 +8,8 @@ websockets
 azure-identity
 
 # Azure AI Agent Framework
+agent-framework-azure-ai==1.0.0rc3
+agent-framework-core==1.0.0rc3
 azure-ai-projects
 azure-ai-inference
 

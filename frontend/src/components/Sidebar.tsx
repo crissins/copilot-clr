@@ -15,6 +15,7 @@ import {
   VideoClip24Regular,
   CalendarClock24Regular,
   PersonVoice24Regular,
+  Record24Regular,
   ChevronLeft24Regular,
   ChevronRight24Regular,
 } from "@fluentui/react-icons";
@@ -33,6 +34,7 @@ const NAV_ITEMS: NavItem[] = [
   { id: "feature4", label: "Media Processing",  icon: <VideoClip24Regular /> },
   { id: "feature5", label: "Task Scheduler",    icon: <CalendarClock24Regular /> },
   { id: "feature6", label: "Accessibility Hub", icon: <PersonVoice24Regular /> },
+  { id: "feature7", label: "Speech Assistant", icon: <Record24Regular /> },
 ];
 
 interface SidebarProps {

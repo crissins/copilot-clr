@@ -29,6 +29,10 @@ import time
 import uuid
 from datetime import datetime, timezone
 
+from dotenv import load_dotenv
+
+load_dotenv()
+
 import websockets
 from azure.cosmos import CosmosClient, ContainerProxy
 from azure.identity import DefaultAzureCredential
@@ -38,6 +42,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
 from agents.chat_agent import get_agent_response
+from agents.speech_agent import get_speech_agent_response, transcribe_audio_for_speech
 from auth.entra import AuthError, validate_token
 
 logging.basicConfig(level=logging.INFO)
@@ -165,6 +170,134 @@ def _get_user_id(authorization: str | None) -> str:
 
     claims = validate_token(authorization[7:], client_id)
     return claims.get("oid", claims.get("sub", "unknown"))
+
+
+# ============================================================================
+# POST /api/speech/recognize — STT via Speech Agent (Feature 7)
+# ============================================================================
+
+@app.post("/api/speech/recognize")
+async def speech_recognize(req: Request) -> JSONResponse:
+    """Transcribe uploaded audio to text via Azure Speech SDK."""
+    try:
+        user_id = _get_user_id(req.headers.get("Authorization"))
+    except AuthError as e:
+        return JSONResponse({"error": str(e)}, status_code=401)
+
+    form = await req.form()
+    audio_file = form.get("audio")
+    if not audio_file:
+        return JSONResponse({"error": "No audio data received."}, status_code=400)
+
+    audio_bytes = await audio_file.read()
+    if len(audio_bytes) > 10 * 1024 * 1024:
+        return JSONResponse({"error": "Audio file too large (max 10 MB)."}, status_code=400)
+
+    result = await transcribe_audio_for_speech(audio_bytes)
+    logger.info("stt_recognized user=%s chars=%d", user_id, len(result.get("text", "")))
+    return JSONResponse(result)
+
+
+# ============================================================================
+# POST /api/speech/synthesize — TTS via Speech Agent (Feature 7)
+# ============================================================================
+
+@app.post("/api/speech/synthesize")
+async def speech_synthesize(req: Request):
+    """Generate TTS audio with calm SSML. Returns MP3 audio bytes."""
+    from fastapi.responses import Response
+    from services.speech import synthesize_speech_sync
+
+    try:
+        user_id = _get_user_id(req.headers.get("Authorization"))
+    except AuthError as e:
+        return JSONResponse({"error": str(e)}, status_code=401)
+
+    try:
+        body = await req.json()
+    except Exception:
+        return JSONResponse({"error": "Invalid JSON"}, status_code=400)
+
+    text = body.get("text", "").strip()
+    if not text:
+        return JSONResponse({"error": "Text is required."}, status_code=400)
+    if len(text) > 5000:
+        return JSONResponse({"error": "Text must be under 5000 characters."}, status_code=400)
+
+    result = await asyncio.to_thread(
+        synthesize_speech_sync,
+        text,
+        body.get("voice", "en-US-JennyNeural"),
+        body.get("style", "calm"),
+        body.get("rate", "slow"),
+    )
+
+    if result.get("local_dev"):
+        return JSONResponse({"message": "TTS requires Azure Speech Service.", "ssml": result.get("ssml", "")})
+
+    audio_bytes = result.get("audio_bytes", b"")
+    if not audio_bytes:
+        return JSONResponse({"error": result.get("error", "Synthesis failed.")}, status_code=502)
+
+    return Response(
+        content=audio_bytes,
+        media_type="audio/mpeg",
+        headers={"X-TTS-Latency-Ms": str(result.get("durationMs", 0))},
+    )
+
+
+# ============================================================================
+# POST /api/speech/chat — Full speech pipeline via Agent Framework (Feature 7)
+# ============================================================================
+
+@app.post("/api/speech/chat")
+async def speech_chat(req: Request) -> JSONResponse:
+    """Send text to the Speech Assistant agent. Returns response + optional audio."""
+    try:
+        user_id = _get_user_id(req.headers.get("Authorization"))
+    except AuthError as e:
+        return JSONResponse({"error": str(e)}, status_code=401)
+
+    try:
+        body = await req.json()
+    except Exception:
+        return JSONResponse({"error": "Invalid JSON"}, status_code=400)
+
+    message = body.get("message", "").strip()
+    session_id = body.get("sessionId", "")
+    if not message:
+        return JSONResponse({"error": "Message is required"}, status_code=400)
+
+    if not session_id:
+        session_id = str(uuid.uuid4())
+
+    start = time.monotonic()
+    try:
+        result = await get_speech_agent_response(
+            message=message,
+            session_id=session_id,
+            user_id=user_id,
+        )
+    except Exception:
+        logger.exception("Speech agent error for session=%s", session_id)
+        result = {
+            "text": "I'm sorry, I had a little trouble with that. Please try again.",
+            "audio_base64": "",
+            "sessionId": session_id,
+        }
+
+    duration_ms = int((time.monotonic() - start) * 1000)
+    logger.info("speech_chat_duration_ms=%d session=%s", duration_ms, session_id)
+
+    return JSONResponse({
+        "sessionId": result.get("sessionId", session_id),
+        "message": {
+            "role": "assistant",
+            "content": result["text"],
+        },
+        "audio_base64": result.get("audio_base64", ""),
+        "meta": {"latencyMs": duration_ms},
+    })
 
 
 # ============================================================================
