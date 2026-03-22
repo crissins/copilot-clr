@@ -1,0 +1,16 @@
+{
+  "location": "eastus2",
+  "sku": {
+    "name": "Free_F1",
+    "capacity": 1
+  },
+  "identity": {
+    "type": "SystemAssigned"
+  },
+  "properties": {
+    "tls": {
+      "clientCertEnabled": false
+    },
+    "publicNetworkAccess": "Enabled"
+  }
+}

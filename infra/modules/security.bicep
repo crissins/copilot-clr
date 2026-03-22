@@ -50,6 +50,9 @@ param speechName string = ''
 @description('Azure Immersive Reader name')
 param irName string = ''
 
+@description('Azure Web PubSub name')
+param webPubSubName string = ''
+
 // ============================================================================
 // Built-in Role Definition IDs
 // https://learn.microsoft.com/en-us/azure/role-based-access-control/built-in-roles
@@ -66,6 +69,7 @@ var roles = {
   serviceBusDataOwner: '090c5cfd-751d-490a-894a-3ce6f1109419'
   azureMLDataScientist: 'f6c7c914-8db3-469d-8ca1-694a8f32e121'
   acrPull: '7f951dda-4ed3-4680-a7ca-43fe172d538d' // AcrPull — Container App image pull via MI
+  webPubSubServiceOwner: '12cf5a90-567b-43ae-8102-96cf46c7d9b4'
 }
 
 // ============================================================================
@@ -113,6 +117,10 @@ resource speechService 'Microsoft.CognitiveServices/accounts@2024-04-01-preview'
 
 resource immersiveReader 'Microsoft.CognitiveServices/accounts@2024-04-01-preview' existing = if (!empty(irName)) {
   name: irName
+}
+
+resource webPubSub 'Microsoft.SignalRService/webPubSub@2024-03-01' existing = if (!empty(webPubSubName)) {
+  name: webPubSubName
 }
 
 // ============================================================================
@@ -239,6 +247,19 @@ resource funcAiProjectRole 'Microsoft.Authorization/roleAssignments@2022-04-01' 
   properties: {
     principalId: containerAppPrincipalId
     roleDefinitionId: subscriptionResourceId('Microsoft.Authorization/roleDefinitions', roles.azureMLDataScientist)
+    principalType: 'ServicePrincipal'
+  }
+}
+
+// ============================================================================
+// Container App → Web PubSub (Service Owner — generate tokens + send messages)
+// ============================================================================
+resource funcWebPubSubRole 'Microsoft.Authorization/roleAssignments@2022-04-01' = if (!localDevMode && !empty(webPubSubName)) {
+  name: guid(webPubSub.id, containerAppPrincipalId, roles.webPubSubServiceOwner)
+  scope: webPubSub
+  properties: {
+    principalId: containerAppPrincipalId
+    roleDefinitionId: subscriptionResourceId('Microsoft.Authorization/roleDefinitions', roles.webPubSubServiceOwner)
     principalType: 'ServicePrincipal'
   }
 }

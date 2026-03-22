@@ -4,8 +4,6 @@ import {
   webLightTheme,
   webDarkTheme,
   Button,
-  Toolbar,
-  ToolbarButton,
   Avatar,
   Text,
   makeStyles,
@@ -206,7 +204,7 @@ function AppShell() {
 
         {/* ── Preferences drawer ─────────────────────────────────────── */}
         {showPrefs && (
-          <PreferencesPanel onClose={() => setShowPrefs(false)} />
+          <PreferencesPanel isOpen={showPrefs} onClose={() => setShowPrefs(false)} />
         )}
       </div>
     </FluentProvider>

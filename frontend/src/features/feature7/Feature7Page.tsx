@@ -23,6 +23,8 @@ import {
   Badge,
   Tooltip,
   Divider,
+  Select,
+  Label,
   makeStyles,
   tokens,
   shorthands,
@@ -39,6 +41,7 @@ import {
   BotSparkle24Regular,
   Person24Regular,
   Keyboard24Regular,
+  Settings24Regular,
 } from "@fluentui/react-icons";
 import ReactMarkdown from "react-markdown";
 import * as speechSdk from "microsoft-cognitiveservices-speech-sdk";
@@ -353,6 +356,27 @@ const useStyles = makeStyles({
     gap: "4px",
     ...shorthands.padding("4px", "0"),
   },
+  settingsPanel: {
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: "16px",
+    flexWrap: "wrap",
+    ...shorthands.padding("8px", "12px"),
+    ...shorthands.borderRadius(tokens.borderRadiusMedium),
+    backgroundColor: tokens.colorNeutralBackground3,
+    animationDuration: "200ms",
+    animationTimingFunction: "ease-out",
+    animationName: {
+      from: { opacity: 0, maxHeight: "0px" },
+      to: { opacity: 1, maxHeight: "60px" },
+    },
+  },
+  settingsField: {
+    display: "flex",
+    alignItems: "center",
+    gap: "6px",
+  },
 });
 
 // ── Component ──────────────────────────────────────────────────────────────
@@ -372,11 +396,18 @@ export function Feature7Page() {
   // UI state
   const [inputMode, setInputMode] = useState<"voice" | "text">("voice");
   const [showTimer, setShowTimer] = useState(false);
+  const [showSettings, setShowSettings] = useState(false);
   const [notification, setNotification] = useState<{ message: string; type: "encouragement" | "tip" } | null>(null);
   const [taskSteps, setTaskSteps] = useState<Map<string, TaskStep[]>>(new Map());
 
+  // Speech settings
+  const [voiceName, setVoiceName] = useState("en-US-JennyNeural");
+  const [speechRate, setSpeechRate] = useState("slow");
+
   // Refs
   const recognizerRef = useRef<speechSdk.SpeechRecognizer | null>(null);
+  const transcriptRef = useRef<string>("");
+  const backendTokenRef = useRef<string | null>(null);
   const conversationEndRef = useRef<HTMLDivElement | null>(null);
   const currentAudioRef = useRef<HTMLAudioElement | null>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
@@ -393,8 +424,10 @@ export function Feature7Page() {
     try {
       setIsRecording(true);
       setStatus("Connecting to speech service...");
+      transcriptRef.current = "";
 
       const backendToken = await getAccessToken();
+      backendTokenRef.current = backendToken;
       const { authToken, region } = await apiClient.getSpeechToken(backendToken);
 
       const speechConfig = speechSdk.SpeechConfig.fromAuthorizationToken(
@@ -407,45 +440,101 @@ export function Feature7Page() {
       const recognizer = new speechSdk.SpeechRecognizer(speechConfig, audioConfig);
       recognizerRef.current = recognizer;
 
-      setStatus("Listening... speak naturally, then tap stop when you're done.");
+      // Accumulate final recognized phrases
+      recognizer.recognized = (_sender, e) => {
+        if (
+          e.result.reason === speechSdk.ResultReason.RecognizedSpeech &&
+          e.result.text
+        ) {
+          transcriptRef.current = transcriptRef.current
+            ? `${transcriptRef.current} ${e.result.text}`
+            : e.result.text;
+          setStatus(`Heard: "${transcriptRef.current.slice(-80)}..." — tap stop when done.`);
+        }
+      };
 
-      recognizer.recognizeOnceAsync(
-        async (result) => {
-          recognizer.close();
-          recognizerRef.current = null;
-          setIsRecording(false);
+      // Show interim feedback while speaking
+      recognizer.recognizing = (_sender, e) => {
+        if (e.result.text) {
+          const soFar = transcriptRef.current
+            ? `${transcriptRef.current} ${e.result.text}`
+            : e.result.text;
+          setStatus(`Listening: "${soFar.slice(-80)}..."`);
+        }
+      };
 
-          if (
-            result.reason === speechSdk.ResultReason.RecognizedSpeech &&
-            result.text
-          ) {
-            await processTranscription(result.text, backendToken);
-          } else if (result.reason === speechSdk.ResultReason.NoMatch) {
-            setStatus("I didn't catch that. No worries — try again when you're ready.");
-          } else {
-            setStatus("Ready when you are. Tap the microphone to try again.");
+      recognizer.canceled = (_sender, e) => {
+        if (e.reason === speechSdk.CancellationReason.Error) {
+          console.error("Speech recognition canceled:", e.errorDetails);
+          if (recognizerRef.current) {
+            recognizerRef.current = null;
+            try { recognizer.close(); } catch { /* already disposed */ }
           }
-        },
-        (error) => {
-          recognizer.close();
-          recognizerRef.current = null;
           setIsRecording(false);
-          console.error("Speech recognition error:", error);
           setStatus("Something interrupted the connection. Tap the microphone to try again.");
         }
-      );
-    } catch {
+      };
+
+      recognizer.sessionStopped = () => {
+        // Session ended (e.g. service timeout) — process whatever we have
+        if (recognizerRef.current) {
+          recognizerRef.current = null;
+          try { recognizer.close(); } catch { /* already disposed */ }
+        }
+        setIsRecording(false);
+        const text = transcriptRef.current.trim();
+        if (text) {
+          processTranscription(text, backendTokenRef.current);
+        } else {
+          setStatus("I didn't catch that. No worries — try again when you're ready.");
+        }
+      };
+
+      await recognizer.startContinuousRecognitionAsync();
+      setStatus("Listening... speak naturally, then tap stop when you're done.");
+    } catch (err: unknown) {
       setIsRecording(false);
-      setStatus("Microphone access is needed. Check your browser permissions and try again.");
+      const msg = err instanceof Error ? err.message : String(err);
+      if (msg.includes("Permission") || msg.includes("NotAllowedError") || msg.includes("getUserMedia")) {
+        setStatus("Microphone access is needed. Check your browser permissions and try again.");
+      } else if (msg.includes("503") || msg.includes("Speech token") || msg.includes("502")) {
+        setStatus("The speech service is temporarily unavailable. Please try again in a moment.");
+      } else {
+        setStatus(`Something went wrong: ${msg}. Tap the microphone to try again.`);
+      }
     }
   }, [getAccessToken]);
 
   const stopRecording = useCallback(() => {
-    if (recognizerRef.current) {
-      recognizerRef.current.close();
+    const rec = recognizerRef.current;
+    if (rec) {
       recognizerRef.current = null;
+      rec.stopContinuousRecognitionAsync(
+        () => {
+          try { rec.close(); } catch { /* already disposed */ }
+          setIsRecording(false);
+          const text = transcriptRef.current.trim();
+          if (text) {
+            processTranscription(text, backendTokenRef.current);
+          } else {
+            setStatus("I didn't catch that. No worries — try again when you're ready.");
+          }
+        },
+        (err) => {
+          console.error("Stop recognition error:", err);
+          try { rec.close(); } catch { /* already disposed */ }
+          setIsRecording(false);
+          const text = transcriptRef.current.trim();
+          if (text) {
+            processTranscription(text, backendTokenRef.current);
+          } else {
+            setStatus("I didn't catch that. No worries — try again when you're ready.");
+          }
+        }
+      );
+    } else {
+      setIsRecording(false);
     }
-    setIsRecording(false);
   }, []);
 
   // ── Send text message ──────────────────────────────────────────────────
@@ -510,7 +599,7 @@ export function Feature7Page() {
           if (agentResponse.audio_base64) {
             await playBase64Audio(agentResponse.audio_base64);
           } else {
-            await speakText(assistantText, token);
+            await speakText(assistantText, token, voiceName, speechRate);
           }
         }
 
@@ -530,7 +619,7 @@ export function Feature7Page() {
         setIsProcessing(false);
       }
     },
-    [scrollToBottom, inputMode, conversation.length],
+    [scrollToBottom, inputMode, conversation.length, voiceName, speechRate],
   );
 
   // ── Audio playback ────────────────────────────────────────────────────
@@ -566,10 +655,10 @@ export function Feature7Page() {
     }
   }, []);
 
-  const speakText = useCallback(async (text: string, token: string | null) => {
+  const speakText = useCallback(async (text: string, token: string | null, voice?: string, rate?: string) => {
     try {
       setIsSpeaking(true);
-      const audioBlob = await apiClient.speechSynthesize(text, token);
+      const audioBlob = await apiClient.speechSynthesize(text, token, voice, rate);
       const url = URL.createObjectURL(audioBlob);
       const audio = new Audio(url);
       currentAudioRef.current = audio;
@@ -607,10 +696,10 @@ export function Feature7Page() {
       if (isSpeaking || isProcessing) return;
       const token = await getAccessToken();
       setStatus("Reading aloud...");
-      await speakText(text, token);
+      await speakText(text, token, voiceName, speechRate);
       setStatus("Ready for your next question. Take your time.");
     },
-    [isSpeaking, isProcessing, getAccessToken, speakText],
+    [isSpeaking, isProcessing, getAccessToken, speakText, voiceName, speechRate],
   );
 
   const clearConversation = useCallback(() => {
@@ -876,7 +965,56 @@ export function Feature7Page() {
                 aria-label="Start over"
               />
             </Tooltip>
+            <Tooltip content={showSettings ? "Hide voice settings" : "Voice settings"} relationship="label">
+              <Button
+                appearance={showSettings ? "primary" : "subtle"}
+                size="small"
+                icon={<Settings24Regular />}
+                onClick={() => setShowSettings(!showSettings)}
+                aria-label={showSettings ? "Hide voice settings" : "Voice settings"}
+                aria-pressed={showSettings}
+              />
+            </Tooltip>
           </div>
+
+          {/* Voice settings panel */}
+          {showSettings && (
+            <div className={styles.settingsPanel}>
+              <div className={styles.settingsField}>
+                <Label size="small" htmlFor="voice-select">Voice</Label>
+                <Select
+                  id="voice-select"
+                  size="small"
+                  value={voiceName}
+                  onChange={(_, d) => setVoiceName(d.value)}
+                >
+                  <option value="en-US-JennyNeural">Jenny (calm, warm)</option>
+                  <option value="en-US-AriaNeural">Aria (friendly)</option>
+                  <option value="en-US-GuyNeural">Guy (relaxed)</option>
+                  <option value="en-US-SaraNeural">Sara (gentle)</option>
+                  <option value="en-US-DavisNeural">Davis (steady)</option>
+                  <option value="en-US-JaneNeural">Jane (soothing)</option>
+                  <option value="en-US-JasonNeural">Jason (clear)</option>
+                  <option value="en-US-TonyNeural">Tony (composed)</option>
+                </Select>
+              </div>
+              <div className={styles.settingsField}>
+                <Label size="small" htmlFor="rate-select">Speed</Label>
+                <Select
+                  id="rate-select"
+                  size="small"
+                  value={speechRate}
+                  onChange={(_, d) => setSpeechRate(d.value)}
+                >
+                  <option value="x-slow">Very Slow</option>
+                  <option value="slow">Slow</option>
+                  <option value="medium">Medium</option>
+                  <option value="default">Normal</option>
+                  <option value="fast">Fast</option>
+                </Select>
+              </div>
+            </div>
+          )}
 
           {/* Input area — voice or text */}
           {inputMode === "voice" ? (

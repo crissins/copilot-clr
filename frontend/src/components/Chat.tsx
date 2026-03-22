@@ -12,7 +12,6 @@ import {
 import {
   Send24Regular,
   Add24Regular,
-  DocumentArrowUp24Regular,
 } from "@fluentui/react-icons";
 import { apiClient, type Message } from "../services/api";
 import { MessageList } from "./MessageList";

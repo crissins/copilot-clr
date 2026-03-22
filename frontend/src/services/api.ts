@@ -176,16 +176,28 @@ class ApiClient {
   async speechSynthesize(
     text: string,
     token: string | null,
-    style: string = "calm",
-    rate: string = "slow"
+    voice?: string,
+    rate?: string,
   ): Promise<Blob> {
     const res = await fetch(`${API_BASE}/api/speech/synthesize`, {
       method: "POST",
       headers: this.getHeaders(token),
-      body: JSON.stringify({ text, style, rate }),
+      body: JSON.stringify({ text, voice, rate }),
     });
     if (!res.ok) throw new Error(`Speech synthesis failed: ${res.status}`);
     return res.blob();
+  }
+
+  /** Get a Web PubSub WebSocket URL for real-time voice sessions. */
+  async negotiateVoice(
+    token: string | null
+  ): Promise<{ url: string }> {
+    const res = await fetch(`${API_BASE}/api/voice/negotiate`, {
+      method: "POST",
+      headers: this.getHeaders(token),
+    });
+    if (!res.ok) throw new Error(`Voice negotiate failed: ${res.status}`);
+    return res.json();
   }
 
   async getIRToken(token: string | null): Promise<{ token: string; subdomain: string }> {

@@ -283,6 +283,9 @@ module containerApps 'modules/container-apps.bicep' = if (!localDevMode) {
     speechRegion: speech.outputs.speechRegion
     irEndpoint: immersiveReader.outputs.irEndpoint
     docIntelEndpoint: documentIntelligence.outputs.docIntelEndpoint
+    // Construct Web PubSub endpoint from naming convention to avoid circular dependency
+    // (Web PubSub module needs Container App hostname; Container App needs PubSub endpoint)
+    webPubSubEndpoint: 'https://webpubsub-${resourceToken}.webpubsub.azure.com'
   }
 }
 
@@ -296,6 +299,20 @@ module swaLinkedBackend 'modules/swa-linked-backend.bicep' = if (!localDevMode &
     #disable-next-line BCP318
     containerAppResourceId: containerApps.outputs.containerAppId
     location: location
+  }
+}
+
+// Azure Web PubSub — real-time voice transport (SWA can't proxy WebSockets).
+// Clients connect to Web PubSub directly; event handler calls Container App backend.
+module webPubSub 'modules/webpubsub.bicep' = if (!localDevMode) {
+  name: 'webpubsub-deployment'
+  params: {
+    location: location
+    resourceToken: resourceToken
+    tags: tags
+    skuName: 'Free_F1'
+    #disable-next-line BCP318
+    backendHostname: containerApps.outputs.containerAppHostname
   }
 }
 
@@ -324,6 +341,8 @@ module security 'modules/security.bicep' = {
     #disable-next-line BCP318
     serviceBusName: localDevMode ? '' : serviceBus.outputs.serviceBusName
     aiProjectName: aiFoundryProject.outputs.projectName
+    #disable-next-line BCP318
+    webPubSubName: localDevMode ? '' : webPubSub.outputs.webPubSubName
   }
 }
 
@@ -367,3 +386,7 @@ output DOC_INTELLIGENCE_ENDPOINT string = documentIntelligence.outputs.docIntelE
 
 // Storage
 output STORAGE_ACCOUNT_NAME string = storage.outputs.storageAccountName
+
+// Web PubSub (real-time voice transport)
+#disable-next-line BCP318
+output WEBPUBSUB_ENDPOINT string = localDevMode ? '' : webPubSub.outputs.webPubSubEndpoint

@@ -66,6 +66,9 @@ param irEndpoint string = ''
 @description('Azure Document Intelligence endpoint')
 param docIntelEndpoint string = ''
 
+@description('Azure Web PubSub endpoint for real-time voice transport')
+param webPubSubEndpoint string = ''
+
 @description('Container vCPU allocation. Valid: 0.25, 0.5, 0.75, 1.0. Use 0.25 in low-cost mode (0.25 CPU must pair with 0.5Gi memory).')
 param containerCpu string = '0.5'
 
@@ -161,10 +164,13 @@ resource containerApp 'Microsoft.App/containerApps@2024-03-01' = {
             { name: 'KEY_VAULT_URI',              value: keyVaultUri }
             { name: 'AI_PROJECT_NAME',            value: aiProjectName }
             { name: 'AI_FOUNDRY_ENDPOINT',        value: aiFoundryEndpoint }
+            { name: 'AZURE_SUBSCRIPTION_ID',      value: subscription().subscriptionId }
+            { name: 'AZURE_RESOURCE_GROUP',       value: resourceGroup().name }
             { name: 'SPEECH_ENDPOINT',             value: speechEndpoint }
             { name: 'SPEECH_REGION',               value: speechRegion }
             { name: 'IR_ENDPOINT',                 value: irEndpoint }
             { name: 'DOC_INTELLIGENCE_ENDPOINT',   value: docIntelEndpoint }
+            { name: 'WEBPUBSUB_ENDPOINT',           value: webPubSubEndpoint }
             { name: 'ENTRA_CLIENT_ID',            value: entraClientId }
           ]
         }

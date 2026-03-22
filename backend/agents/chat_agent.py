@@ -64,8 +64,19 @@ Responsible AI guidelines you always follow:
 # Cosmos DB helper — thread ID persistence (FIX 2)
 # ============================================================================
 
+_cosmos_sessions_container = None
+
+
 def _get_cosmos_container():
-    """Return the sessions Cosmos container, or None in local dev mode."""
+    """Return the sessions Cosmos container, or None in local dev mode.
+
+    Uses a module-level singleton per Microsoft best practices:
+    https://learn.microsoft.com/azure/cosmos-db/best-practice-python
+    """
+    global _cosmos_sessions_container
+    if _cosmos_sessions_container is not None:
+        return _cosmos_sessions_container
+
     cosmos_endpoint = os.environ.get("COSMOS_DB_ENDPOINT", "")
     cosmos_database = os.environ.get("COSMOS_DB_DATABASE", "chatdb")
     if not cosmos_endpoint:
@@ -73,7 +84,8 @@ def _get_cosmos_container():
     from azure.cosmos import CosmosClient  # noqa: PLC0415
     from azure.identity import DefaultAzureCredential  # noqa: PLC0415
     client = CosmosClient(url=cosmos_endpoint, credential=DefaultAzureCredential())
-    return client.get_database_client(cosmos_database).get_container_client("sessions")
+    _cosmos_sessions_container = client.get_database_client(cosmos_database).get_container_client("sessions")
+    return _cosmos_sessions_container
 
 
 def _read_thread_id_sync(session_id: str, user_id: str) -> str | None:
