@@ -139,7 +139,7 @@ class ApiClient {
   }
 
   async textToSpeech(text: string, token: string | null): Promise<Blob> {
-    const res = await fetch(`${API_BASE}/api/tts`, {
+    const res = await fetch(`${API_BASE}/api/speech/synthesize`, {
       method: "POST",
       headers: this.getHeaders(token),
       body: JSON.stringify({ text }),
