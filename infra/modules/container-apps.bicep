@@ -171,6 +171,7 @@ resource containerApp 'Microsoft.App/containerApps@2024-03-01' = {
             { name: 'IR_ENDPOINT',                 value: irEndpoint }
             { name: 'DOC_INTELLIGENCE_ENDPOINT',   value: docIntelEndpoint }
             { name: 'WEBPUBSUB_ENDPOINT',           value: webPubSubEndpoint }
+            { name: 'AZURE_CONTENT_SAFETY_ENDPOINT', value: aiServicesEndpoint }
             { name: 'ENTRA_CLIENT_ID',            value: entraClientId }
           ]
         }

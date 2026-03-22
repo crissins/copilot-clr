@@ -215,6 +215,7 @@ module openAi 'modules/openai.bicep' = {
     chatModelCapacity: openAiChatCapacity
     embeddingModelCapacity: openAiEmbeddingCapacity
     deployRealtimeModel: deployVoice
+    deployCustomRaiPolicy: true
   }
 }
 

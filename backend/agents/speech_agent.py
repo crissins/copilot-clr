@@ -142,6 +142,65 @@ def _reassemble_config(metadata: dict) -> str:
 
 
 # ============================================================================
+# Cosmos DB helper — conversation ID persistence
+# ============================================================================
+
+_cosmos_sessions_container = None
+
+
+def _get_cosmos_container():
+    """Return the sessions Cosmos container, or None in local dev mode."""
+    global _cosmos_sessions_container
+    if _cosmos_sessions_container is not None:
+        return _cosmos_sessions_container
+
+    cosmos_endpoint = os.environ.get("COSMOS_DB_ENDPOINT", "")
+    cosmos_database = os.environ.get("COSMOS_DB_DATABASE", "chatdb")
+    if not cosmos_endpoint:
+        return None
+    from azure.cosmos import CosmosClient  # noqa: PLC0415
+    client = CosmosClient(url=cosmos_endpoint, credential=DefaultAzureCredential())
+    _cosmos_sessions_container = (
+        client.get_database_client(cosmos_database).get_container_client("sessions")
+    )
+    return _cosmos_sessions_container
+
+
+def _read_conversation_id_sync(session_id: str, user_id: str) -> Optional[str]:
+    """Read Foundry conversationId from Cosmos DB sessions document."""
+    container = _get_cosmos_container()
+    if container is None:
+        return None
+    try:
+        doc = container.read_item(item=session_id, partition_key=user_id)
+        return doc.get("speechConversationId")
+    except Exception:
+        return None
+
+
+def _write_conversation_id_sync(
+    session_id: str, user_id: str, conversation_id: str
+) -> None:
+    """Patch speechConversationId into the Cosmos DB sessions document."""
+    container = _get_cosmos_container()
+    if container is None:
+        return
+    try:
+        container.patch_item(
+            item=session_id,
+            partition_key=user_id,
+            patch_operations=[
+                {"op": "add", "path": "/speechConversationId", "value": conversation_id}
+            ],
+        )
+    except Exception:
+        logger.warning(
+            "Failed to persist speechConversationId=%s for session=%s",
+            conversation_id, session_id,
+        )
+
+
+# ============================================================================
 # Azure AI Foundry Agent Service client (synchronous — via asyncio.to_thread)
 # Uses AIProjectClient from azure-ai-projects with PromptAgentDefinition.
 # ============================================================================
@@ -197,19 +256,35 @@ def _ensure_agent_sync(client) -> str:
     return AGENT_NAME
 
 
-def _run_agent_chat_sync(client, agent_name: str, message: str) -> dict:
+def _run_agent_chat_sync(
+    client, agent_name: str, message: str,
+    session_id: str = "", user_id: str = "",
+) -> dict:
     """Run a single chat turn via Foundry Agent Service.
 
-    Uses the OpenAI client's conversations + responses API with agent_reference.
+    Reuses the Foundry conversation for the same session_id so the agent
+    maintains context across turns.  Conversation IDs are persisted to
+    Cosmos DB (speechConversationId field on the sessions document).
+
     Returns: {"text": str}
     """
     openai_client = client.get_openai_client()
 
-    conversation = openai_client.conversations.create()
+    # Look up existing conversation for this session
+    conversation_id: Optional[str] = None
+    if session_id and user_id:
+        conversation_id = _read_conversation_id_sync(session_id, user_id)
+
+    if not conversation_id:
+        conversation = openai_client.conversations.create()
+        conversation_id = conversation.id
+        if session_id and user_id:
+            _write_conversation_id_sync(session_id, user_id, conversation_id)
+        logger.info("Created Foundry conversation %s for session %s", conversation_id, session_id)
 
     response = openai_client.responses.create(
         input=message,
-        conversation=conversation.id,
+        conversation=conversation_id,
         extra_body={
             "agent_reference": {
                 "name": agent_name,
@@ -274,10 +349,12 @@ async def get_speech_agent_response(
             "sessionId": session_id,
         }
 
-    # Foundry Agent Service chat in a thread to avoid blocking
+    # Foundry Agent Service chat — reuses conversation per session
     client = await asyncio.to_thread(_get_project_client_sync)
     agent_name = await asyncio.to_thread(_ensure_agent_sync, client)
-    result = await asyncio.to_thread(_run_agent_chat_sync, client, agent_name, message)
+    result = await asyncio.to_thread(
+        _run_agent_chat_sync, client, agent_name, message, session_id, user_id,
+    )
     response_text = result["text"]
 
     # TTS synthesis with calm SSML in a thread

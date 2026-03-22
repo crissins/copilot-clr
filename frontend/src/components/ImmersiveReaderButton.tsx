@@ -1,51 +1,31 @@
 ﻿import { useCallback } from "react";
-import { apiClient } from "../services/api";
-import { useAuth } from "../hooks/useAuth";
+import { useImmersiveReader } from "../hooks/useImmersiveReader";
 
 interface Props {
   title: string;
   text: string;
+  mimeType?: string;
 }
 
-export function ImmersiveReaderButton({ title, text }: Props) {
-  const { getAccessToken } = useAuth();
+/**
+ * ImmersiveReaderButton — launches Immersive Reader for a piece of content
+ * using the shared hook (which applies all user-configured settings).
+ */
+export function ImmersiveReaderButton({ title, text, mimeType }: Props) {
+  const { launch, isOpen } = useImmersiveReader();
 
   const handleClick = useCallback(async () => {
-    try {
-      const token = await getAccessToken();
-      const { token: irToken, subdomain } = await apiClient.getIRToken(token);
-
-      const content = {
-        title,
-        chunks: [{ content: text, mimeType: "text/plain" }],
-      };
-
-      // Load the Immersive Reader SDK dynamically
-      if (!(window as any).ImmersiveReader) {
-        const script = document.createElement("script");
-        script.src = "https://ircdname.azureedge.net/immersivereadersdk/immersive-reader-sdk.1.4.0.js";
-        script.async = true;
-        await new Promise((resolve, reject) => {
-          script.onload = resolve;
-          script.onerror = reject;
-          document.head.appendChild(script);
-        });
-      }
-
-      (window as any).ImmersiveReader.launchAsync(irToken, subdomain, content, {
-        uiLang: "en",
-      });
-    } catch (err) {
-      console.error("Immersive Reader launch failed:", err);
-    }
-  }, [title, text, getAccessToken]);
+    if (isOpen) return;
+    await launch(title, text, mimeType);
+  }, [title, text, mimeType, launch, isOpen]);
 
   return (
     <button
       onClick={handleClick}
+      disabled={isOpen}
       className="btn-icon"
       aria-label="Open in Immersive Reader"
-      title="Immersive Reader (line focus, syllables, picture dictionary)"
+      title="Immersive Reader (line focus, syllables, picture dictionary, translation)"
     >
       &#x1F4D6;
     </button>

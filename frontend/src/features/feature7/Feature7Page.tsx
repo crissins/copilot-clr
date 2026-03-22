@@ -42,11 +42,14 @@ import {
   Person24Regular,
   Keyboard24Regular,
   Settings24Regular,
+  ImmersiveReader24Regular,
 } from "@fluentui/react-icons";
 import ReactMarkdown from "react-markdown";
 import * as speechSdk from "microsoft-cognitiveservices-speech-sdk";
 import { apiClient } from "../../services/api";
 import { useAuth } from "../../hooks/useAuth";
+import { useImmersiveReader } from "../../hooks/useImmersiveReader";
+import { ImmersiveReaderSettingsPanel } from "../../components/ImmersiveReaderSettingsPanel";
 import { SuggestionChips } from "./SuggestionChips";
 import { FocusTimer } from "./FocusTimer";
 import { TaskBreakdown, type TaskStep } from "./TaskBreakdown";
@@ -99,7 +102,7 @@ const useStyles = makeStyles({
     display: "flex",
     flexDirection: "column",
     flex: 1,
-    maxWidth: "720px",
+    maxWidth: "960px",
     width: "100%",
     margin: "0 auto",
     overflow: "hidden",
@@ -387,6 +390,7 @@ export function Feature7Page() {
 
   // Conversation state
   const [conversation, setConversation] = useState<ConversationTurn[]>([]);
+  const [sessionId, setSessionId] = useState<string | null>(null);
   const [isRecording, setIsRecording] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
   const [isSpeaking, setIsSpeaking] = useState(false);
@@ -403,6 +407,10 @@ export function Feature7Page() {
   // Speech settings
   const [voiceName, setVoiceName] = useState("en-US-JennyNeural");
   const [speechRate, setSpeechRate] = useState("slow");
+
+  // Immersive Reader
+  const { settings: irSettings, updateSettings: updateIRSettings, launch: launchIR, isOpen: irIsOpen } = useImmersiveReader();
+  const [showIRSettings, setShowIRSettings] = useState(false);
 
   // Refs
   const recognizerRef = useRef<speechSdk.SpeechRecognizer | null>(null);
@@ -572,7 +580,12 @@ export function Feature7Page() {
 
       setStatus("Taking a moment to think clearly...");
       try {
-        const agentResponse = await apiClient.speechChat(text, null, token);
+        const agentResponse = await apiClient.speechChat(text, sessionId, token);
+
+        // Track session for conversation continuity
+        if (agentResponse.sessionId && agentResponse.sessionId !== sessionId) {
+          setSessionId(agentResponse.sessionId);
+        }
 
         const assistantText = agentResponse.message.content;
         const tasks = extractTasks(assistantText);
@@ -593,14 +606,12 @@ export function Feature7Page() {
 
         scrollToBottom();
 
-        // Play TTS
-        if (inputMode === "voice") {
-          setStatus("Reading the response aloud...");
-          if (agentResponse.audio_base64) {
-            await playBase64Audio(agentResponse.audio_base64);
-          } else {
-            await speakText(assistantText, token, voiceName, speechRate);
-          }
+        // Play TTS automatically in both modes
+        setStatus("Reading the response aloud...");
+        if (agentResponse.audio_base64) {
+          await playBase64Audio(agentResponse.audio_base64);
+        } else {
+          await speakText(assistantText, token, voiceName, speechRate);
         }
 
         setStatus("Ready for your next question. Take your time.");
@@ -619,7 +630,7 @@ export function Feature7Page() {
         setIsProcessing(false);
       }
     },
-    [scrollToBottom, inputMode, conversation.length, voiceName, speechRate],
+    [scrollToBottom, sessionId, inputMode, conversation.length, voiceName, speechRate],
   );
 
   // ── Audio playback ────────────────────────────────────────────────────
@@ -704,6 +715,7 @@ export function Feature7Page() {
 
   const clearConversation = useCallback(() => {
     setConversation([]);
+    setSessionId(null);
     setTaskSteps(new Map());
     setStatus("Tap the microphone or type a message to begin.");
     stopSpeaking();
@@ -838,6 +850,16 @@ export function Feature7Page() {
                                   disabled={disabled}
                                   onClick={() => replayTurn(turn.text)}
                                   aria-label="Read this response aloud"
+                                />
+                              </Tooltip>
+                              <Tooltip content="Immersive Reader" relationship="label">
+                                <Button
+                                  appearance="subtle"
+                                  size="small"
+                                  icon={<ImmersiveReader24Regular />}
+                                  disabled={irIsOpen}
+                                  onClick={() => launchIR("Speech Assistant", turn.text)}
+                                  aria-label="Open in Immersive Reader"
                                 />
                               </Tooltip>
                             </div>
@@ -975,6 +997,16 @@ export function Feature7Page() {
                 aria-pressed={showSettings}
               />
             </Tooltip>
+            <Tooltip content={showIRSettings ? "Hide reader settings" : "Immersive Reader settings"} relationship="label">
+              <Button
+                appearance={showIRSettings ? "primary" : "subtle"}
+                size="small"
+                icon={<ImmersiveReader24Regular />}
+                onClick={() => setShowIRSettings(!showIRSettings)}
+                aria-label={showIRSettings ? "Hide Immersive Reader settings" : "Immersive Reader settings"}
+                aria-pressed={showIRSettings}
+              />
+            </Tooltip>
           </div>
 
           {/* Voice settings panel */}
@@ -1014,6 +1046,14 @@ export function Feature7Page() {
                 </Select>
               </div>
             </div>
+          )}
+
+          {/* Immersive Reader settings panel */}
+          {showIRSettings && (
+            <ImmersiveReaderSettingsPanel
+              settings={irSettings}
+              onChange={updateIRSettings}
+            />
           )}
 
           {/* Input area — voice or text */}
