@@ -37,7 +37,7 @@ jobs:
       # Log in to Azure using a Service Principal stored as a GitHub secret.
       # Secret name: AZURE_CREDENTIALS  (JSON from: az ad sp create-for-rbac)
       - name: Azure login
-        uses: azure/login@v2
+        uses: azure/login@v1
         with:
           creds: ${{ secrets.AZURE_CREDENTIALS }}
 
