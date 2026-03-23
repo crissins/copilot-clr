@@ -13,7 +13,7 @@
  *  - Confirmation: celebrate completed tasks
  */
 
-import { useState, useRef, useCallback } from "react";
+import { useState, useRef, useCallback, useEffect } from "react";
 import {
   Button,
   Text,
@@ -419,6 +419,9 @@ export function Feature7Page() {
   const conversationEndRef = useRef<HTMLDivElement | null>(null);
   const currentAudioRef = useRef<HTMLAudioElement | null>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  // Ref to always hold the latest processTranscription, avoiding stale closures
+  // in startRecording/stopRecording callbacks.
+  const processTranscriptionRef = useRef<(text: string, token: string | null) => Promise<void>>();
 
   const scrollToBottom = useCallback(() => {
     setTimeout(() => {
@@ -479,7 +482,27 @@ export function Feature7Page() {
             try { recognizer.close(); } catch { /* already disposed */ }
           }
           setIsRecording(false);
-          setStatus("Something interrupted the connection. Tap the microphone to try again.");
+          const details = e.errorDetails || "";
+          if (details.includes("1006") || details.includes("WebSocket")) {
+            setStatus("Couldn't connect to the speech service. Check your connection and try again.");
+          } else if (details.includes("401") || details.includes("Unauthorized")) {
+            setStatus("Speech authorization expired. Please try again.");
+          } else {
+            setStatus("Something interrupted the connection. Tap the microphone to try again.");
+          }
+        } else {
+          // EndOfStream or other non-error cancellation — clean up
+          if (recognizerRef.current) {
+            recognizerRef.current = null;
+            try { recognizer.close(); } catch { /* already disposed */ }
+          }
+          setIsRecording(false);
+          const text = transcriptRef.current.trim();
+          if (text) {
+            processTranscriptionRef.current?.(text, backendTokenRef.current);
+          } else {
+            setStatus("I didn't catch that. No worries — try again when you're ready.");
+          }
         }
       };
 
@@ -492,7 +515,7 @@ export function Feature7Page() {
         setIsRecording(false);
         const text = transcriptRef.current.trim();
         if (text) {
-          processTranscription(text, backendTokenRef.current);
+          processTranscriptionRef.current?.(text, backendTokenRef.current);
         } else {
           setStatus("I didn't catch that. No worries — try again when you're ready.");
         }
@@ -523,7 +546,7 @@ export function Feature7Page() {
           setIsRecording(false);
           const text = transcriptRef.current.trim();
           if (text) {
-            processTranscription(text, backendTokenRef.current);
+            processTranscriptionRef.current?.(text, backendTokenRef.current);
           } else {
             setStatus("I didn't catch that. No worries — try again when you're ready.");
           }
@@ -534,7 +557,7 @@ export function Feature7Page() {
           setIsRecording(false);
           const text = transcriptRef.current.trim();
           if (text) {
-            processTranscription(text, backendTokenRef.current);
+            processTranscriptionRef.current?.(text, backendTokenRef.current);
           } else {
             setStatus("I didn't catch that. No worries — try again when you're ready.");
           }
@@ -632,6 +655,11 @@ export function Feature7Page() {
     },
     [scrollToBottom, sessionId, inputMode, conversation.length, voiceName, speechRate],
   );
+
+  // Keep the ref in sync so voice callbacks always call the latest version
+  useEffect(() => {
+    processTranscriptionRef.current = processTranscription;
+  }, [processTranscription]);
 
   // ── Audio playback ────────────────────────────────────────────────────
 

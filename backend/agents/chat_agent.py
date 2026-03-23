@@ -1,12 +1,13 @@
 """
-Chat Agent — Microsoft Agent Framework (azure-ai-projects)
+Chat Agent — Copilot CLR
 
-FIX 1: All sync SDK calls are wrapped in asyncio.to_thread() so FastAPI's
-        event loop is never blocked.
-FIX 2: Thread IDs are persisted to Cosmos DB (sessions container) so they
-        survive pod restarts and Container App scale-out.
-FIX 3: Agent instructions updated to Copilot CLR calm/supportive persona
-        to satisfy the Responsible AI scoring criterion.
+Routing logic:
+  1. PROJECT_ENDPOINT set       → Agent Framework sequential workflow
+  2. AZURE_OPENAI_ENDPOINT set  → Legacy OpenAI Assistants API (fallback)
+  3. Neither set                → Local-dev stub response
+
+The public API is unchanged:
+    await get_agent_response(message, session_id, user_id) -> str
 """
 
 import asyncio
@@ -19,17 +20,19 @@ logger = logging.getLogger(__name__)
 # Local dev stub
 # ============================================================================
 
+
 def _local_response(message: str) -> str:
     """Canned response for LOCAL_DEV mode (no Azure connection required)."""
     return (
-        f"**[Local dev mode]** No Azure OpenAI endpoint configured. "
-        f"Set `AZURE_OPENAI_ENDPOINT` to connect to Azure.\n\n"
+        f"**[Local dev mode]** No Azure AI endpoint configured. "
+        f"Set `PROJECT_ENDPOINT` (Agent Framework) or "
+        f"`AZURE_OPENAI_ENDPOINT` (legacy) to connect.\n\n"
         f"You said: *{message}*"
     )
 
 
 # ============================================================================
-# Agent configuration — Copilot CLR persona (Responsible AI requirement)
+# Agent configuration — Copilot CLR persona (used by legacy path only)
 # ============================================================================
 
 AGENT_NAME = "Copilot CLRAssistant"
@@ -61,18 +64,13 @@ Responsible AI guidelines you always follow:
 """
 
 # ============================================================================
-# Cosmos DB helper — thread ID persistence (FIX 2)
+# Cosmos DB helper — thread ID persistence (legacy path)
 # ============================================================================
 
 _cosmos_sessions_container = None
 
 
 def _get_cosmos_container():
-    """Return the sessions Cosmos container, or None in local dev mode.
-
-    Uses a module-level singleton per Microsoft best practices:
-    https://learn.microsoft.com/azure/cosmos-db/best-practice-python
-    """
     global _cosmos_sessions_container
     if _cosmos_sessions_container is not None:
         return _cosmos_sessions_container
@@ -83,13 +81,15 @@ def _get_cosmos_container():
         return None
     from azure.cosmos import CosmosClient  # noqa: PLC0415
     from azure.identity import DefaultAzureCredential  # noqa: PLC0415
+
     client = CosmosClient(url=cosmos_endpoint, credential=DefaultAzureCredential())
-    _cosmos_sessions_container = client.get_database_client(cosmos_database).get_container_client("sessions")
+    _cosmos_sessions_container = client.get_database_client(
+        cosmos_database
+    ).get_container_client("sessions")
     return _cosmos_sessions_container
 
 
 def _read_thread_id_sync(session_id: str, user_id: str) -> str | None:
-    """Read threadId from Cosmos DB sessions document. Returns None if missing."""
     container = _get_cosmos_container()
     if container is None:
         return None
@@ -101,7 +101,6 @@ def _read_thread_id_sync(session_id: str, user_id: str) -> str | None:
 
 
 def _write_thread_id_sync(session_id: str, user_id: str, thread_id: str) -> None:
-    """Patch threadId into the Cosmos DB sessions document."""
     container = _get_cosmos_container()
     if container is None:
         return
@@ -109,20 +108,28 @@ def _write_thread_id_sync(session_id: str, user_id: str, thread_id: str) -> None
         container.patch_item(
             item=session_id,
             partition_key=user_id,
-            patch_operations=[{"op": "add", "path": "/threadId", "value": thread_id}],
+            patch_operations=[
+                {"op": "add", "path": "/threadId", "value": thread_id}
+            ],
         )
     except Exception:
-        logger.warning("Failed to persist threadId=%s for session=%s", thread_id, session_id)
+        logger.warning(
+            "Failed to persist threadId=%s for session=%s", thread_id, session_id
+        )
 
 
 # ============================================================================
-# Azure OpenAI Assistants client
+# Legacy OpenAI Assistants client (fallback when PROJECT_ENDPOINT is absent)
 # ============================================================================
+
 
 def _get_openai_client_sync():
-    """Create AzureOpenAI client (synchronous — always call via asyncio.to_thread)."""
-    from azure.identity import DefaultAzureCredential, get_bearer_token_provider  # noqa: PLC0415
+    from azure.identity import (  # noqa: PLC0415
+        DefaultAzureCredential,
+        get_bearer_token_provider,
+    )
     from openai import AzureOpenAI  # noqa: PLC0415
+
     token_provider = get_bearer_token_provider(
         DefaultAzureCredential(), "https://cognitiveservices.azure.com/.default"
     )
@@ -133,21 +140,14 @@ def _get_openai_client_sync():
     )
 
 
-# Agent ID cached in-process for the lifetime of this replica only.
-# Thread IDs are persisted to Cosmos so restarts don't lose session continuity.
 _assistant_id: str | None = None
 
 
 def _ensure_assistant_sync(client) -> str:
-    """Create or retrieve the Copilot CLR assistant. Returns assistant ID.
-    
-    NOTE: Synchronous — must be called via asyncio.to_thread().
-    """
     global _assistant_id
     if _assistant_id:
         return _assistant_id
 
-    # Check if assistant already exists
     assistants = client.beta.assistants.list()
     for assistant in assistants.data:
         if assistant.name == AGENT_NAME:
@@ -155,7 +155,6 @@ def _ensure_assistant_sync(client) -> str:
             logger.info("Found existing assistant: %s", _assistant_id)
             return _assistant_id
 
-    # Create new assistant
     assistant = client.beta.assistants.create(
         model=AGENT_MODEL,
         name=AGENT_NAME,
@@ -167,42 +166,28 @@ def _ensure_assistant_sync(client) -> str:
 
 
 def _get_or_create_thread_sync(client, session_id: str, user_id: str) -> str:
-    """Get thread ID from Cosmos or create a new one.
-
-    NOTE: Synchronous — must be called via asyncio.to_thread().
-    """
-    # FIX 2: Look up persisted thread ID from Cosmos first
     thread_id = _read_thread_id_sync(session_id, user_id)
     if thread_id:
-        logger.debug("Reusing thread %s for session %s", thread_id, session_id)
         return thread_id
 
-    # Create new thread and persist its ID
     thread = client.beta.threads.create()
     thread_id = thread.id
-    logger.info("Created thread %s for session %s", thread_id, session_id)
     _write_thread_id_sync(session_id, user_id, thread_id)
     return thread_id
 
 
-def _run_assistant_sync(client, assistant_id: str, thread_id: str, message: str) -> str:
-    """Add message, run assistant, return response text.
-
-    NOTE: Synchronous — must be called via asyncio.to_thread().
-    """
-    # Add user message
+def _run_assistant_sync(
+    client, assistant_id: str, thread_id: str, message: str
+) -> str:
     client.beta.threads.messages.create(
         thread_id=thread_id,
         role="user",
         content=message,
     )
-
-    # Run the assistant and poll until complete
     run = client.beta.threads.runs.create_and_poll(
         thread_id=thread_id,
         assistant_id=assistant_id,
     )
-
     if run.status == "failed":
         logger.error("Assistant run failed: %s", run.last_error)
         return (
@@ -210,7 +195,6 @@ def _run_assistant_sync(client, assistant_id: str, thread_id: str, message: str)
             "Let's try a different approach — could you rephrase your question?"
         )
 
-    # Extract the latest assistant message
     messages = client.beta.threads.messages.list(thread_id=thread_id, limit=1)
     for msg in messages.data:
         if msg.role == "assistant":
@@ -221,9 +205,24 @@ def _run_assistant_sync(client, assistant_id: str, thread_id: str, message: str)
     return "I wasn't able to generate a response. Please try again."
 
 
+async def _legacy_agent_response(
+    message: str, session_id: str, user_id: str
+) -> str:
+    """Run the legacy OpenAI Assistants path in a background thread."""
+    client = await asyncio.to_thread(_get_openai_client_sync)
+    assistant_id = await asyncio.to_thread(_ensure_assistant_sync, client)
+    thread_id = await asyncio.to_thread(
+        _get_or_create_thread_sync, client, session_id, user_id
+    )
+    return await asyncio.to_thread(
+        _run_assistant_sync, client, assistant_id, thread_id, message
+    )
+
+
 # ============================================================================
 # Public API — called from main.py
 # ============================================================================
+
 
 async def get_agent_response(
     message: str,
@@ -232,27 +231,28 @@ async def get_agent_response(
 ) -> str:
     """Send a user message to the agent and return the response.
 
-    All synchronous Azure SDK calls are run in a thread pool via
-    asyncio.to_thread() to avoid blocking FastAPI's event loop (FIX 1).
+    Routing:
+        1. PROJECT_ENDPOINT set       → Agent Framework sequential workflow
+        2. AZURE_OPENAI_ENDPOINT set  → Legacy OpenAI Assistants
+        3. Neither                    → Local-dev stub
 
     Args:
         message:    The user's message text.
-        session_id: Chat session ID — maps to an Agent Service thread.
-        user_id:    Authenticated Entra ID OID (for Cosmos lookups).
+        session_id: Chat session ID.
+        user_id:    Authenticated Entra ID OID.
 
     Returns:
         The agent's text response.
     """
-    if not os.environ.get("AZURE_OPENAI_ENDPOINT"):
-        return _local_response(message)
+    # ── Path 1: Agent Framework workflow (preferred) ──
+    if os.environ.get("PROJECT_ENDPOINT"):
+        from agents.workflow import run_workflow  # noqa: PLC0415
 
-    # FIX 1: All sync SDK calls wrapped in asyncio.to_thread()
-    client = await asyncio.to_thread(_get_openai_client_sync)
-    assistant_id = await asyncio.to_thread(_ensure_assistant_sync, client)
-    thread_id = await asyncio.to_thread(
-        _get_or_create_thread_sync, client, session_id, user_id
-    )
-    response = await asyncio.to_thread(
-        _run_assistant_sync, client, assistant_id, thread_id, message
-    )
-    return response
+        return await run_workflow(message, session_id, user_id)
+
+    # ── Path 2: Legacy OpenAI Assistants ──
+    if os.environ.get("AZURE_OPENAI_ENDPOINT"):
+        return await _legacy_agent_response(message, session_id, user_id)
+
+    # ── Path 3: Local dev ──
+    return _local_response(message)

@@ -222,6 +222,72 @@ class ApiClient {
     });
     if (!res.ok) throw new Error(`Report failed: ${res.status}`);
   }
+
+  async getSettings(token: string | null): Promise<NeurodiverseSettings> {
+    const res = await fetch(`${API_BASE}/api/settings`, {
+      headers: this.getHeaders(token),
+    });
+    if (!res.ok) throw new Error(`Get settings failed: ${res.status}`);
+    return res.json();
+  }
+
+  async updateSettings(
+    settings: Partial<NeurodiverseSettings>,
+    token: string | null
+  ): Promise<NeurodiverseSettings> {
+    const res = await fetch(`${API_BASE}/api/settings`, {
+      method: "PUT",
+      headers: this.getHeaders(token),
+      body: JSON.stringify(settings),
+    });
+    if (!res.ok) throw new Error(`Update settings failed: ${res.status}`);
+    return res.json();
+  }
+
+  // ── Tasks API ──
+
+  async getTasks(token: string | null): Promise<{ tasks: Task[] }> {
+    const res = await fetch(`${API_BASE}/api/tasks`, {
+      headers: this.getHeaders(token),
+    });
+    if (!res.ok) throw new Error(`Get tasks failed: ${res.status}`);
+    return res.json();
+  }
+
+  async createTask(
+    task: { title: string; description?: string; priority?: string; dueDate?: string },
+    token: string | null
+  ): Promise<Task> {
+    const res = await fetch(`${API_BASE}/api/tasks`, {
+      method: "POST",
+      headers: this.getHeaders(token),
+      body: JSON.stringify(task),
+    });
+    if (!res.ok) throw new Error(`Create task failed: ${res.status}`);
+    return res.json();
+  }
+
+  async updateTask(
+    taskId: string,
+    updates: Partial<Task>,
+    token: string | null
+  ): Promise<Task> {
+    const res = await fetch(`${API_BASE}/api/tasks/${taskId}`, {
+      method: "PUT",
+      headers: this.getHeaders(token),
+      body: JSON.stringify(updates),
+    });
+    if (!res.ok) throw new Error(`Update task failed: ${res.status}`);
+    return res.json();
+  }
+
+  async deleteTask(taskId: string, token: string | null): Promise<void> {
+    const res = await fetch(`${API_BASE}/api/tasks/${taskId}`, {
+      method: "DELETE",
+      headers: this.getHeaders(token),
+    });
+    if (!res.ok) throw new Error(`Delete task failed: ${res.status}`);
+  }
 }
 
 interface UserPreferences {
@@ -244,5 +310,44 @@ interface UploadResult {
   message: string;
 }
 
+interface NeurodiverseSettings {
+  id: string;
+  userId: string;
+  displayName: string;
+  email: string;
+  readingLevel: string;
+  preferredFormat: string;
+  voiceSpeed: string;
+  fontSize: string;
+  highContrast: boolean;
+  theme: string;
+  language: string;
+  fontFamily: string;
+  lineSpacing: string;
+  reducedMotion: boolean;
+  focusTimerMinutes: number;
+  breakReminderMinutes: number;
+  notificationStyle: string;
+  responseLengthPreference: string;
+  dyslexiaFont: boolean;
+  colorOverlay: string;
+  autoReadResponses: boolean;
+  preferredVoice: string;
+  textAlignment: string;
+  updatedAt?: string;
+}
+
+interface Task {
+  id: string;
+  userId: string;
+  title: string;
+  description: string;
+  priority: string;
+  status: string;
+  dueDate: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
 export const apiClient = new ApiClient();
-export type { ChatResponse, Session, Message, SessionDetail, UserPreferences, UploadResult };
+export type { ChatResponse, Session, Message, SessionDetail, UserPreferences, UploadResult, NeurodiverseSettings, Task };

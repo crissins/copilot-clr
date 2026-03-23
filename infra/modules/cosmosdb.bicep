@@ -204,6 +204,33 @@ resource auditContainer 'Microsoft.DocumentDB/databaseAccounts/sqlDatabases/cont
   }
 }
 
+// User tasks container (managed by AI agent workflow)
+resource tasksContainer 'Microsoft.DocumentDB/databaseAccounts/sqlDatabases/containers@2024-02-15-preview' = {
+  parent: database
+  name: 'tasks'
+  properties: {
+    resource: {
+      id: 'tasks'
+      partitionKey: {
+        paths: ['/userId']
+        kind: 'Hash'
+        version: 2
+      }
+      indexingPolicy: {
+        indexingMode: 'consistent'
+        includedPaths: [
+          { path: '/userId/?' }
+          { path: '/status/?' }
+          { path: '/createdAt/?' }
+        ]
+        excludedPaths: [
+          { path: '/*' }
+        ]
+      }
+    }
+  }
+}
+
 output cosmosDbId string = cosmosDb.id
 output cosmosDbName string = cosmosDb.name
 output cosmosDbEndpoint string = cosmosDb.properties.documentEndpoint

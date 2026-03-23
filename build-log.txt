@@ -1,0 +1,179 @@
+﻿2026/03/22 06:40:04 Downloading source code...
+
+2026/03/22 06:40:05 Finished downloading source code
+
+2026/03/22 06:40:05 Using acb_vol_86665b8e-a380-41e7-9cbf-f63d6468b3a0 as the home volume
+2026/03/22 06:40:05 Setting up Docker configuration...
+2026/03/22 06:40:06 Successfully set up Docker configuration
+2026/03/22 06:40:06 Logging in to registry: containerregistrykvhky.azurecr.io
+2026/03/22 06:40:07 Successfully logged into containerregistrykvhky.azurecr.io
+2026/03/22 06:40:07 Executing step ID: build. Timeout(sec): 28800, Working directory: '', Network: ''
+2026/03/22 06:40:07 Scanning for dependencies...
+2026/03/22 06:40:07 Successfully scanned dependencies
+2026/03/22 06:40:07 Launching container with name: build
+Sending build context to Docker daemon  331.3kB
+
+
+
+Step 1/10 : FROM python:3.11-slim
+3.11-slim: Pulling from library/python
+ec781dee3f47: Pulling fs layer
+6944007a5b45: Pulling fs layer
+e35b92e2619d: Pulling fs layer
+7524aba74b8c: Pulling fs layer
+7524aba74b8c: Waiting
+e35b92e2619d: Verifying Checksum
+e35b92e2619d: Download complete
+6944007a5b45: Verifying Checksum
+6944007a5b45: Download complete
+7524aba74b8c: Verifying Checksum
+7524aba74b8c: Download complete
+ec781dee3f47: Verifying Checksum
+ec781dee3f47: Download complete
+ec781dee3f47: Pull complete
+
+6944007a5b45: Pull complete
+e35b92e2619d: Pull complete
+7524aba74b8c: Pull complete
+Digest: sha256:9358444059ed78e2975ada2c189f1c1a3144a5dab6f35bff8c981afb38946634
+Status: Downloaded newer image for python:3.11-slim
+ ---> e67db9b14d09
+Step 2/10 : WORKDIR /app
+ ---> Running in f3dbb9c61a84
+Removing intermediate container f3dbb9c61a84
+ ---> ac993031e823
+Step 3/10 : RUN apt-get update &&     apt-get install -y --no-install-recommends       libssl-dev       libasound2       ca-certificates &&     rm -rf /var/lib/apt/lists/*
+ ---> Running in be68372cdec8
+Hit:1 http://deb.debian.org/debian trixie InRelease
+Get:2 http://deb.debian.org/debian trixie-updates InRelease [47.3 kB]
+Get:3 http://deb.debian.org/debian-security trixie-security InRelease [43.4 kB]
+Get:4 http://deb.debian.org/debian trixie/main amd64 Packages [9671 kB]
+Get:5 http://deb.debian.org/debian trixie-updates/main amd64 Packages [5412 B]
+Get:6 http://deb.debian.org/debian-security trixie-security/main amd64 Packages [114 kB]
+Fetched 9881 kB in 1s (11.7 MB/s)
+
+Reading package lists...
+Reading package lists...
+Building dependency tree...
+Reading state information...
+ca-certificates is already the newest version (20250419).
+Suggested packages:
+  alsa-utils libasound2-plugins libssl-doc
+Recommended packages:
+  alsa-ucm-conf alsa-topology-conf
+The following NEW packages will be installed:
+  libasound2-data libasound2t64 libssl-dev
+0 upgraded, 3 newly installed, 0 to remove and 0 not upgraded.
+Need to get 3356 kB of archives.
+After this operation, 17.9 MB of additional disk space will be used.
+Get:1 http://deb.debian.org/debian trixie/main amd64 libasound2-data all 1.2.14-1 [21.1 kB]
+Get:2 http://deb.debian.org/debian trixie/main amd64 libasound2t64 amd64 1.2.14-1 [381 kB]
+Get:3 http://deb.debian.org/debian trixie/main amd64 libssl-dev amd64 3.5.5-1~deb13u1 [2953 kB]
+debconf: unable to initialize frontend: Dialog
+debconf: (TERM is not set, so the dialog frontend is not usable.)
+debconf: falling back to frontend: Readline
+debconf: unable to initialize frontend: Readline
+debconf: (Can't locate Term/ReadLine.pm in @INC (you may need to install the Term::ReadLine module) (@INC entries checked: /etc/perl /usr/local/lib/x86_64-linux-gnu/perl/5.40.1 /usr/local/share/perl/5.40.1 /usr/lib/x86_64-linux-gnu/perl5/5.40 /usr/share/perl5 /usr/lib/x86_64-linux-gnu/perl-base /usr/lib/x86_64-linux-gnu/perl/5.40 /usr/share/perl/5.40 /usr/local/lib/site_perl) at /usr/share/perl5/Debconf/FrontEnd/Readline.pm line 8, <STDIN> line 3.)
+debconf: falling back to frontend: Teletype
+debconf: unable to initialize frontend: Teletype
+debconf: (This frontend requires a controlling tty.)
+debconf: falling back to frontend: Noninteractive
+Fetched 3356 kB in 0s (35.1 MB/s)
+
+Selecting previously unselected package libasound2-data.
+
+(Reading database ... 
+(Reading database ... 5%
+(Reading database ... 10%
+(Reading database ... 15%
+(Reading database ... 20%
+(Reading database ... 25%
+(Reading database ... 30%
+(Reading database ... 35%
+(Reading database ... 40%
+(Reading database ... 45%
+(Reading database ... 50%
+(Reading database ... 55%
+(Reading database ... 60%
+(Reading database ... 65%
+(Reading database ... 70%
+(Reading database ... 75%
+(Reading database ... 80%
+(Reading database ... 85%
+(Reading database ... 90%
+(Reading database ... 95%
+(Reading database ... 100%
+(Reading database ... 5645 files and directories currently installed.)
+
+Preparing to unpack .../libasound2-data_1.2.14-1_all.deb ...
+
+Unpacking libasound2-data (1.2.14-1) ...
+
+Selecting previously unselected package libasound2t64:amd64.
+
+Preparing to unpack .../libasound2t64_1.2.14-1_amd64.deb ...
+
+Unpacking libasound2t64:amd64 (1.2.14-1) ...
+
+Selecting previously unselected package libssl-dev:amd64.
+
+Preparing to unpack .../libssl-dev_3.5.5-1~deb13u1_amd64.deb ...
+
+Unpacking libssl-dev:amd64 (3.5.5-1~deb13u1) ...
+
+Setting up libasound2-data (1.2.14-1) ...
+
+Setting up libasound2t64:amd64 (1.2.14-1) ...
+
+Setting up libssl-dev:amd64 (3.5.5-1~deb13u1) ...
+
+Processing triggers for libc-bin (2.41-12+deb13u2) ...
+
+Removing intermediate container be68372cdec8
+ ---> 90599f933c24
+Step 4/10 : COPY requirements.txt .
+ ---> 881cbdf354eb
+Step 5/10 : RUN pip install --no-cache-dir -r requirements.txt
+ ---> Running in abec533c65ad
+Collecting fastapi (from -r requirements.txt (line 2))
+
+az : ERROR: The command failed with an unexpected error. Here is the traceback:
+At line:1 char:61
++ ... chcp 65001; az acr task logs -r containerregistrykvhky --run-id ch4 2 ...
++                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : NotSpecified: (ERROR: The comm... the traceback::String) [], RemoteExceptio 
+   n
+    + FullyQualifiedErrorId : NativeCommandError
+ 
+ERROR: 'charmap' codec can't encode characters in position 343-382: character maps to <undefined>
+Traceback (most recent call last):
+  File "D:\a\_work\1\s\build_scripts\windows\artifacts\cli\Lib\site-packages\knack/cli.py", line 233, in 
+invoke
+  File "D:\a\_work\1\s\build_scripts\windows\artifacts\cli\Lib\site-packages\azure/cli/core/commands/__ini
+t__.py", line 682, in execute
+  File "D:\a\_work\1\s\build_scripts\windows\artifacts\cli\Lib\site-packages\azure/cli/core/commands/__ini
+t__.py", line 812, in _run_jobs_serially
+  File "D:\a\_work\1\s\build_scripts\windows\artifacts\cli\Lib\site-packages\azure/cli/core/commands/__ini
+t__.py", line 781, in _run_job
+  File "D:\a\_work\1\s\build_scripts\windows\artifacts\cli\Lib\site-packages\azure/cli/core/commands/__ini
+t__.py", line 336, in __call__
+  File "D:\a\_work\1\s\build_scripts\windows\artifacts\cli\Lib\site-packages\azure/cli/core/commands/comma
+nd_operation.py", line 120, in handler
+  File "D:\a\_work\1\s\build_scripts\windows\artifacts\cli\Lib\site-packages\azure/cli/command_modules/acr
+/task.py", line 1126, in acr_task_logs
+  File "D:\a\_work\1\s\build_scripts\windows\artifacts\cli\Lib\site-packages\azure/cli/command_modules/acr
+/_stream_utils.py", line 56, in stream_logs
+  File "D:\a\_work\1\s\build_scripts\windows\artifacts\cli\Lib\site-packages\azure/cli/command_modules/acr
+/_stream_utils.py", line 126, in _stream_logs
+  File "D:\a\_work\1\s\build_scripts\windows\artifacts\cli\Lib\site-packages\colorama/ansitowin32.py", 
+line 47, in write
+  File "D:\a\_work\1\s\build_scripts\windows\artifacts\cli\Lib\site-packages\colorama/ansitowin32.py", 
+line 177, in write
+  File "D:\a\_work\1\s\build_scripts\windows\artifacts\cli\Lib\site-packages\colorama/ansitowin32.py", 
+line 205, in write_and_convert
+  File "D:\a\_work\1\s\build_scripts\windows\artifacts\cli\Lib\site-packages\colorama/ansitowin32.py", 
+line 210, in write_plain_text
+  File "encodings\cp1252.py", line 19, in encode
+UnicodeEncodeError: 'charmap' codec can't encode characters in position 343-382: character maps to 
+<undefined>
+To check existing issues, please visit: https://github.com/Azure/azure-cli/issues

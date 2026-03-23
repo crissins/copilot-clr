@@ -25,6 +25,7 @@ import { Chat } from "./components/Chat";
 import { LoginButton } from "./components/LoginButton";
 import { PreferencesPanel } from "./components/PreferencesPanel";
 import { Sidebar } from "./components/Sidebar";
+import { SettingsPage } from "./components/SettingsPage";
 import { useAuth } from "./hooks/useAuth";
 import { Feature1Page } from "./features/feature1/Feature1Page";
 import { Feature2Page } from "./features/feature2/Feature2Page";
@@ -98,6 +99,7 @@ function ViewContent({ activeView }: { activeView: string }) {
     case "feature5": return <Feature5Page />;
     case "feature6": return <Feature6Page />;
     case "feature7": return <Feature7Page />;
+    case "settings": return <SettingsPage />;
     default:         return <Chat />;
   }
 }

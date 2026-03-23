@@ -10,6 +10,10 @@ openai
 azure-ai-projects>=2.0.0b3
 azure-ai-inference
 
+# Microsoft Agent Framework SDK (sequential workflow)
+agent-framework-azure-ai==1.0.0rc3
+agent-framework-core==1.0.0rc3
+
 # Azure Data Services
 azure-cosmos
 azure-storage-blob
