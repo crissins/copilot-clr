@@ -37,7 +37,7 @@ param environmentName string = 'dev'
 @description('Project name used for resource naming')
 param projectName string = 'chatapp'
 
-@description('Entra ID Client ID for user authentication (set after app registration)')
+@description('Entra ID Client ID for user authentication. Leave empty to auto-create via deployment script.')
 param entraClientId string = ''
 
 // ============================================================================
@@ -202,6 +202,23 @@ module staticWebApp 'modules/staticwebapp.bicep' = if (!localDevMode) {
   }
 }
 
+// Entra ID App Registration — auto-creates if entraClientId is not provided.
+// Sets signInAudience to AzureADandPersonalMicrosoftAccount (org + @outlook.com).
+module entraApp 'modules/entra-app-registration.bicep' = if (empty(entraClientId) && !localDevMode) {
+  name: 'entra-app-registration-deployment'
+  params: {
+    location: location
+    tags: tags
+    appDisplayName: 'Copilot CLR'
+    #disable-next-line BCP318
+    swaHostname: localDevMode ? '' : staticWebApp.outputs.staticWebAppHostname
+  }
+}
+
+// Resolve client ID: use param if provided, otherwise use auto-created value
+#disable-next-line BCP318
+var resolvedEntraClientId = !empty(entraClientId) ? entraClientId : (localDevMode ? '' : entraApp.outputs.clientId)
+
 // ============================================================================
 // Phase 2: AI Layer (depends on storage, keyvault, monitoring)
 // ============================================================================
@@ -277,7 +294,7 @@ module containerApps 'modules/container-apps.bicep' = if (!localDevMode) {
     aiFoundryEndpoint: aiFoundryProject.outputs.projectDiscoveryUrl
     #disable-next-line BCP318
     staticWebAppHostname: staticWebApp.outputs.staticWebAppHostname
-    entraClientId: entraClientId
+    entraClientId: resolvedEntraClientId
     containerCpu: containerCpu
     containerMemory: containerMemory
     speechEndpoint: speech.outputs.speechEndpoint
@@ -391,3 +408,6 @@ output STORAGE_ACCOUNT_NAME string = storage.outputs.storageAccountName
 // Web PubSub (real-time voice transport)
 #disable-next-line BCP318
 output WEBPUBSUB_ENDPOINT string = localDevMode ? '' : webPubSub.outputs.webPubSubEndpoint
+
+// Entra ID App Registration
+output ENTRA_CLIENT_ID string = resolvedEntraClientId

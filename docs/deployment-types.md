@@ -146,3 +146,34 @@ If you redeploy after deletion, purge any soft-deleted Cognitive Services accoun
 az cognitiveservices account list-deleted --query "[].name" -o tsv
 az cognitiveservices account purge --location <region> --resource-group <rg> --name <name>
 ```
+
+## Prerequisites
+
+### Entra ID App Registration (automated)
+
+The Bicep template includes a deployment script (`modules/entra-app-registration.bicep`) that **automatically creates** an Entra ID App Registration configured for:
+
+- **Multi-tenant + personal accounts** (`AzureADandPersonalMicrosoftAccount`) — accepts organizational accounts and personal @outlook.com / @hotmail.com accounts
+- **SPA redirect URIs** — `http://localhost:5173` (dev) and the SWA hostname (cloud)
+- **OpenID scopes** — `openid`, `profile`, `email`
+
+**One-time requirement:** The deployment script's managed identity (`id-entra-app-script`) needs **Microsoft Graph** permission to create app registrations. After the first deployment, grant it:
+
+```bash
+# Get the managed identity's principal ID
+MI_OID=$(az identity show -g <rg> -n id-entra-app-script --query principalId -o tsv)
+
+# Assign the Cloud Application Administrator role (Entra ID directory role)
+az rest --method POST \
+  --url "https://graph.microsoft.com/v1.0/directoryRoles/templateId=9b895d92-2cd3-44c7-9d02-a6ac2d5ea5c3/members/\$ref" \
+  --headers "Content-Type=application/json" \
+  --body "{\"@odata.id\":\"https://graph.microsoft.com/v1.0/directoryObjects/$MI_OID\"}"
+```
+
+Alternatively, assign the **Cloud Application Administrator** role to the managed identity via the Azure Portal (Entra ID > Roles and administrators).
+
+If you prefer to manage the app registration manually, pass the client ID as a parameter to skip the deployment script:
+
+```bash
+az deployment group create ... --parameters entraClientId=<your-client-id>
+```

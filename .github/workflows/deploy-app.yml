@@ -6,10 +6,7 @@
 name: Deploy App (Static Web App)
 
 on:
-  push:
-    branches: [main]
-    paths: ['frontend/**']
-  workflow_dispatch:
+  workflow_dispatch:   # manual-only — deploy.yml handles SWA deploys on push
 
 permissions:
   id-token: write
