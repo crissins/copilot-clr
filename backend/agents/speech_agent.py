@@ -25,6 +25,21 @@ import os
 from typing import Optional
 
 from azure.identity import DefaultAzureCredential
+from azure.identity.aio import DefaultAzureCredential as AsyncDefaultAzureCredential
+
+from agent_framework import Message
+from agent_framework.azure import AzureAIClient
+from agents.memory import UserMemoryProvider, CosmosDBHistoryProvider
+from agents.agent_tools import (
+    search_documents,
+    search_web,
+    create_task,
+    list_tasks,
+    update_task,
+    delete_task,
+    get_chat_history,
+    set_tool_context,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -256,50 +271,58 @@ def _ensure_agent_sync(client) -> str:
     return AGENT_NAME
 
 
-def _run_agent_chat_sync(
-    client, agent_name: str, message: str,
-    session_id: str = "", user_id: str = "",
+async def _run_agent_chat_async(
+    message: str,
+    session_id: str,
+    user_id: str,
 ) -> dict:
-    """Run a single chat turn via Foundry Agent Service.
+    """Run a single chat turn via Agent Framework with persistent memory.
 
-    Reuses the Foundry conversation for the same session_id so the agent
-    maintains context across turns.  Conversation IDs are persisted to
-    Cosmos DB (speechConversationId field on the sessions document).
+    Args:
+        message:    The user's message text.
+        session_id: Chat session ID.
+        user_id:    Authenticated user ID.
 
-    Returns: {"text": str}
+    Returns:
+        {"text": str}
     """
-    openai_client = client.get_openai_client()
+    # Set context vars for tools (like get_chat_history)
+    set_tool_context(user_id, session_id)
 
-    # Look up existing conversation for this session
-    conversation_id: Optional[str] = None
-    if session_id and user_id:
-        conversation_id = _read_conversation_id_sync(session_id, user_id)
+    credential = AsyncDefaultAzureCredential()
+    
+    # We use the same tools as the main assistant to provide a unified experience
+    tools = [
+        search_documents,
+        search_web,
+        create_task,
+        list_tasks,
+        update_task,
+        delete_task,
+        get_chat_history,
+    ]
 
-    if not conversation_id:
-        conversation = openai_client.conversations.create()
-        conversation_id = conversation.id
-        if session_id and user_id:
-            _write_conversation_id_sync(session_id, user_id, conversation_id)
-        logger.info("Created Foundry conversation %s for session %s", conversation_id, session_id)
+    # Providers:
+    # 1. UserMemoryProvider handles name/preference extraction/injection
+    # 2. CosmosDBHistoryProvider handles loading/storing conversation history
+    memory_provider = UserMemoryProvider()
+    history_provider = CosmosDBHistoryProvider(session_id, user_id, load_messages=True)
 
-    response = openai_client.responses.create(
-        input=message,
-        conversation=conversation_id,
-        extra_body={
-            "agent_reference": {
-                "name": agent_name,
-                "type": "agent_reference",
-            }
-        },
-    )
-
-    for item in response.output:
-        if hasattr(item, "content"):
-            for block in item.content:
-                if hasattr(block, "text"):
-                    return {"text": block.text}
-
-    return {"text": "I wasn't able to generate a response. Please try again."}
+    async with AzureAIClient(
+        project_endpoint=os.environ.get("PROJECT_ENDPOINT", ""),
+        model_deployment_name=AGENT_MODEL,
+        credential=credential,
+    ).as_agent(
+        name=AGENT_NAME,
+        instructions=AGENT_INSTRUCTIONS,
+        tools=tools,
+        context_providers=[history_provider, memory_provider],
+    ) as agent:
+        input_messages = [Message(role="user", content=message)]
+        response = await agent.run(input_messages)
+        
+        text = response.text if hasattr(response, "text") else str(response)
+        return {"text": text}
 
 
 # ============================================================================
@@ -349,12 +372,8 @@ async def get_speech_agent_response(
             "sessionId": session_id,
         }
 
-    # Foundry Agent Service chat — reuses conversation per session
-    client = await asyncio.to_thread(_get_project_client_sync)
-    agent_name = await asyncio.to_thread(_ensure_agent_sync, client)
-    result = await asyncio.to_thread(
-        _run_agent_chat_sync, client, agent_name, message, session_id, user_id,
-    )
+    # Agent Framework chat — with persistent memory providers
+    result = await _run_agent_chat_async(message, session_id, user_id)
     response_text = result["text"]
 
     # TTS synthesis with calm SSML in a thread

@@ -352,6 +352,52 @@ async def speech_synthesize(req: Request):
 
 
 # ============================================================================
+# POST /api/speech/onboarding — Multilingual SSML for onboarding greeting
+# ============================================================================
+
+@app.post("/api/speech/onboarding")
+async def speech_onboarding(req: Request):
+    """Synthesize a pre-built multilingual SSML string for the onboarding flow.
+
+    Accepts { "ssml": "<speak>...</speak>" } with per-language <voice> tags.
+    Returns MP3 audio bytes.
+    """
+    from fastapi.responses import Response
+    from services.speech import synthesize_ssml_raw_sync
+
+    try:
+        _get_user_id(req.headers.get("Authorization"))
+    except AuthError as e:
+        return JSONResponse({"error": str(e)}, status_code=401)
+
+    try:
+        body = await req.json()
+    except Exception:
+        return JSONResponse({"error": "Invalid JSON"}, status_code=400)
+
+    ssml = body.get("ssml", "").strip()
+    if not ssml or not ssml.startswith("<speak"):
+        return JSONResponse({"error": "Valid SSML is required."}, status_code=400)
+    if len(ssml) > 10000:
+        return JSONResponse({"error": "SSML too long."}, status_code=400)
+
+    result = await asyncio.to_thread(synthesize_ssml_raw_sync, ssml)
+
+    if result.get("local_dev"):
+        return JSONResponse({"message": "TTS requires Azure Speech Service.", "ssml": ssml})
+
+    audio_bytes = result.get("audio_bytes", b"")
+    if not audio_bytes:
+        return JSONResponse({"error": result.get("error", "Synthesis failed.")}, status_code=502)
+
+    return Response(
+        content=audio_bytes,
+        media_type="audio/mpeg",
+        headers={"X-TTS-Latency-Ms": str(result.get("durationMs", 0))},
+    )
+
+
+# ============================================================================
 # POST /api/speech/chat — Full speech pipeline via Agent Framework (Feature 7)
 # ============================================================================
 
@@ -399,6 +445,16 @@ async def speech_chat(req: Request) -> JSONResponse:
             "updatedAt": datetime.now(timezone.utc).isoformat(),
         })
 
+    # Persist user message
+    _messages_container.upsert_item({
+        "id": str(uuid.uuid4()),
+        "sessionId": session_id,
+        "role": "user",
+        "content": message,
+        "userId": user_id,
+        "createdAt": datetime.now(timezone.utc).isoformat(),
+    })
+
     start = time.monotonic()
     try:
         result = await get_speech_agent_response(
@@ -425,6 +481,16 @@ async def speech_chat(req: Request) -> JSONResponse:
         )
         result["text"] = _CONTENT_SAFETY_FALLBACK
         result["audio_base64"] = ""  # Drop audio for filtered response
+
+    # Persist assistant response
+    _messages_container.upsert_item({
+        "id": str(uuid.uuid4()),
+        "sessionId": session_id,
+        "role": "assistant",
+        "content": result["text"],
+        "userId": user_id,
+        "createdAt": datetime.now(timezone.utc).isoformat(),
+    })
 
     duration_ms = int((time.monotonic() - start) * 1000)
     logger.info("speech_chat_duration_ms=%d session=%s", duration_ms, session_id)

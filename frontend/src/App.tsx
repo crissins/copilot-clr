@@ -26,7 +26,10 @@ import { LoginButton } from "./components/LoginButton";
 import { PreferencesPanel } from "./components/PreferencesPanel";
 import { Sidebar } from "./components/Sidebar";
 import { SettingsPage } from "./components/SettingsPage";
+import { LanguageSelector } from "./components/LanguageSelector";
+import { OnboardingWizard } from "./components/OnboardingWizard";
 import { useAuth } from "./hooks/useAuth";
+import { useSettings } from "./hooks/useSettings";
 import { Feature1Page } from "./features/feature1/Feature1Page";
 import { Feature2Page } from "./features/feature2/Feature2Page";
 import { Feature3Page } from "./features/feature3/Feature3Page";
@@ -89,7 +92,7 @@ const useStyles = makeStyles({
 
 // ── View router ──────────────────────────────────────────────────────────────
 
-function ViewContent({ activeView }: { activeView: string }) {
+function ViewContent({ activeView, onStartOnboarding }: { activeView: string; onStartOnboarding?: () => void }) {
   switch (activeView) {
     case "chat":     return <Chat />;
     case "feature1": return <Feature1Page />;
@@ -99,7 +102,7 @@ function ViewContent({ activeView }: { activeView: string }) {
     case "feature5": return <Feature5Page />;
     case "feature6": return <Feature6Page />;
     case "feature7": return <Feature7Page />;
-    case "settings": return <SettingsPage />;
+    case "settings": return <SettingsPage onStartOnboarding={onStartOnboarding} />;
     default:         return <Chat />;
   }
 }
@@ -109,12 +112,32 @@ function ViewContent({ activeView }: { activeView: string }) {
 function AppShell() {
   const styles = useStyles();
   const { user, logout } = useAuth();
+  const { settings, loading: settingsLoading, reload: reloadSettings } = useSettings();
   const [showPrefs, setShowPrefs] = useState(false);
   const [activeView, setActiveView] = useState("chat");
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [darkMode, setDarkMode] = useState(false);
 
+  // Onboarding: "lang" → language selector, "wizard" → step wizard, null → done/not needed
+  const [onboardingPhase, setOnboardingPhase] = useState<"lang" | "wizard" | null>(null);
+  const [selectedLanguage, setSelectedLanguage] = useState("en");
+  const [onboardingDismissed, setOnboardingDismissed] = useState(false);
+
   const isAuthed = LOCAL_DEV || !!user;
+
+  // Detect first-time user (no updatedAt means they've never saved settings)
+  const needsOnboarding =
+    isAuthed && !settingsLoading && settings && !settings.updatedAt && !onboardingDismissed;
+
+  // Derive effective phase — also allow manual re-trigger via onboardingPhase
+  const activeOnboarding =
+    onboardingPhase !== null ? onboardingPhase
+    : needsOnboarding ? "lang"
+    : null;
+
+  const startOnboarding = () => {
+    setOnboardingPhase("lang");
+  };
 
   return (
     <FluentProvider theme={darkMode ? webDarkTheme : webLightTheme}>
@@ -169,21 +192,29 @@ function AppShell() {
         {/* ── Body ───────────────────────────────────────────────────── */}
         <div className={styles.body}>
           {LOCAL_DEV ? (
-            // LOCAL_DEV: always show content
-            <>
-              <Sidebar
-                activeView={activeView}
-                onNavigate={setActiveView}
-                collapsed={sidebarCollapsed}
-                onToggle={() => setSidebarCollapsed(!sidebarCollapsed)}
-              />
+            // LOCAL_DEV: show onboarding or normal content
+            activeOnboarding === "lang" ? (
               <main className={styles.main} role="main">
-                <ViewContent activeView={activeView} />
+                <LanguageSelector
+                  onSelect={(lang) => {
+                    setSelectedLanguage(lang);
+                    setOnboardingPhase("wizard");
+                  }}
+                />
               </main>
-            </>
-          ) : (
-            <>
-              <AuthenticatedTemplate>
+            ) : activeOnboarding === "wizard" ? (
+              <main className={styles.main} role="main">
+                <OnboardingWizard
+                  language={selectedLanguage}
+                  onComplete={() => {
+                    setOnboardingPhase(null);
+                    setOnboardingDismissed(true);
+                    reloadSettings();
+                  }}
+                />
+              </main>
+            ) : (
+              <>
                 <Sidebar
                   activeView={activeView}
                   onNavigate={setActiveView}
@@ -191,8 +222,46 @@ function AppShell() {
                   onToggle={() => setSidebarCollapsed(!sidebarCollapsed)}
                 />
                 <main className={styles.main} role="main">
-                  <ViewContent activeView={activeView} />
+                  <ViewContent activeView={activeView} onStartOnboarding={startOnboarding} />
                 </main>
+              </>
+            )
+          ) : (
+            <>
+              <AuthenticatedTemplate>
+                {activeOnboarding === "lang" ? (
+                  <main className={styles.main} role="main">
+                    <LanguageSelector
+                      onSelect={(lang) => {
+                        setSelectedLanguage(lang);
+                        setOnboardingPhase("wizard");
+                      }}
+                    />
+                  </main>
+                ) : activeOnboarding === "wizard" ? (
+                  <main className={styles.main} role="main">
+                    <OnboardingWizard
+                      language={selectedLanguage}
+                      onComplete={() => {
+                        setOnboardingPhase(null);
+                        setOnboardingDismissed(true);
+                        reloadSettings();
+                      }}
+                    />
+                  </main>
+                ) : (
+                  <>
+                    <Sidebar
+                      activeView={activeView}
+                      onNavigate={setActiveView}
+                      collapsed={sidebarCollapsed}
+                      onToggle={() => setSidebarCollapsed(!sidebarCollapsed)}
+                    />
+                    <main className={styles.main} role="main">
+                      <ViewContent activeView={activeView} onStartOnboarding={startOnboarding} />
+                    </main>
+                  </>
+                )}
               </AuthenticatedTemplate>
 
               <UnauthenticatedTemplate>

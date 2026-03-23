@@ -24,6 +24,7 @@ import {
   Save24Regular,
   ArrowReset24Regular,
   Person24Regular,
+  Wand24Regular,
 } from "@fluentui/react-icons";
 import { useSettings } from "../hooks/useSettings";
 import type { NeurodiverseSettings } from "../services/api";
@@ -124,7 +125,11 @@ const useStyles = makeStyles({
   },
 });
 
-export function SettingsPage() {
+interface SettingsPageProps {
+  onStartOnboarding?: () => void;
+}
+
+export function SettingsPage({ onStartOnboarding }: SettingsPageProps) {
   const styles = useStyles();
   const { settings, loading, saving, error, updateSettings } = useSettings();
   const [draft, setDraft] = useState<Partial<NeurodiverseSettings>>({});
@@ -187,6 +192,15 @@ export function SettingsPage() {
           </Text>
         </div>
         <div className={styles.headerActions}>
+          {onStartOnboarding && (
+            <Button
+              appearance="subtle"
+              icon={<Wand24Regular />}
+              onClick={onStartOnboarding}
+            >
+              Restart Onboarding
+            </Button>
+          )}
           {hasDraftChanges && (
             <Button
               appearance="subtle"

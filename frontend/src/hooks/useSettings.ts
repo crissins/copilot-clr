@@ -1,6 +1,30 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { apiClient, type NeurodiverseSettings } from "../services/api";
 import { useAuth } from "./useAuth";
+
+const DEFAULT_SETTINGS: NeurodiverseSettings = {
+  id: "",
+  userId: "",
+  readingLevel: "Grade 5",
+  preferredFormat: "bullet points",
+  voiceSpeed: "1.0",
+  fontSize: "medium",
+  highContrast: false,
+  theme: "system",
+  language: "en",
+  fontFamily: "default",
+  lineSpacing: "normal",
+  reducedMotion: false,
+  focusTimerMinutes: 25,
+  breakReminderMinutes: 5,
+  notificationStyle: "calm",
+  responseLengthPreference: "medium",
+  dyslexiaFont: false,
+  colorOverlay: "none",
+  autoReadResponses: false,
+  preferredVoice: "default",
+  textAlignment: "left",
+};
 
 export function useSettings() {
   const { getAccessToken } = useAuth();
@@ -8,24 +32,35 @@ export function useSettings() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const loadedRef = useRef(false);
 
   const loadSettings = useCallback(async () => {
     setLoading(true);
     setError(null);
     try {
       const token = await getAccessToken();
-      const data = await apiClient.getSettings(token);
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), 8000);
+      const data = await apiClient.getSettings(token, controller.signal);
+      clearTimeout(timeout);
       setSettings(data);
     } catch (err) {
-      setError("Failed to load settings");
       console.error("Load settings failed:", err);
+      // Fall back to defaults so the page always renders
+      if (!settings) {
+        setSettings({ ...DEFAULT_SETTINGS });
+      }
+      setError("Failed to load settings — using defaults");
     } finally {
       setLoading(false);
     }
-  }, [getAccessToken]);
+  }, [getAccessToken]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
-    loadSettings();
+    if (!loadedRef.current) {
+      loadedRef.current = true;
+      loadSettings();
+    }
   }, [loadSettings]);
 
   const updateSettings = useCallback(

@@ -223,9 +223,10 @@ class ApiClient {
     if (!res.ok) throw new Error(`Report failed: ${res.status}`);
   }
 
-  async getSettings(token: string | null): Promise<NeurodiverseSettings> {
+  async getSettings(token: string | null, signal?: AbortSignal): Promise<NeurodiverseSettings> {
     const res = await fetch(`${API_BASE}/api/settings`, {
       headers: this.getHeaders(token),
+      signal,
     });
     if (!res.ok) throw new Error(`Get settings failed: ${res.status}`);
     return res.json();
@@ -287,6 +288,16 @@ class ApiClient {
       headers: this.getHeaders(token),
     });
     if (!res.ok) throw new Error(`Delete task failed: ${res.status}`);
+  }
+
+  async synthesizeOnboardingSsml(ssml: string, token: string | null): Promise<Blob> {
+    const res = await fetch(`${API_BASE}/api/speech/onboarding`, {
+      method: "POST",
+      headers: this.getHeaders(token),
+      body: JSON.stringify({ ssml }),
+    });
+    if (!res.ok) throw new Error(`Onboarding TTS failed: ${res.status}`);
+    return res.blob();
   }
 }
 
