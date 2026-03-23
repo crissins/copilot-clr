@@ -23,6 +23,7 @@ import {
 
 import { Chat } from "./components/Chat";
 import { LoginButton } from "./components/LoginButton";
+import { LandingPage } from "./components/LandingPage";
 import { PreferencesPanel } from "./components/PreferencesPanel";
 import { Sidebar } from "./components/Sidebar";
 import { SettingsPage } from "./components/SettingsPage";
@@ -265,9 +266,7 @@ function AppShell() {
               </AuthenticatedTemplate>
 
               <UnauthenticatedTemplate>
-                <div className={styles.loginWrapper}>
-                  <LoginButton />
-                </div>
+                <LandingPage />
               </UnauthenticatedTemplate>
             </>
           )}
