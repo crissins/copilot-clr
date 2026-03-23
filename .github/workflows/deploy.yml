@@ -1,0 +1,119 @@
+name: Deploy — Backend + Frontend
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:       # allow manual trigger from GitHub UI
+
+# ─── Environment variables shared across jobs ─────────────────────────────────
+env:
+  RESOURCE_GROUP: rg-chatapp-prod
+  LOCATION: eastus2
+
+  # Container App / ACR
+  ACR_LOGIN_SERVER: containerregistrykvhky.azurecr.io
+  ACR_IMAGE: containerregistrykvhky.azurecr.io/copilot-clr-api
+  CONTAINER_APP_NAME: container-apps-kvhky
+  CONTAINER_APP_ENV: container-apps-environment-kvhky
+
+  # Static Web App
+  SWA_NAME: swa-kvhky
+
+jobs:
+  # ═══════════════════════════════════════════════════════════════════════════
+  # JOB 1 — Build & push backend Docker image to ACR, update Container App
+  # ═══════════════════════════════════════════════════════════════════════════
+  deploy-backend:
+    name: Backend — Docker build → ACR → Container App
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write   # needed for OIDC login to Azure
+      contents: read
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      # Log in to Azure using a Service Principal stored as a GitHub secret.
+      # Secret name: AZURE_CREDENTIALS  (JSON from: az ad sp create-for-rbac)
+      - name: Azure login
+        uses: azure/login@v2
+        with:
+          creds: ${{ secrets.AZURE_CREDENTIALS }}
+
+      # Authenticate docker to ACR using the SP credentials
+      - name: ACR login
+        run: az acr login --name containerregistrykvhky
+
+      # Build image — tag with git SHA for traceability AND :latest for rollout
+      - name: Build & push Docker image
+        run: |
+          IMAGE_TAG=${{ env.ACR_IMAGE }}:${{ github.sha }}
+          IMAGE_LATEST=${{ env.ACR_IMAGE }}:latest
+
+          docker build \
+            --file backend/Dockerfile \
+            --tag "$IMAGE_TAG" \
+            --tag "$IMAGE_LATEST" \
+            backend/
+
+          docker push "$IMAGE_TAG"
+          docker push "$IMAGE_LATEST"
+
+          echo "IMAGE=$IMAGE_TAG" >> $GITHUB_ENV
+
+      # Update the Container App to use the new SHA-tagged image
+      # (more reliable than :latest — avoids revision reuse)
+      - name: Deploy to Container App
+        run: |
+          az containerapp update \
+            --name ${{ env.CONTAINER_APP_NAME }} \
+            --resource-group ${{ env.RESOURCE_GROUP }} \
+            --image "$IMAGE" \
+            --query "{name:name, latestRevision:properties.latestRevisionName}" \
+            --output table
+
+  # ═══════════════════════════════════════════════════════════════════════════
+  # JOB 2 — Build frontend, deploy to Azure Static Web Apps
+  # ═══════════════════════════════════════════════════════════════════════════
+  deploy-frontend:
+    name: Frontend — npm build → SWA
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write
+      contents: read
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install dependencies
+        working-directory: frontend
+        run: npm ci
+
+      # VITE_API_BASE is empty for SWA (proxied via staticwebapp.config.json)
+      # Add other public env vars here as needed
+      - name: Build frontend
+        working-directory: frontend
+        env:
+          VITE_LOCAL_DEV: "false"
+        run: npm run build
+
+      # Deploy dist/ to Azure SWA using the deployment token
+      # Secret name: SWA_DEPLOYMENT_TOKEN
+      - name: Deploy to Static Web Apps
+        uses: Azure/static-web-apps-deploy@v1
+        with:
+          azure_static_web_apps_api_token: ${{ secrets.SWA_DEPLOYMENT_TOKEN }}
+          repo_token: ${{ secrets.GITHUB_TOKEN }}
+          action: upload
+          app_location: frontend/dist
+          skip_app_build: true          # we already built above with Vite
+          output_location: ""
