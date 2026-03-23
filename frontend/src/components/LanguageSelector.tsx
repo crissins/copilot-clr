@@ -9,12 +9,12 @@ interface LanguageSelectorProps {
 }
 
 const LANGUAGES = [
-  { code: "en", label: "English", hello: "Hello", subtitle: "Please choose your language", voice: "en-US-JennyNeural" },
-  { code: "es", label: "Español", hello: "Hola", subtitle: "Escoge tu idioma", voice: "es-ES-ElviraNeural" },
-  { code: "it", label: "Italiano", hello: "Ciao", subtitle: "Scegli la tua lingua", voice: "it-IT-ElsaNeural" },
-  { code: "pt", label: "Português", hello: "Olá", subtitle: "Escolha seu idioma", voice: "pt-BR-FranciscaNeural" },
-  { code: "de", label: "Deutsch", hello: "Hallo", subtitle: "Wähle deine Sprache", voice: "de-DE-KatjaNeural" },
-  { code: "ja", label: "日本語", hello: "こんにちは", subtitle: "言語を選択してください", voice: "ja-JP-NanamiNeural" },
+  { code: "en", label: "English", hello: "Hello", subtitle: "Please choose your language", voice: "en-US-JennyNeural", lang: "en-US" },
+  { code: "es", label: "Español", hello: "Hola", subtitle: "Escoge tu idioma", voice: "es-ES-ElviraNeural", lang: "es-ES" },
+  { code: "it", label: "Italiano", hello: "Ciao", subtitle: "Scegli la tua lingua", voice: "it-IT-ElsaNeural", lang: "it-IT" },
+  { code: "pt", label: "Português", hello: "Olá", subtitle: "Escolha seu idioma", voice: "pt-BR-FranciscaNeural", lang: "pt-BR" },
+  { code: "de", label: "Deutsch", hello: "Hallo", subtitle: "Wähle deine Sprache", voice: "de-DE-KatjaNeural", lang: "de-DE" },
+  { code: "ja", label: "日本語", hello: "こんにちは", subtitle: "言語を選択してください", voice: "ja-JP-NanamiNeural", lang: "ja-JP" },
 ];
 
 // Duration (ms) each greeting is shown / spoken before transitioning
@@ -52,11 +52,11 @@ export function LanguageSelector({ onSelect }: LanguageSelectorProps) {
     if (hasPlayed) return;
     setHasPlayed(true);
 
-    // Each voice block: native greeting + subtitle, then a timed pause.
-    // The break accounts for the spoken duration so the visual and audio stay in sync.
+    // Each voice block: set xml:lang per language so the Speech Service
+    // renders text with native pronunciation, not English fallback.
     const voiceBlocks = LANGUAGES.map(
       (l) =>
-        `  <voice name="${l.voice}">\n` +
+        `  <voice name="${l.voice}" xml:lang="${l.lang}">\n` +
         `    <prosody rate="slow">${l.hello}.</prosody>\n` +
         `    <break time="600ms"/>\n` +
         `    <prosody rate="slow">${l.subtitle}.</prosody>\n` +
