@@ -32,12 +32,12 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       # Log in to Azure using a Service Principal stored as a GitHub secret.
       # Secret name: AZURE_CREDENTIALS  (JSON from: az ad sp create-for-rbac)
       - name: Azure login
-        uses: azure/login@v1
+        uses: azure/login@v2
         with:
           creds: ${{ secrets.AZURE_CREDENTIALS }}
 
@@ -85,12 +85,12 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
-      - name: Setup Node.js 20
-        uses: actions/setup-node@v4
+      - name: Setup Node.js 22
+        uses: actions/setup-node@v5
         with:
-          node-version: "20"
+          node-version: "22"
           cache: "npm"
           cache-dependency-path: frontend/package-lock.json
 
@@ -99,11 +99,12 @@ jobs:
         run: npm ci
 
       # VITE_API_BASE is empty for SWA (proxied via staticwebapp.config.json)
-      # Add other public env vars here as needed
+      # VITE_ vars are baked in at build time by Vite
       - name: Build frontend
         working-directory: frontend
         env:
           VITE_LOCAL_DEV: "false"
+          VITE_ENTRA_CLIENT_ID: ${{ secrets.VITE_ENTRA_CLIENT_ID }}
         run: npm run build
 
       # Deploy dist/ to Azure SWA using the deployment token
