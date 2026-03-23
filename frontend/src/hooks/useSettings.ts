@@ -5,6 +5,8 @@ import { useAuth } from "./useAuth";
 const DEFAULT_SETTINGS: NeurodiverseSettings = {
   id: "",
   userId: "",
+  displayName: "",
+  email: "",
   readingLevel: "Grade 5",
   preferredFormat: "bullet points",
   voiceSpeed: "1.0",
