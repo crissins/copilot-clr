@@ -22,7 +22,6 @@ import {
 } from "@azure/msal-react";
 
 import { Chat } from "./components/Chat";
-import { LoginButton } from "./components/LoginButton";
 import { LandingPage } from "./components/LandingPage";
 import { PreferencesPanel } from "./components/PreferencesPanel";
 import { Sidebar } from "./components/Sidebar";
