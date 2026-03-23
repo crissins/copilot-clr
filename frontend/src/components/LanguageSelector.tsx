@@ -17,6 +17,11 @@ const LANGUAGES = [
   { code: "ja", label: "日本語", hello: "こんにちは", subtitle: "言語を選択してください", voice: "ja-JP-NanamiNeural" },
 ];
 
+// Duration (ms) each greeting is shown / spoken before transitioning
+const GREETING_DURATION_MS = 3000;
+// Fade-out starts this many ms before the next greeting
+const FADE_MS = 800;
+
 export function LanguageSelector({ onSelect }: LanguageSelectorProps) {
   const { getAccessToken } = useAuth();
   const [currentIndex, setCurrentIndex] = useState(0);
@@ -24,32 +29,45 @@ export function LanguageSelector({ onSelect }: LanguageSelectorProps) {
   const [hasPlayed, setHasPlayed] = useState(false);
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const indexRef = useRef(0);
 
-  // Cycle through languages
+  // Start visual cycling — keeps a ref in sync so the audio callback can read it
   useEffect(() => {
     intervalRef.current = setInterval(() => {
       setVisible(false);
       setTimeout(() => {
-        setCurrentIndex((prev) => (prev + 1) % LANGUAGES.length);
+        indexRef.current = (indexRef.current + 1) % LANGUAGES.length;
+        setCurrentIndex(indexRef.current);
         setVisible(true);
-      }, 800);
-    }, 3000);
+      }, FADE_MS);
+    }, GREETING_DURATION_MS);
     return () => {
       if (intervalRef.current) clearInterval(intervalRef.current);
     };
   }, []);
 
-  // Play multilingual SSML greeting once on mount
+  // Build SSML where each language greeting is spoken by its native voice,
+  // with a <break> between each to align with the visual cycling cadence.
   const playGreeting = useCallback(async () => {
     if (hasPlayed) return;
     setHasPlayed(true);
 
-    const ssml = `<speak version="1.0" xmlns="http://www.w3.org/2001/10/synthesis" xml:lang="en-US">
-${LANGUAGES.map(
-  (l) =>
-    `  <voice name="${l.voice}"><prosody rate="slow">${l.hello}. ${l.subtitle}.</prosody></voice>`
-).join("\n")}
-</speak>`;
+    // Each voice block: native greeting + subtitle, then a timed pause.
+    // The break accounts for the spoken duration so the visual and audio stay in sync.
+    const voiceBlocks = LANGUAGES.map(
+      (l) =>
+        `  <voice name="${l.voice}">\n` +
+        `    <prosody rate="slow">${l.hello}.</prosody>\n` +
+        `    <break time="600ms"/>\n` +
+        `    <prosody rate="slow">${l.subtitle}.</prosody>\n` +
+        `    <break time="800ms"/>\n` +
+        `  </voice>`
+    ).join("\n");
+
+    const ssml =
+      `<speak version="1.0" xmlns="http://www.w3.org/2001/10/synthesis" xml:lang="en-US">\n` +
+      voiceBlocks +
+      `\n</speak>`;
 
     try {
       const token = await getAccessToken();
@@ -57,9 +75,25 @@ ${LANGUAGES.map(
       const url = URL.createObjectURL(blob);
       const audio = new Audio(url);
       audioRef.current = audio;
+
+      // Sync visual cycling to audio start: reset index and restart interval
+      if (intervalRef.current) clearInterval(intervalRef.current);
+      indexRef.current = 0;
+      setCurrentIndex(0);
+      setVisible(true);
+
+      intervalRef.current = setInterval(() => {
+        setVisible(false);
+        setTimeout(() => {
+          indexRef.current = (indexRef.current + 1) % LANGUAGES.length;
+          setCurrentIndex(indexRef.current);
+          setVisible(true);
+        }, FADE_MS);
+      }, GREETING_DURATION_MS);
+
       audio.play().catch(() => {});
     } catch {
-      // TTS unavailable — continue silently
+      // TTS unavailable — visual cycling continues silently
     }
   }, [getAccessToken, hasPlayed]);
 
