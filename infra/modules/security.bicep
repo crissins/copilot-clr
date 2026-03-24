@@ -58,7 +58,6 @@ param webPubSubName string = ''
 // https://learn.microsoft.com/en-us/azure/role-based-access-control/built-in-roles
 // ============================================================================
 var roles = {
-  cosmosDbDataContributor: 'b24988ac-6180-42a0-ab88-20f7382dd24c' // Contributor (for serverless, data plane RBAC not yet GA)
   storageBlobDataContributor: 'ba92f5b4-2d11-453d-a403-e96b0029c9fe'
   keyVaultSecretsUser: '4633458b-17de-408a-b874-0445c86b69e6'
   azureAIDeveloper: '64702f94-c441-49e6-a78b-ef80e0188fee' // Needed for Project to connect to OpenAI
@@ -137,15 +136,19 @@ resource appAcrPullRole 'Microsoft.Authorization/roleAssignments@2022-04-01' = i
 }
 
 // ============================================================================
-// Container App → Cosmos DB (Data Contributor)
+// Container App → Cosmos DB (Data-plane: Built-in Data Contributor)
+// The ARM "Contributor" role only grants control-plane access.
+// Data-plane reads/writes (read_item, upsert_item, query_items) require a
+// Cosmos DB SQL role assignment with the built-in Data Contributor role.
+// Built-in role IDs: Reader = …0001, Contributor = …0002
 // ============================================================================
-resource funcCosmosRole 'Microsoft.Authorization/roleAssignments@2022-04-01' = if (!localDevMode) {
-  name: guid(cosmosDb.id, containerAppPrincipalId, roles.cosmosDbDataContributor)
-  scope: cosmosDb
+resource funcCosmosDataPlaneRole 'Microsoft.DocumentDB/databaseAccounts/sqlRoleAssignments@2024-02-15-preview' = if (!localDevMode) {
+  parent: cosmosDb
+  name: guid(cosmosDb.id, containerAppPrincipalId, 'cosmos-data-contributor')
   properties: {
     principalId: containerAppPrincipalId
-    roleDefinitionId: subscriptionResourceId('Microsoft.Authorization/roleDefinitions', roles.cosmosDbDataContributor)
-    principalType: 'ServicePrincipal'
+    roleDefinitionId: '${cosmosDb.id}/sqlRoleDefinitions/00000000-0000-0000-0000-000000000002'
+    scope: cosmosDb.id
   }
 }
 
