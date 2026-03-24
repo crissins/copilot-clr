@@ -57,8 +57,14 @@ param aiFoundryEndpoint string = ''
 @description('Azure Speech Service endpoint')
 param speechEndpoint string = ''
 
+@description('Azure Speech Service resource ID for token generation')
+param speechResourceId string = ''
+
 @description('Azure Speech Service region')
 param speechRegion string = 'eastus'
+
+@description('Azure Storage account name for blob uploads')
+param storageAccountName string = ''
 
 @description('Azure Immersive Reader endpoint')
 param irEndpoint string = ''
@@ -163,11 +169,13 @@ resource containerApp 'Microsoft.App/containerApps@2024-03-01' = {
             { name: 'SERVICE_BUS_NAMESPACE',      value: serviceBusNamespace }
             { name: 'KEY_VAULT_URI',              value: keyVaultUri }
             { name: 'AI_PROJECT_NAME',            value: aiProjectName }
-            { name: 'AI_FOUNDRY_ENDPOINT',        value: aiFoundryEndpoint }
+            { name: 'PROJECT_ENDPOINT',             value: aiFoundryEndpoint }
             { name: 'AZURE_SUBSCRIPTION_ID',      value: subscription().subscriptionId }
             { name: 'AZURE_RESOURCE_GROUP',       value: resourceGroup().name }
             { name: 'SPEECH_ENDPOINT',             value: speechEndpoint }
+            { name: 'SPEECH_RESOURCE_ID',          value: speechResourceId }
             { name: 'SPEECH_REGION',               value: speechRegion }
+            { name: 'STORAGE_ACCOUNT_NAME',        value: storageAccountName }
             { name: 'IR_ENDPOINT',                 value: irEndpoint }
             { name: 'DOC_INTELLIGENCE_ENDPOINT',   value: docIntelEndpoint }
             { name: 'WEBPUBSUB_ENDPOINT',           value: webPubSubEndpoint }

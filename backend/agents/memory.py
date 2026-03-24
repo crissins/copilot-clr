@@ -6,6 +6,7 @@ Provides:
   - CosmosDBHistoryProvider: Persists conversation history to Cosmos DB 'messages' container.
 """
 
+import asyncio
 import logging
 import uuid
 from datetime import datetime, timezone
@@ -91,11 +92,13 @@ class CosmosDBHistoryProvider(BaseHistoryProvider):
                 "SELECT TOP 20 * FROM c "
                 "WHERE c.sessionId = @sid ORDER BY c.createdAt DESC"
             )
-            items = list(container.query_items(
-                query=query,
-                parameters=[{"name": "@sid", "value": self.session_id}],
-                enable_cross_partition_query=False,
-            ))
+            items = await asyncio.to_thread(
+                lambda: list(container.query_items(
+                    query=query,
+                    parameters=[{"name": "@sid", "value": self.session_id}],
+                    enable_cross_partition_query=False,
+                ))
+            )
             
             # Framework expects oldest first
             messages = []
@@ -130,6 +133,6 @@ class CosmosDBHistoryProvider(BaseHistoryProvider):
                     "content": msg.content,
                     "createdAt": datetime.now(timezone.utc).isoformat(),
                 }
-                container.upsert_item(doc)
+                await asyncio.to_thread(container.upsert_item, doc)
             except Exception:
                 logger.exception("Failed to store message to Cosmos DB for session=%s", self.session_id)

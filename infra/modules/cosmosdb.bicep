@@ -231,6 +231,111 @@ resource tasksContainer 'Microsoft.DocumentDB/databaseAccounts/sqlDatabases/cont
   }
 }
 
+// Content uploads container
+resource contentContainer 'Microsoft.DocumentDB/databaseAccounts/sqlDatabases/containers@2024-02-15-preview' = {
+  parent: database
+  name: 'content'
+  properties: {
+    resource: {
+      id: 'content'
+      partitionKey: {
+        paths: ['/userId']
+        kind: 'Hash'
+        version: 2
+      }
+      indexingPolicy: {
+        indexingMode: 'consistent'
+        includedPaths: [
+          { path: '/userId/?' }
+          { path: '/createdAt/?' }
+        ]
+        excludedPaths: [
+          { path: '/*' }
+        ]
+      }
+    }
+  }
+}
+
+// Adapted content container
+resource adaptedContainer 'Microsoft.DocumentDB/databaseAccounts/sqlDatabases/containers@2024-02-15-preview' = {
+  parent: database
+  name: 'adapted'
+  properties: {
+    resource: {
+      id: 'adapted'
+      partitionKey: {
+        paths: ['/userId']
+        kind: 'Hash'
+        version: 2
+      }
+      indexingPolicy: {
+        indexingMode: 'consistent'
+        includedPaths: [
+          { path: '/userId/?' }
+          { path: '/createdAt/?' }
+        ]
+        excludedPaths: [
+          { path: '/*' }
+        ]
+      }
+    }
+  }
+}
+
+// TTS audio snippets container
+resource audioContainer 'Microsoft.DocumentDB/databaseAccounts/sqlDatabases/containers@2024-02-15-preview' = {
+  parent: database
+  name: 'audio'
+  properties: {
+    resource: {
+      id: 'audio'
+      partitionKey: {
+        paths: ['/userId']
+        kind: 'Hash'
+        version: 2
+      }
+      indexingPolicy: {
+        indexingMode: 'consistent'
+        includedPaths: [
+          { path: '/userId/?' }
+          { path: '/createdAt/?' }
+        ]
+        excludedPaths: [
+          { path: '/*' }
+        ]
+      }
+    }
+  }
+}
+
+// Reminders container
+resource remindersContainer 'Microsoft.DocumentDB/databaseAccounts/sqlDatabases/containers@2024-02-15-preview' = {
+  parent: database
+  name: 'reminders'
+  properties: {
+    resource: {
+      id: 'reminders'
+      partitionKey: {
+        paths: ['/userId']
+        kind: 'Hash'
+        version: 2
+      }
+      indexingPolicy: {
+        indexingMode: 'consistent'
+        includedPaths: [
+          { path: '/userId/?' }
+          { path: '/scheduledTime/?' }
+          { path: '/status/?' }
+        ]
+        excludedPaths: [
+          { path: '/*' }
+        ]
+      }
+    }
+  }
+}
+
 output cosmosDbId string = cosmosDb.id
 output cosmosDbName string = cosmosDb.name
 output cosmosDbEndpoint string = cosmosDb.properties.documentEndpoint

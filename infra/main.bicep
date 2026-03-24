@@ -298,7 +298,9 @@ module containerApps 'modules/container-apps.bicep' = if (!localDevMode) {
     containerCpu: containerCpu
     containerMemory: containerMemory
     speechEndpoint: speech.outputs.speechEndpoint
+    speechResourceId: speech.outputs.speechId
     speechRegion: speech.outputs.speechRegion
+    storageAccountName: storage.outputs.storageAccountName
     irEndpoint: immersiveReader.outputs.irEndpoint
     docIntelEndpoint: documentIntelligence.outputs.docIntelEndpoint
     // Construct Web PubSub endpoint from naming convention to avoid circular dependency
