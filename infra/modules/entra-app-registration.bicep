@@ -65,20 +65,35 @@ resource deploymentScript 'Microsoft.Resources/deploymentScripts@2023-08-01' = {
         echo "App registration '$APP_NAME' already exists (appId=$EXISTING_APP_ID). Updating..."
         APP_ID="$EXISTING_APP_ID"
 
-        # Update signInAudience and redirect URIs
+        # Update signInAudience, redirect URIs, and expose API
         az ad app update --id "$APP_ID" \
           --sign-in-audience AzureADandPersonalMicrosoftAccount \
           --web-redirect-uris [] \
+          --identifier-uris "api://$APP_ID" \
           2>/dev/null || true
 
         az rest --method PATCH \
           --url "https://graph.microsoft.com/v1.0/applications(appId='$APP_ID')" \
           --headers "Content-Type=application/json" \
-          --body "{\"spa\":{\"redirectUris\":$REDIRECT_URIS}}"
+          --body "{
+            \"spa\":{\"redirectUris\":$REDIRECT_URIS},
+            \"api\":{
+              \"oauth2PermissionScopes\":[{
+                \"adminConsentDescription\":\"Allow the application to access the API on behalf of the signed-in user.\",
+                \"adminConsentDisplayName\":\"Access as user\",
+                \"id\":\"71391690-0701-447a-8b89-a29278918451\",
+                \"isEnabled\":true,
+                \"type\":\"User\",
+                \"userConsentDescription\":\"Allow the application to access the API on your behalf.\",
+                \"userConsentDisplayName\":\"Access as user\",
+                \"value\":\"access_as_user\"
+              }]
+            }
+          }"
       else
         echo "Creating new app registration '$APP_NAME'..."
 
-        # Create with SPA redirect URIs and multi-tenant + personal accounts
+        # Create with SPA redirect URIs, identifier URI, and exposed API scope
         RESULT=$(az rest --method POST \
           --url "https://graph.microsoft.com/v1.0/applications" \
           --headers "Content-Type=application/json" \
@@ -86,6 +101,19 @@ resource deploymentScript 'Microsoft.Resources/deploymentScripts@2023-08-01' = {
             \"displayName\":\"$APP_NAME\",
             \"signInAudience\":\"AzureADandPersonalMicrosoftAccount\",
             \"spa\":{\"redirectUris\":$REDIRECT_URIS},
+            \"identifierUris\":[\"api://PLACEHOLDER_FOR_APP_ID\"],
+            \"api\":{
+              \"oauth2PermissionScopes\":[{
+                \"adminConsentDescription\":\"Allow the application to access the API on behalf of the signed-in user.\",
+                \"adminConsentDisplayName\":\"Access as user\",
+                \"id\":\"71391690-0701-447a-8b89-a29278918451\",
+                \"isEnabled\":true,
+                \"type\":\"User\",
+                \"userConsentDescription\":\"Allow the application to access the API on your behalf.\",
+                \"userConsentDisplayName\":\"Access as user\",
+                \"value\":\"access_as_user\"
+              }]
+            },
             \"requiredResourceAccess\":[{
               \"resourceAppId\":\"00000003-0000-0000-c000-000000000000\",
               \"resourceAccess\":[
@@ -96,8 +124,15 @@ resource deploymentScript 'Microsoft.Resources/deploymentScripts@2023-08-01' = {
             }]
           }")
 
+        # Post-create fixup: Replace placeholder with actual app ID if needed (Graph doesn't allow self-ref during POST)
+        # Actually, let's just use the appId from the result for identifierUris in a PATCH after.
         APP_ID=$(echo "$RESULT" | python3 -c "import sys,json; print(json.load(sys.stdin)['appId'])")
-        echo "Created app registration with appId=$APP_ID"
+        echo "Created app registration with appId=$APP_ID. Setting identifierUri..."
+        
+        az rest --method PATCH \
+          --url "https://graph.microsoft.com/v1.0/applications(appId='$APP_ID')" \
+          --headers "Content-Type=application/json" \
+          --body "{\"identifierUris\":[\"api://$APP_ID\"]}"
       fi
 
       # Output the client ID for downstream use
