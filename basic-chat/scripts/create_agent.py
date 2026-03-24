@@ -19,6 +19,10 @@ def main() -> None:
     model_deployment_name = require_env("MODEL_DEPLOYMENT_NAME")
     agent_name = os.getenv("AGENT_NAME", "cognitive-load-agent")
 
+    print(f"Using Foundry endpoint: {project_endpoint}")
+    print(f"Using model: {model_deployment_name}")
+    print(f"Agent name: {agent_name}")
+
     instructions = """
 You are Cognitive Load Reduction Assistant, an AI assistant designed to reduce cognitive overload for neurodiverse users, including people with ADHD, autism, dyslexia, and users who feel overwhelmed by dense information.
 
@@ -84,18 +88,23 @@ When appropriate, end with one simple recommended next step.
         credential=DefaultAzureCredential(),
     )
 
-    agent = project_client.agents.create_version(
-        agent_name=agent_name,
-        definition=PromptAgentDefinition(
-            model=model_deployment_name,
-            instructions=instructions,
-        ),
-    )
 
-    print("Agent created successfully.")
-    print(f"name={agent.name}")
-    print(f"version={agent.version}")
-    print(f"id={agent.id}")
+    try:
+        agent = project_client.agents.create_version(
+            agent_name=agent_name,
+            definition=PromptAgentDefinition(
+                model=model_deployment_name,
+                instructions=instructions,
+            ),
+        )
+
+        print("Agent created successfully.")
+        print(f"name={agent.name}")
+        print(f"version={agent.version}")
+        print(f"id={agent.id}")
+
+    except Exception as e:
+        print(f"Agent may already exist. Skipping creation. Error: {e}")
 
 
 if __name__ == "__main__":

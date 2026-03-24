@@ -13,9 +13,6 @@ import {
   Text,
   Textarea,
   Title3,
-  makeStyles,
-  shorthands,
-  tokens,
 } from "@fluentui/react-components";
 import {
   BrainCircuit24Regular,
@@ -23,8 +20,11 @@ import {
   Lightbulb24Regular,
   Send24Regular,
 } from "@fluentui/react-icons";
+import ReactMarkdown from "react-markdown";
+import remarkGfm from "remark-gfm";
 import { useMemo, useState } from "react";
 import { useAppStyles } from "./App.styles";
+
 
 type Message = {
   id: string;
@@ -36,9 +36,7 @@ const starterMessages: Message[] = [
   {
     id: "1",
     role: "assistant",
-    text:
-      // "Hi. I’m your Cognitive Load Reduction Assistant.\n\nI can simplify dense information, break work into smaller steps, and help you focus on the next action.",
-      "Hola. Soy tu Asistente de Reducción de Carga Cognitiva.\n\nPuedo simplificar información densa, dividir el trabajo en pasos más pequeños y ayudarte a enfocarte en la próxima acción."
+    text: "Hi. I’m your Cognitive Load Reduction Assistant.\n\nI can simplify dense information, break work into smaller steps, and help you focus on the next action.",
   },
 ];
 
@@ -52,19 +50,34 @@ export default function App() {
   const [maxSteps, setMaxSteps] = useState(5);
   const [calmTone, setCalmTone] = useState(true);
   const [showOnlyNextStep, setShowOnlyNextStep] = useState(false);
+  const [conversationId, setConversationId] = useState<string | null>(null);
+  const [isLoading, setIsLoading] = useState(false);
+
+  const normalizeMarkdown = (text: string) =>
+    text
+      .replace(/\r\n/g, "\n")
+      .replace(/\n{3,}/g, "\n\n")
+      .trim();
 
   const quickActions = useMemo(
-    () => [
-      "Resume esto en lenguaje simple",
-      "Divide esta tarea en pasos pequeños",
-      "Ayúdame a priorizar qué hacer primero",
-    ],
-    []
+    () =>
+      showOnlyNextStep
+        ? [
+          "I feel overwhelmed. Give me only the next step.",
+          "I am stuck on a task. Tell me the next action only.",
+          "Help me start this without giving me too much information.",
+        ]
+        : [
+          "Summarize this in simple language",
+          "Break this task into small steps",
+          "Help me prioritize what to do first",
+        ],
+    [showOnlyNextStep]
   );
 
   const sendMessage = async (text?: string) => {
     const content = (text ?? draft).trim();
-    if (!content) return;
+    if (!content || isLoading) return;
 
     const userMessage: Message = {
       id: crypto.randomUUID(),
@@ -74,21 +87,57 @@ export default function App() {
 
     setMessages((prev) => [...prev, userMessage]);
     setDraft("");
+    setIsLoading(true);
 
-    const mockReply =
-      responseFormat === "steps"
-        ? `Summary:\nYou want help with: ${content}\n\nSteps:\n1. Define the immediate goal.\n2. Focus on one action only.\n3. Ignore non-urgent details for now.\n\nNext action:\nWrite the first small task you can finish in 5 minutes.`
-        : `Summary:\n${content}\n\nChecklist:\n- Identify the main goal\n- Choose one priority\n- Start with the easiest next action`;
+    const API_BASE_URL = import.meta.env.VITE_API_BASE_URL;
 
-    const assistantMessage: Message = {
-      id: crypto.randomUUID(),
-      role: "assistant",
-      text: mockReply,
-    };
+    try {
+      const response = await fetch(API_BASE_URL, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          message: content,
+          preferences: {
+            readingLevel,
+            responseFormat,
+            maxSteps,
+            calmTone,
+            showOnlyNextStep,
+          },
+          conversationId,
+        }),
+      });
 
-    setTimeout(() => {
+      if (!response.ok) {
+        throw new Error("Backend request failed");
+      }
+
+      const data = await response.json();
+
+      setConversationId(data.conversationId);
+
+      const assistantMessage: Message = {
+        id: crypto.randomUUID(),
+        role: "assistant",
+        text: data.reply,
+      };
+
       setMessages((prev) => [...prev, assistantMessage]);
-    }, 400);
+    } catch (error) {
+      console.error(error);
+
+      const assistantMessage: Message = {
+        id: crypto.randomUUID(),
+        role: "assistant",
+        text: "Sorry, I’m having trouble responding right now. Please try again.",
+      };
+
+      setMessages((prev) => [...prev, assistantMessage]);
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   return (
@@ -97,12 +146,10 @@ export default function App() {
         <aside className={styles.sidebar}>
           <Card className={styles.card}>
             <CardHeader
-              // header={<Title3>Accessibility Preferences</Title3>}
-              header={<Title3>Preferencias de Accesibilidad</Title3>}
+              header={<Title3>Accessibility Preferences</Title3>}
               description={
                 <Body1 className={styles.muted}>
-                  {/* Configure how the assistant responds. */}
-                  Configura cómo responde el asistente.
+                  Configure how the assistant responds.
                 </Body1>
               }
             />
@@ -200,13 +247,16 @@ export default function App() {
                   <Badge icon={<BrainCircuit24Regular />}>Accessible</Badge>
                   <Badge icon={<ClipboardTask24Regular />}>Step-based</Badge>
                   <Badge icon={<Lightbulb24Regular />}>Focused</Badge>
+                  {showOnlyNextStep && (
+                    <Badge appearance="filled">Next-step mode active</Badge>
+                  )}
                 </div>
               </div>
 
               <Input
                 appearance="filled-lighter"
                 placeholder="Search future conversations"
-                style={{ width: 260 }}
+                style={{ width: "100%", maxWidth: 260 }}
               />
             </div>
           </Card>
@@ -248,17 +298,45 @@ export default function App() {
                     key={message.id}
                     className={`${styles.messageRow} ${rowClass}`}
                   >
-                    <div className={bubbleClass}>{message.text}</div>
+                    <div className={`${bubbleClass} ${styles.markdownContent}`}>
+                      <ReactMarkdown
+                        remarkPlugins={[remarkGfm]}
+                        components={{
+                          h1: ({ children }) => <h1>{children}</h1>,
+                          h2: ({ children }) => <h2>{children}</h2>,
+                          h3: ({ children }) => <h3>{children}</h3>,
+                          p: ({ children }) => <p>{children}</p>,
+                          ul: ({ children }) => <ul>{children}</ul>,
+                          ol: ({ children }) => <ol>{children}</ol>,
+                          li: ({ children }) => <li>{children}</li>,
+                          strong: ({ children }) => <strong>{children}</strong>,
+                        }}
+                      >
+                        {normalizeMarkdown(message.text)}
+                      </ReactMarkdown>
+                    </div>
                   </div>
                 );
               })}
+
+              {isLoading && (
+                <div className={`${styles.messageRow} ${styles.assistantRow}`}>
+                  <div className={`${styles.bubble} ${styles.assistantBubble}`}>
+                    Thinking...
+                  </div>
+                </div>
+              )}
             </div>
           </Card>
 
           <Card className={`${styles.card} ${styles.composerCard}`}>
             <Field
               label="Ask for help"
-              hint="Describe a task, paste dense text, or ask for a simpler explanation."
+              hint={
+                showOnlyNextStep
+                  ? "Describe where you're stuck and the assistant will return only the next action."
+                  : "Describe a task, paste dense text, or ask for a simpler explanation."
+              }
             >
               <Textarea
                 className={styles.textarea}
@@ -266,7 +344,11 @@ export default function App() {
                 rows={4}
                 value={draft}
                 onChange={(_, data) => setDraft(data.value)}
-                placeholder="Example: I have 3 tasks due today and I feel overwhelmed. Help me prioritize them."
+                placeholder={
+                  showOnlyNextStep
+                    ? "Example: I feel stuck starting my homework. Tell me only the next step."
+                    : "Example: I have 3 tasks due today and I feel overwhelmed. Help me prioritize them."
+                }
               />
             </Field>
 
@@ -274,8 +356,9 @@ export default function App() {
               appearance="primary"
               icon={<Send24Regular />}
               onClick={() => sendMessage()}
+              disabled={isLoading}
             >
-              Send
+              {isLoading ? "Sending..." : showOnlyNextStep ? "Get next step" : "Send"}
             </Button>
           </Card>
         </main>

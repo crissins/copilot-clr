@@ -59,6 +59,7 @@ fi
 
 echo "Creating model deployment '$MODEL_DEPLOYMENT_NAME'..."
 "$AZ_CMD" cognitiveservices account deployment create \
+  --only-show-errors \
   --name "$FOUNDRY_ACCOUNT_NAME" \
   --resource-group "$AZURE_RESOURCE_GROUP" \
   --deployment-name "$MODEL_DEPLOYMENT_NAME" \
@@ -70,6 +71,7 @@ echo "Creating model deployment '$MODEL_DEPLOYMENT_NAME'..."
 
 echo "Verifying deployment provisioning state..."
 "$AZ_CMD" cognitiveservices account deployment show \
+  --only-show-errors \
   --name "$FOUNDRY_ACCOUNT_NAME" \
   --resource-group "$AZURE_RESOURCE_GROUP" \
   --deployment-name "$MODEL_DEPLOYMENT_NAME" \

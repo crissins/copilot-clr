@@ -1,4 +1,5 @@
 name: hackathon-foundry-agent
+
 metadata:
   template: hackathon-foundry-agent@0.0.1
 
@@ -6,15 +7,42 @@ infra:
   provider: bicep
   path: infra
 
+services:
+  backend:
+    project: ./app
+    host: containerapp
+    language: docker
+    docker:
+      path: ./app/Dockerfile
+      remoteBuild: true
+
+  frontend:
+    project: ./frontend
+    host: staticwebapp
+    language: js
+    dist: dist
+
 hooks:
   postprovision:
     posix:
       shell: sh
-      run: ./scripts/deploy-model.sh && python3 ./scripts/create_agent.py
+      run: |
+        ./scripts/deploy-model.sh
+        python3 ./scripts/create_agent.py
+        ./scripts/set-secrets.sh
       interactive: true
       continueOnError: false
+
     windows:
       shell: pwsh
-      run: bash ./scripts/deploy-model.sh; if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }; python ./scripts/create_agent.py
+      run: |
+        bash ./scripts/deploy-model.sh
+        if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+        python ./scripts/create_agent.py
+        if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+        bash ./scripts/set-secrets.sh
+        if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
       interactive: true
       continueOnError: false
