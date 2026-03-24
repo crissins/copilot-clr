@@ -61,11 +61,16 @@ def validate_token(token: str, client_id: str) -> dict:
         unverified = jwt.decode(token, options={"verify_signature": False})
         tenant_id = unverified.get("tid", "common")
 
+        # v2.0 tokens issued for a custom API scope (api://{clientId}/access_as_user)
+        # have aud=api://{clientId}, while tokens for the app itself have aud={clientId}.
+        # Accept both so the backend works regardless of which scope the frontend used.
+        valid_audiences = [client_id, f"api://{client_id}"]
+
         claims = jwt.decode(
             token,
             signing_key.key,
             algorithms=["RS256"],
-            audience=client_id,
+            audience=valid_audiences,
             issuer=f"https://login.microsoftonline.com/{tenant_id}/v2.0",
             options={
                 "verify_exp": True,

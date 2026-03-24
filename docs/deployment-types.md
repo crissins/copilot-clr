@@ -147,6 +147,48 @@ az cognitiveservices account list-deleted --query "[].name" -o tsv
 az cognitiveservices account purge --location <region> --resource-group <rg> --name <name>
 ```
 
+## CI/CD Pipeline
+
+The project uses GitHub Actions ([`.github/workflows/deploy.yml`](../.github/workflows/deploy.yml)) to deploy both backend and frontend on every push to `main`.
+
+### Required GitHub Secrets
+
+| Secret | Value | Purpose |
+|--------|-------|---------|
+| `AZURE_CREDENTIALS` | JSON from `az ad sp create-for-rbac` | Azure login for both jobs |
+| `SWA_DEPLOYMENT_TOKEN` | Static Web App deployment token | SWA upload |
+| `VITE_ENTRA_CLIENT_ID` | `4b1e7b4f-4ec7-4101-99ce-0cd7ea70e341` | Baked into frontend at build time by Vite |
+
+Add secrets at **repo → Settings → Secrets and variables → Actions**.
+
+> **Important:** `VITE_ENTRA_CLIENT_ID` is a build-time variable — Vite injects it into the JavaScript bundle during `npm run build`. It is **not** a runtime SWA app setting.
+
+### Pipeline Jobs
+
+| Job | What it does |
+|-----|-------------|
+| **Backend** | Docker build → push to ACR (SHA + latest tags) → `az containerapp update` |
+| **Frontend** | `npm ci` → `npm run build` (with `VITE_ENTRA_CLIENT_ID`) → SWA deploy |
+
+### GitHub Actions Versions
+
+All workflows use Node.js 24-compatible action versions:
+
+| Action | Version | Notes |
+|--------|---------|-------|
+| `actions/checkout` | `v5` | Node 24 support |
+| `actions/setup-node` | `v5` | Node 24 support |
+| `actions/setup-python` | `v5` | Node 24 support |
+| `azure/login` | `v2` | Node 24 + OIDC support |
+| `azure/cli` | `v2` | — |
+| `azure/arm-deploy` | `v2` | — |
+| `Azure/static-web-apps-deploy` | `v1` | Latest available |
+| `Azure/functions-action` | `v1` | Latest available |
+
+The frontend build uses **Node.js 22 LTS**.
+
+---
+
 ## Prerequisites
 
 ### Entra ID App Registration (automated)

@@ -42,7 +42,20 @@ export function useAuth() {
         const response = await instance.acquireTokenPopup(apiRequest);
         return response.accessToken;
       }
-      console.error("Failed to acquire token:", error);
+      // AADSTS70011 (invalid_scope) means the app registration's "Expose an API"
+      // hasn't been configured yet — typically a first-deploy timing issue that
+      // resolves once the Bicep deployment script completes.  Return null so the
+      // caller can degrade gracefully instead of showing a cryptic error.
+      const msg = error instanceof Error ? error.message : String(error);
+      if (msg.includes("AADSTS70011") || msg.includes("invalid_scope")) {
+        console.warn(
+          "Custom API scope not configured yet (AADSTS70011). " +
+          "Auth will be skipped until the deployment script finishes. " +
+          "Run 'azd up' or redeploy to fix."
+        );
+      } else {
+        console.error("Failed to acquire token:", error);
+      }
       return null;
     }
   }, [instance, account]);
