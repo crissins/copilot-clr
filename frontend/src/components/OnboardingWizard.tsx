@@ -59,9 +59,20 @@ export function OnboardingWizard({ language, onComplete }: OnboardingWizardProps
   const [speaking, setSpeaking] = useState(false);
   const [done, setDone] = useState(false);
   const audioRef = useRef<HTMLAudioElement | null>(null);
+  const speakIdRef = useRef(0);
 
   const t = getI18n(language);
   const ttsVoice = LANG_VOICES[language] || LANG_VOICES.en;
+
+  // Stop any currently playing audio and cancel in-flight speak calls
+  const stopSpeaking = useCallback(() => {
+    speakIdRef.current += 1;
+    if (audioRef.current) {
+      audioRef.current.pause();
+      audioRef.current = null;
+    }
+    setSpeaking(false);
+  }, []);
 
   // Collected selections
   const [selections, setSelections] = useState<Partial<NeurodiverseSettings>>({
@@ -101,24 +112,24 @@ export function OnboardingWizard({ language, onComplete }: OnboardingWizardProps
   // Speak narration for current step using the chosen language voice
   const speak = useCallback(
     async (text: string) => {
-      if (audioRef.current) {
-        audioRef.current.pause();
-        audioRef.current = null;
-      }
+      stopSpeaking();
+      const id = speakIdRef.current;
       setSpeaking(true);
       try {
         const token = await getAccessToken();
+        if (speakIdRef.current !== id) return; // cancelled
         const blob = await apiClient.speechSynthesize(text, token, ttsVoice, "slow");
+        if (speakIdRef.current !== id) return; // cancelled
         const url = URL.createObjectURL(blob);
         const audio = new Audio(url);
         audioRef.current = audio;
         audio.onended = () => setSpeaking(false);
         audio.play().catch(() => setSpeaking(false));
       } catch {
-        setSpeaking(false);
+        if (speakIdRef.current === id) setSpeaking(false);
       }
     },
-    [getAccessToken, ttsVoice],
+    [getAccessToken, ttsVoice, stopSpeaking],
   );
 
   // Auto-narrate when step changes
@@ -136,6 +147,7 @@ export function OnboardingWizard({ language, onComplete }: OnboardingWizardProps
   }, [step, done]);
 
   const goNext = useCallback(() => {
+    stopSpeaking();
     if (step >= STEP_KEYS.length - 1) {
       setExiting(true);
       setTimeout(async () => {
@@ -154,16 +166,17 @@ export function OnboardingWizard({ language, onComplete }: OnboardingWizardProps
       setStep((s) => s + 1);
       setExiting(false);
     }, 400);
-  }, [step, selections, updateSettings, speak, t.doneSubtitle]);
+  }, [step, selections, updateSettings, speak, stopSpeaking, t.doneSubtitle]);
 
   const goBack = useCallback(() => {
     if (step <= 0) return;
+    stopSpeaking();
     setExiting(true);
     setTimeout(() => {
       setStep((s) => s - 1);
       setExiting(false);
     }, 400);
-  }, [step]);
+  }, [step, stopSpeaking]);
 
   // ── Done screen ──
 
