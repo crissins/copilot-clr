@@ -31,7 +31,7 @@ const NAV_ITEMS: NavItem[] = [
   { id: "feature2", label: "Simplify Content",  icon: <TextGrammarSettings24Regular /> },
   { id: "feature3", label: "Voice Chat",        icon: <Mic24Regular /> },
   { id: "feature4", label: "Media Processing",  icon: <VideoClip24Regular /> },
-  { id: "feature5", label: "Task Scheduler",    icon: <CalendarClock24Regular /> },
+  { id: "feature5", label: "Task Decomposer",   icon: <CalendarClock24Regular /> },
   { id: "feature6", label: "Accessibility Hub", icon: <PersonVoice24Regular /> },
 ];
 

@@ -8,7 +8,7 @@ websockets
 azure-identity
 
 # Azure AI Agent Framework
-azure-ai-projects
+azure-ai-projects==1.0.0
 azure-ai-inference
 
 # Azure Data Services

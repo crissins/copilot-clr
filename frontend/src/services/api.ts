@@ -170,6 +170,117 @@ class ApiClient {
     });
     if (!res.ok) throw new Error(`Report failed: ${res.status}`);
   }
+
+  // ── Task Decomposer ─────────────────────────────────────────────────────
+
+  async decomposeTask(
+    goal: string,
+    readingLevel: string,
+    token: string | null
+  ): Promise<DecomposeResponse> {
+    const res = await fetch(`${API_BASE}/api/tasks/decompose`, {
+      method: "POST",
+      headers: this.getHeaders(token),
+      body: JSON.stringify({ goal, readingLevel }),
+    });
+    if (!res.ok) throw new Error(`Decompose failed: ${res.status}`);
+    return res.json();
+  }
+
+  async listTaskPlans(token: string | null): Promise<TaskPlan[]> {
+    const res = await fetch(`${API_BASE}/api/tasks`, {
+      headers: this.getHeaders(token),
+    });
+    if (!res.ok) throw new Error(`List tasks failed: ${res.status}`);
+    const data = await res.json();
+    return data.tasks;
+  }
+
+  async getTaskPlan(
+    taskId: string,
+    token: string | null
+  ): Promise<TaskPlan> {
+    const res = await fetch(`${API_BASE}/api/tasks/${encodeURIComponent(taskId)}`, {
+      headers: this.getHeaders(token),
+    });
+    if (!res.ok) throw new Error(`Get task failed: ${res.status}`);
+    const data = await res.json();
+    return data.task;
+  }
+
+  async toggleStep(
+    taskId: string,
+    stepId: string,
+    completed: boolean,
+    token: string | null
+  ): Promise<TaskPlan> {
+    const res = await fetch(
+      `${API_BASE}/api/tasks/${encodeURIComponent(taskId)}/steps/${encodeURIComponent(stepId)}`,
+      {
+        method: "PATCH",
+        headers: this.getHeaders(token),
+        body: JSON.stringify({ completed }),
+      }
+    );
+    if (!res.ok) throw new Error(`Toggle step failed: ${res.status}`);
+    const data = await res.json();
+    return data.task;
+  }
+
+  async deleteTaskPlan(
+    taskId: string,
+    token: string | null
+  ): Promise<void> {
+    const res = await fetch(`${API_BASE}/api/tasks/${encodeURIComponent(taskId)}`, {
+      method: "DELETE",
+      headers: this.getHeaders(token),
+    });
+    if (!res.ok) throw new Error(`Delete task failed: ${res.status}`);
+  }
+
+  async sendReminder(
+    taskId: string,
+    stepId: string,
+    email: string,
+    token: string | null
+  ): Promise<{ status: string; message: string }> {
+    const res = await fetch(
+      `${API_BASE}/api/tasks/${encodeURIComponent(taskId)}/remind`,
+      {
+        method: "POST",
+        headers: this.getHeaders(token),
+        body: JSON.stringify({ stepId, email }),
+      }
+    );
+    if (!res.ok) throw new Error(`Reminder failed: ${res.status}`);
+    return res.json();
+  }
+}
+
+interface TaskStep {
+  id: string;
+  title: string;
+  estimatedMinutes: number;
+  priority: "high" | "medium" | "low";
+  focusTip: string;
+  completed: boolean;
+  completedAt: string | null;
+}
+
+interface TaskPlan {
+  id: string;
+  userId: string;
+  goal: string;
+  steps: TaskStep[];
+  explanation: string;
+  readingLevel: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+interface DecomposeResponse {
+  task: TaskPlan;
+  meta: { latencyMs: number };
 }
 
 interface UserPreferences {
@@ -193,4 +304,14 @@ interface UploadResult {
 }
 
 export const apiClient = new ApiClient();
-export type { ChatResponse, Session, Message, SessionDetail, UserPreferences, UploadResult };
+export type {
+  ChatResponse,
+  Session,
+  Message,
+  SessionDetail,
+  UserPreferences,
+  UploadResult,
+  TaskStep,
+  TaskPlan,
+  DecomposeResponse,
+};

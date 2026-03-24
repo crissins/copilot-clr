@@ -38,6 +38,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
 from agents.chat_agent import get_agent_response
+from agents.task_decomposer import decompose_task
 from auth.entra import AuthError, validate_token
 
 logging.basicConfig(level=logging.INFO)
@@ -63,7 +64,7 @@ app.add_middleware(
     CORSMiddleware,
     allow_origins=_allowed_origins,
     allow_credentials=True,
-    allow_methods=["GET", "POST", "DELETE", "OPTIONS"],
+    allow_methods=["GET", "POST", "PATCH", "DELETE", "OPTIONS"],
     allow_headers=["Authorization", "Content-Type"],
 )
 
@@ -129,6 +130,7 @@ if _LOCAL_DEV or not os.environ.get("COSMOS_DB_ENDPOINT"):
     logger.info("LOCAL_DEV mode: using in-memory storage (no Cosmos DB required)")
     _sessions_container: _InMemoryContainer | ContainerProxy = _InMemoryContainer()
     _messages_container: _InMemoryContainer | ContainerProxy = _InMemoryContainer()
+    _tasks_container: _InMemoryContainer | ContainerProxy = _InMemoryContainer()
 else:
     _credential = DefaultAzureCredential()
     _cosmos_client = CosmosClient(
@@ -138,6 +140,7 @@ else:
     _database = _cosmos_client.get_database_client(os.environ["COSMOS_DB_DATABASE"])
     _sessions_container = _database.get_container_client("sessions")
     _messages_container = _database.get_container_client("messages")
+    _tasks_container = _database.get_container_client("tasks")
 
 
 # ---------------------------------------------------------------------------
@@ -156,7 +159,7 @@ def _get_user_id(authorization: str | None) -> str:
     if _LOCAL_DEV:
         return "local-dev-user"
 
-    client_id = os.environ.get("ENTRA_CLIENT_ID", "")
+    client_id = os.environ.get("AZURE_CLIENT_ID", "")
     if not client_id:
         return "anonymous"
 
@@ -273,7 +276,7 @@ def list_sessions(req: Request) -> JSONResponse:
     sessions = list(_sessions_container.query_items(
         query="SELECT * FROM c WHERE c.userId = @userId ORDER BY c.updatedAt DESC",
         parameters=[{"name": "@userId", "value": user_id}],
-        enable_cross_partition_query=False,
+        enable_cross_partition_query=True,
     ))
     return JSONResponse({"sessions": [
         {k: v for k, v in s.items() if not k.startswith("_")} for s in sessions
@@ -329,7 +332,7 @@ def get_session(session_id: str, req: Request) -> JSONResponse:
     messages = list(_messages_container.query_items(
         query="SELECT * FROM c WHERE c.sessionId = @sid ORDER BY c.createdAt ASC",
         parameters=[{"name": "@sid", "value": session_id}],
-        enable_cross_partition_query=False,
+        enable_cross_partition_query=True,
     ))
     return JSONResponse({
         "session": {k: v for k, v in session.items() if not k.startswith("_")},
@@ -359,7 +362,7 @@ def delete_session(session_id: str, req: Request) -> JSONResponse:
     messages = list(_messages_container.query_items(
         query="SELECT c.id FROM c WHERE c.sessionId = @sid",
         parameters=[{"name": "@sid", "value": session_id}],
-        enable_cross_partition_query=False,
+        enable_cross_partition_query=True,
     ))
     for msg in messages:
         try:
@@ -368,6 +371,264 @@ def delete_session(session_id: str, req: Request) -> JSONResponse:
             pass  # Best-effort cleanup
 
     return JSONResponse(None, status_code=204)
+
+
+# ============================================================================
+# POST /api/tasks/decompose — Break a complex goal into time-boxed steps
+# ============================================================================
+
+@app.post("/api/tasks/decompose")
+async def decompose_goal(req: Request) -> JSONResponse:
+    """Decompose a complex goal into numbered, time-boxed sub-tasks."""
+    try:
+        user_id = _get_user_id(req.headers.get("Authorization"))
+    except AuthError as e:
+        return JSONResponse({"error": str(e)}, status_code=401)
+
+    try:
+        body = await req.json()
+    except Exception:
+        return JSONResponse({"error": "Invalid JSON"}, status_code=400)
+
+    goal = body.get("goal", "").strip()
+    reading_level = body.get("readingLevel", "")
+
+    if not goal:
+        return JSONResponse({"error": "Goal is required"}, status_code=400)
+
+    start = time.monotonic()
+    try:
+        result = await decompose_task(
+            goal=goal,
+            user_id=user_id,
+            reading_level=reading_level,
+        )
+    except Exception:
+        logger.exception("Task decomposition error for user=%s", user_id)
+        return JSONResponse(
+            {"error": "Something went wrong while breaking down your goal. Please try again."},
+            status_code=500,
+        )
+
+    duration_ms = int((time.monotonic() - start) * 1000)
+    logger.info("task_decompose_duration_ms=%d user=%s", duration_ms, user_id)
+
+    now = datetime.now(timezone.utc).isoformat()
+    task_id = str(uuid.uuid4())
+    task_doc = {
+        "id": task_id,
+        "taskId": task_id,
+        "userId": user_id,
+        "goal": goal,
+        "steps": result.get("steps", []),
+        "explanation": result.get("explanation", ""),
+        "readingLevel": reading_level,
+        "createdAt": now,
+        "updatedAt": now,
+    }
+    _tasks_container.upsert_item(task_doc)
+
+    return JSONResponse({
+        "task": {k: v for k, v in task_doc.items() if not k.startswith("_")},
+        "meta": {"latencyMs": duration_ms},
+    }, status_code=201)
+
+
+# ============================================================================
+# GET /api/tasks — List all task plans for the authenticated user
+# ============================================================================
+
+@app.get("/api/tasks")
+def list_tasks(req: Request) -> JSONResponse:
+    """List all task decomposition plans for the user, newest first."""
+    try:
+        user_id = _get_user_id(req.headers.get("Authorization"))
+    except AuthError as e:
+        return JSONResponse({"error": str(e)}, status_code=401)
+
+    tasks = list(_tasks_container.query_items(
+        query="SELECT * FROM c WHERE c.userId = @userId ORDER BY c.createdAt DESC",
+        parameters=[{"name": "@userId", "value": user_id}],
+        enable_cross_partition_query=True,
+    ))
+    return JSONResponse({"tasks": [
+        {k: v for k, v in t.items() if not k.startswith("_")} for t in tasks
+    ]})
+
+
+# ============================================================================
+# GET /api/tasks/{task_id} — Get a specific task plan
+# ============================================================================
+
+@app.get("/api/tasks/{task_id}")
+def get_task(task_id: str, req: Request) -> JSONResponse:
+    """Return a task plan document with all steps."""
+    try:
+        user_id = _get_user_id(req.headers.get("Authorization"))
+    except AuthError as e:
+        return JSONResponse({"error": str(e)}, status_code=401)
+
+    try:
+        task = _tasks_container.read_item(item=task_id, partition_key=task_id)
+    except Exception:
+        return JSONResponse({"error": "Task plan not found"}, status_code=404)
+
+    return JSONResponse({
+        "task": {k: v for k, v in task.items() if not k.startswith("_")},
+    })
+
+
+# ============================================================================
+# PATCH /api/tasks/{task_id}/steps/{step_id} — Toggle step completion
+# ============================================================================
+
+@app.patch("/api/tasks/{task_id}/steps/{step_id}")
+async def toggle_step(task_id: str, step_id: str, req: Request) -> JSONResponse:
+    """Mark a step as completed or uncompleted."""
+    try:
+        user_id = _get_user_id(req.headers.get("Authorization"))
+    except AuthError as e:
+        return JSONResponse({"error": str(e)}, status_code=401)
+
+    try:
+        body = await req.json()
+    except Exception:
+        return JSONResponse({"error": "Invalid JSON"}, status_code=400)
+
+    completed = body.get("completed", False)
+
+    try:
+        task = _tasks_container.read_item(item=task_id, partition_key=task_id)
+    except Exception:
+        return JSONResponse({"error": "Task plan not found"}, status_code=404)
+
+    step_found = False
+    now = datetime.now(timezone.utc).isoformat()
+    for step in task.get("steps", []):
+        if step["id"] == step_id:
+            step["completed"] = completed
+            step["completedAt"] = now if completed else None
+            step_found = True
+            break
+
+    if not step_found:
+        return JSONResponse({"error": "Step not found"}, status_code=404)
+
+    task["updatedAt"] = now
+    _tasks_container.upsert_item(task)
+
+    return JSONResponse({
+        "task": {k: v for k, v in task.items() if not k.startswith("_")},
+    })
+
+
+# ============================================================================
+# DELETE /api/tasks/{task_id} — Delete a task plan
+# ============================================================================
+
+@app.delete("/api/tasks/{task_id}")
+def delete_task(task_id: str, req: Request) -> JSONResponse:
+    """Delete a task decomposition plan."""
+    try:
+        user_id = _get_user_id(req.headers.get("Authorization"))
+    except AuthError as e:
+        return JSONResponse({"error": str(e)}, status_code=401)
+
+    try:
+        _tasks_container.delete_item(item=task_id, partition_key=task_id)
+    except Exception:
+        return JSONResponse({"error": "Task plan not found"}, status_code=404)
+
+    return JSONResponse(None, status_code=204)
+
+
+# ============================================================================
+# POST /api/tasks/{task_id}/remind — Queue a Service Bus reminder
+# ============================================================================
+
+@app.post("/api/tasks/{task_id}/remind")
+async def send_reminder(task_id: str, req: Request) -> JSONResponse:
+    """Queue a reminder for a specific task step via Service Bus.
+
+    The reminder will be picked up by a Service Bus trigger and delivered
+    via Azure Communication Services (email/SMS).
+    """
+    try:
+        user_id = _get_user_id(req.headers.get("Authorization"))
+    except AuthError as e:
+        return JSONResponse({"error": str(e)}, status_code=401)
+
+    try:
+        body = await req.json()
+    except Exception:
+        return JSONResponse({"error": "Invalid JSON"}, status_code=400)
+
+    step_id = body.get("stepId", "")
+    notify_email = body.get("email", "")
+
+    try:
+        task = _tasks_container.read_item(item=task_id, partition_key=task_id)
+    except Exception:
+        return JSONResponse({"error": "Task plan not found"}, status_code=404)
+
+    # Find the step
+    target_step = None
+    for step in task.get("steps", []):
+        if step["id"] == step_id:
+            target_step = step
+            break
+
+    if not target_step:
+        return JSONResponse({"error": "Step not found"}, status_code=404)
+
+    # Queue reminder to Service Bus
+    sb_conn_str = os.environ.get("SERVICE_BUS_CONNECTION_STRING", "")
+    queue_name = os.environ.get("SERVICE_BUS_QUEUE_NAME", "task-reminders")
+
+    reminder_payload = {
+        "taskId": task_id,
+        "stepId": step_id,
+        "stepTitle": target_step["title"],
+        "estimatedMinutes": target_step["estimatedMinutes"],
+        "userId": user_id,
+        "email": notify_email,
+        "goal": task.get("goal", ""),
+        "queuedAt": datetime.now(timezone.utc).isoformat(),
+    }
+
+    if not sb_conn_str or _LOCAL_DEV:
+        logger.info(
+            "LOCAL_DEV or no Service Bus configured — reminder logged only: %s",
+            json.dumps(reminder_payload),
+        )
+        return JSONResponse({
+            "status": "queued",
+            "message": "Reminder noted (Service Bus not configured — logged locally).",
+            "reminder": reminder_payload,
+        })
+
+    try:
+        from azure.servicebus import ServiceBusClient, ServiceBusMessage  # noqa: PLC0415
+
+        sb_client = ServiceBusClient.from_connection_string(sb_conn_str)
+        with sb_client:
+            sender = sb_client.get_queue_sender(queue_name=queue_name)
+            with sender:
+                message = ServiceBusMessage(json.dumps(reminder_payload))
+                sender.send_messages(message)
+        logger.info("Reminder queued for task=%s step=%s", task_id, step_id)
+    except Exception:
+        logger.exception("Failed to queue reminder for task=%s step=%s", task_id, step_id)
+        return JSONResponse(
+            {"error": "Could not queue reminder. Please try again later."},
+            status_code=500,
+        )
+
+    return JSONResponse({
+        "status": "queued",
+        "message": "Reminder has been queued. You will be notified when it is time.",
+        "reminder": reminder_payload,
+    })
 
 
 # ============================================================================
@@ -517,7 +778,7 @@ async def realtime_voice(websocket: WebSocket) -> None:
         return
 
     raw_token = auth_frame.get("token", "")
-    client_id = os.environ.get("ENTRA_CLIENT_ID", "")
+    client_id = os.environ.get("AZURE_CLIENT_ID", "")
 
     if _LOCAL_DEV:
         user_id = "local-dev-user"

@@ -13,7 +13,7 @@ export const msalConfig: Configuration = {
     clientId: import.meta.env.VITE_ENTRA_CLIENT_ID || "YOUR_CLIENT_ID",
     authority: `https://login.microsoftonline.com/${
       import.meta.env.VITE_ENTRA_TENANT_ID || "common"
-    }`,
+    }/v2.0`,
     redirectUri: window.location.origin,
     postLogoutRedirectUri: window.location.origin,
   },
@@ -33,5 +33,5 @@ export const loginRequest = {
 };
 
 export const apiRequest = {
-  scopes: [`api://${import.meta.env.VITE_ENTRA_CLIENT_ID || "YOUR_CLIENT_ID"}/access_as_user`],
+  scopes: [`api://${import.meta.env.VITE_ENTRA_BACKEND_CLIENT_ID || "YOUR_CLIENT_ID"}/access_as_user`],
 };
