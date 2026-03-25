@@ -18,6 +18,7 @@
 │   ├── 📄 main.py
 │   ├── 📄 models.py
 │   ├── 📄 requirements.txt
+│   ├── 📄 __init__.py
 │   └── 📁 __pycache__/
 │       ├── 📄 foundry_client.cpython-313.pyc
 │       ├── 📄 main.cpython-313.pyc

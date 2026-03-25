@@ -5,8 +5,8 @@ load_dotenv()
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 
-from .models import ChatRequest, ChatResponse
-from .foundry_client import FoundryChatService
+from app.models import ChatRequest, ChatResponse
+from app.foundry_client import FoundryChatService
 
 app = FastAPI(title="Cognitive Load Assistant API")
 

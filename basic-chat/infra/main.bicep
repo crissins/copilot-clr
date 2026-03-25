@@ -108,6 +108,26 @@ resource containerAppsEnv 'Microsoft.App/managedEnvironments@2024-03-01' = {
 }
 
 /* ============================
+   Static Web App
+============================ */
+
+resource staticWebApp 'Microsoft.Web/staticSites@2023-12-01' = {
+  name: staticWebAppName
+  location: 'eastus2'
+  sku: {
+    name: 'Standard'
+    tier: 'Standard'
+  }
+  properties: {
+    buildProperties: {
+      appLocation: '/'
+      outputLocation: 'dist'
+    }
+  }
+}
+
+
+/* ============================
    Backend Container App
 ============================ */
 
@@ -147,8 +167,8 @@ resource backendApp 'Microsoft.App/containerApps@2024-03-01' = {
       containers: [
         {
           name: 'backend'
-          // image: '${acr.properties.loginServer}/${backendImageName}:${backendImageTag}'
-          image: 'mcr.microsoft.com/azuredocs/containerapps-helloworld:latest'
+          image: '${acr.properties.loginServer}/${backendImageName}:${backendImageTag}'
+          // image: 'mcr.microsoft.com/azuredocs/containerapps-helloworld:latest'
           resources: {
             cpu: json('0.5')
             memory: '1Gi'
@@ -177,24 +197,6 @@ resource backendApp 'Microsoft.App/containerApps@2024-03-01' = {
   }
 }
 
-/* ============================
-   Static Web App
-============================ */
-
-resource staticWebApp 'Microsoft.Web/staticSites@2023-12-01' = {
-  name: staticWebAppName
-  location: 'eastus2'
-  sku: {
-    name: 'Standard'
-    tier: 'Standard'
-  }
-  properties: {
-    buildProperties: {
-      appLocation: '/'
-      outputLocation: 'dist'
-    }
-  }
-}
 
 /* ============================
    Role Assignments
@@ -241,6 +243,7 @@ resource backendFoundryAccess 'Microsoft.Authorization/roleAssignments@2022-04-0
     principalType: 'ServicePrincipal'
   }
 }
+
 
 /* ============================
    Outputs
