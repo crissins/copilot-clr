@@ -12,7 +12,10 @@ import {
 import {
   Send24Regular,
   Add24Regular,
+  Mic24Regular,
+  MicOff24Regular,
 } from "@fluentui/react-icons";
+import * as speechSdk from "microsoft-cognitiveservices-speech-sdk";
 import { apiClient, type Message } from "../services/api";
 import { MessageList } from "./MessageList";
 import { FileUpload } from "./FileUpload";
@@ -99,8 +102,10 @@ export function Chat({ loadSessionId, onSessionLoaded }: {
   const [input, setInput] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [sessionId, setSessionId] = useState<string | null>(null);
+  const [isRecording, setIsRecording] = useState(false);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const lastMsgCountRef = useRef(0);
+  const recognizerRef = useRef<speechSdk.SpeechRecognizer | null>(null);
 
   useEffect(() => {
     textareaRef.current?.focus();
@@ -168,6 +173,67 @@ export function Chat({ loadSessionId, onSessionLoaded }: {
       }
     })();
   }, [messages, settings, getAccessToken]);
+
+  const toggleMic = useCallback(async () => {
+    if (isRecording) {
+      // Stop recording
+      const rec = recognizerRef.current;
+      if (rec) {
+        recognizerRef.current = null;
+        rec.stopContinuousRecognitionAsync(
+          () => { try { rec.close(); } catch { /* */ } },
+          () => { try { rec.close(); } catch { /* */ } },
+        );
+      }
+      setIsRecording(false);
+      return;
+    }
+
+    // Start recording
+    try {
+      setIsRecording(true);
+      const token = await getAccessToken();
+      const { authToken, region } = await apiClient.getSpeechToken(token);
+      const speechConfig = speechSdk.SpeechConfig.fromAuthorizationToken(authToken, region);
+      speechConfig.speechRecognitionLanguage = settings?.language === "en" ? "en-US"
+        : settings?.language === "es" ? "es-ES"
+        : settings?.language === "it" ? "it-IT"
+        : settings?.language === "pt" ? "pt-BR"
+        : settings?.language === "de" ? "de-DE"
+        : settings?.language === "ja" ? "ja-JP"
+        : "en-US";
+      const audioConfig = speechSdk.AudioConfig.fromDefaultMicrophoneInput();
+      const recognizer = new speechSdk.SpeechRecognizer(speechConfig, audioConfig);
+      recognizerRef.current = recognizer;
+
+      recognizer.recognized = (_s, e) => {
+        if (e.result.reason === speechSdk.ResultReason.RecognizedSpeech && e.result.text) {
+          setInput((prev) => prev ? `${prev} ${e.result.text}` : e.result.text);
+        }
+      };
+
+      recognizer.canceled = () => {
+        setIsRecording(false);
+        if (recognizerRef.current) {
+          recognizerRef.current = null;
+          try { recognizer.close(); } catch { /* */ }
+        }
+      };
+
+      recognizer.sessionStopped = () => {
+        setIsRecording(false);
+        if (recognizerRef.current) {
+          recognizerRef.current = null;
+          try { recognizer.close(); } catch { /* */ }
+        }
+      };
+
+      await recognizer.startContinuousRecognitionAsync();
+    } catch (err) {
+      console.error("Mic start failed:", err);
+      setIsRecording(false);
+    }
+  }, [isRecording, getAccessToken, settings?.language]);
 
   const handleSend = useCallback(async () => {
     const text = input.trim();
@@ -267,6 +333,15 @@ export function Chat({ loadSessionId, onSessionLoaded }: {
 
       {/* Input row */}
       <div className={styles.inputRow}>
+        <Button
+          appearance={isRecording ? "primary" : "subtle"}
+          icon={isRecording ? <MicOff24Regular /> : <Mic24Regular />}
+          onClick={toggleMic}
+          disabled={isLoading}
+          aria-label={isRecording ? "Stop recording" : "Start voice input"}
+          shape="circular"
+          style={{ flexShrink: 0, minWidth: "44px", height: "44px" }}
+        />
         <Textarea
           ref={textareaRef}
           className={styles.textarea}

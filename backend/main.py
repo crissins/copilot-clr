@@ -1847,18 +1847,18 @@ def _check_content_safety(text: str, user_id: str) -> tuple[bool, str]:
 # ---------------------------------------------------------------------------
 from routes.content import router as content_router, init_routes as init_content
 from routes.reminders import router as reminders_router, init_routes as init_reminders
-# from routes.avatar_routes import router as avatar_router, init_routes as init_avatar
-# from routes.speech_routes import router as speech_router, init_routes as init_speech_routes
+from routes.avatar_routes import router as avatar_router, init_routes as init_avatar
+from routes.speech_routes import router as speech_router, init_routes as init_speech_routes
 
 init_content(_content_container, _adapted_container, _audio_container, _get_user_id, _check_content_safety)
 init_reminders(_get_user_id, _reminders_container)
-# init_avatar(_get_user_id, _preferences_container, _adapted_container)
-# init_speech_routes(_get_user_id)
+init_avatar(_get_user_id, _preferences_container, _adapted_container)
+init_speech_routes(_get_user_id)
 
 app.include_router(content_router)
 app.include_router(reminders_router)
-# app.include_router(avatar_router)
-# app.include_router(speech_router)
+app.include_router(avatar_router)
+app.include_router(speech_router)
 
 
 # ── POST /api/voice/negotiate ────────────────────────────────────────────────

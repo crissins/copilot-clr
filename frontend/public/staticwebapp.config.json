@@ -28,6 +28,6 @@
   "globalHeaders": {
     "X-Content-Type-Options": "nosniff",
     "X-Frame-Options": "SAMEORIGIN",
-    "Content-Security-Policy": "default-src 'self'; script-src 'self' blob: data:; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:; media-src 'self' blob:; worker-src 'self' blob: data:; font-src 'self'; frame-src 'self' https://*.cognitiveservices.azure.com https://login.microsoftonline.com https://login.live.com https://*.msftauth.net https://*.msauth.net; connect-src 'self' https://login.microsoftonline.com https://login.live.com https://*.msftauth.net https://*.msauth.net https://*.azure.com https://*.microsoft.com https://*.cognitiveservices.azure.com https://*.azurecontainerapps.io wss://*.speech.microsoft.com wss://*.webpubsub.azure.com"
+    "Content-Security-Policy": "default-src 'self'; script-src 'self' blob: data:; style-src 'self' 'unsafe-inline' https://fonts.cdnfonts.com; style-src-elem 'self' 'unsafe-inline' https://fonts.cdnfonts.com; img-src 'self' data: https:; media-src 'self' blob:; worker-src 'self' blob: data:; font-src 'self' https://fonts.cdnfonts.com; frame-src 'self' https://*.cognitiveservices.azure.com https://login.microsoftonline.com https://login.live.com https://*.msftauth.net https://*.msauth.net; connect-src 'self' https://login.microsoftonline.com https://login.live.com https://*.msftauth.net https://*.msauth.net https://*.azure.com https://*.microsoft.com https://*.cognitiveservices.azure.com https://*.azurecontainerapps.io wss://*.speech.microsoft.com wss://*.webpubsub.azure.com"
   }
 }

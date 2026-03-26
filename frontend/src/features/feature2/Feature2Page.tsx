@@ -34,6 +34,8 @@ import ReactMarkdown from "react-markdown";
 import { apiClient } from "../../services/api";
 import type { ContentItem, ContentDetail } from "../../services/api";
 import { useAuth } from "../../hooks/useAuth";
+import { TTSButton } from "../../components/TTSButton";
+import { ImmersiveReaderButton } from "../../components/ImmersiveReaderButton";
 import { FileUpload } from "../../components/FileUpload";
 
 const useStyles = makeStyles({
@@ -299,6 +301,10 @@ export function Feature2Page() {
                 )}
                 <div className={styles.adaptedText} style={{ marginTop: 12 }}>
                   <ReactMarkdown>{adaptation.adaptedText}</ReactMarkdown>
+                </div>
+                <div style={{ display: "flex", gap: "4px", marginTop: 8 }}>
+                  <TTSButton text={adaptation.adaptedText} />
+                  <ImmersiveReaderButton title={`Adapted: ${profileInfo?.label || adaptation.profile}`} text={adaptation.adaptedText} />
                 </div>
                 <div className={styles.explanationBar} style={{ marginTop: 12 }}>
                   <Text size={200}>

@@ -143,7 +143,7 @@ async def _run_adaptation(
     Uses AI Foundry Agent Service when available, falls back to
     returning structured prompt metadata for local dev.
     """
-    endpoint = os.environ.get("AI_FOUNDRY_ENDPOINT", "")
+    endpoint = os.environ.get("PROJECT_ENDPOINT", "") or os.environ.get("AI_FOUNDRY_ENDPOINT", "")
     if _LOCAL_DEV or not endpoint:
         return _local_adaptation_stub(source_text, profile, analysis)
 
