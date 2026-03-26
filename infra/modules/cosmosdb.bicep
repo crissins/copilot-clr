@@ -212,7 +212,7 @@ resource tasksContainer 'Microsoft.DocumentDB/databaseAccounts/sqlDatabases/cont
     resource: {
       id: 'tasks'
       partitionKey: {
-        paths: ['/taskId']
+        paths: ['/userId']
         kind: 'Hash'
         version: 2
       }

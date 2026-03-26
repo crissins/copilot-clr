@@ -10,6 +10,12 @@ HTTP Endpoints:
   GET    /api/health              — Health check
   POST   /api/voice/negotiate     — Web PubSub client access URL for voice
   POST   /api/webpubsub/voice     — CloudEvent handler for Web PubSub voice hub
+  POST   /api/task-plans/decompose — Break a complex goal into time-boxed steps
+  GET    /api/task-plans          — List all task plans for the authenticated user
+  GET    /api/task-plans/{id}     — Get a specific task plan
+  PATCH  /api/task-plans/{id}/steps/{step_id} — Toggle step completion
+  DELETE /api/task-plans/{id}     — Delete a task plan
+  POST   /api/task-plans/{id}/remind — Queue a Service Bus reminder
 
 Real-time voice uses Azure Web PubSub Service instead of direct WebSockets
 because Azure Static Web Apps don't support WebSocket proxying to linked
@@ -30,9 +36,9 @@ load_dotenv()
 
 from azure.cosmos import CosmosClient, ContainerProxy
 from azure.identity import DefaultAzureCredential
-from fastapi import FastAPI, Request, WebSocket, WebSocketDisconnect
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, Response
 
 from agents.chat_agent import get_agent_response
 from agents.task_decomposer import decompose_task
@@ -99,6 +105,7 @@ class _InMemoryContainer:
         query: str,
         parameters: list,
         enable_cross_partition_query: bool = False,
+        partition_key: str | None = None,
     ) -> list:
         docs = list(self._store.values())
         for param in parameters:
@@ -648,7 +655,7 @@ def list_sessions(req: Request) -> JSONResponse:
     sessions = list(_sessions_container.query_items(
         query="SELECT * FROM c WHERE c.userId = @userId ORDER BY c.updatedAt DESC",
         parameters=[{"name": "@userId", "value": user_id}],
-        enable_cross_partition_query=True,
+        partition_key=user_id,
     ))
     return JSONResponse({"sessions": [
         {k: v for k, v in s.items() if not k.startswith("_")} for s in sessions
@@ -704,7 +711,7 @@ def get_session(session_id: str, req: Request) -> JSONResponse:
     messages = list(_messages_container.query_items(
         query="SELECT * FROM c WHERE c.sessionId = @sid ORDER BY c.createdAt ASC",
         parameters=[{"name": "@sid", "value": session_id}],
-        enable_cross_partition_query=True,
+        partition_key=session_id,
     ))
     return JSONResponse({
         "session": {k: v for k, v in session.items() if not k.startswith("_")},
@@ -734,7 +741,7 @@ def delete_session(session_id: str, req: Request) -> JSONResponse:
     messages = list(_messages_container.query_items(
         query="SELECT c.id FROM c WHERE c.sessionId = @sid",
         parameters=[{"name": "@sid", "value": session_id}],
-        enable_cross_partition_query=True,
+        partition_key=session_id,
     ))
     for msg in messages:
         try:
@@ -742,7 +749,7 @@ def delete_session(session_id: str, req: Request) -> JSONResponse:
         except Exception:
             pass  # Best-effort cleanup
 
-    return JSONResponse(None, status_code=204)
+    return Response(status_code=204)
 
 
 # ============================================================================
@@ -845,10 +852,10 @@ async def update_prefs(req: Request) -> JSONResponse:
 
 
 # ============================================================================
-# POST /api/tasks/decompose — Break a complex goal into time-boxed steps
+# POST /api/task-plans/decompose — Break a complex goal into time-boxed steps
 # ============================================================================
 
-@app.post("/api/tasks/decompose")
+@app.post("/api/task-plans/decompose")
 async def decompose_goal(req: Request) -> JSONResponse:
     """Decompose a complex goal into numbered, time-boxed sub-tasks."""
     try:
@@ -906,11 +913,11 @@ async def decompose_goal(req: Request) -> JSONResponse:
 
 
 # ============================================================================
-# GET /api/tasks — List all task plans for the authenticated user
+# GET /api/task-plans — List all task plans for the authenticated user
 # ============================================================================
 
-@app.get("/api/tasks")
-def list_tasks(req: Request) -> JSONResponse:
+@app.get("/api/task-plans")
+def list_task_plans(req: Request) -> JSONResponse:
     """List all task decomposition plans for the user, newest first."""
     try:
         user_id = _get_user_id(req.headers.get("Authorization"))
@@ -920,7 +927,7 @@ def list_tasks(req: Request) -> JSONResponse:
     tasks = list(_tasks_container.query_items(
         query="SELECT * FROM c WHERE c.userId = @userId ORDER BY c.createdAt DESC",
         parameters=[{"name": "@userId", "value": user_id}],
-        enable_cross_partition_query=True,
+        partition_key=user_id,
     ))
     return JSONResponse({"tasks": [
         {k: v for k, v in t.items() if not k.startswith("_")} for t in tasks
@@ -928,11 +935,11 @@ def list_tasks(req: Request) -> JSONResponse:
 
 
 # ============================================================================
-# GET /api/tasks/{task_id} — Get a specific task plan
+# GET /api/task-plans/{task_id} — Get a specific task plan
 # ============================================================================
 
-@app.get("/api/tasks/{task_id}")
-def get_task(task_id: str, req: Request) -> JSONResponse:
+@app.get("/api/task-plans/{task_id}")
+def get_task_plan(task_id: str, req: Request) -> JSONResponse:
     """Return a task plan document with all steps."""
     try:
         user_id = _get_user_id(req.headers.get("Authorization"))
@@ -940,7 +947,7 @@ def get_task(task_id: str, req: Request) -> JSONResponse:
         return JSONResponse({"error": str(e)}, status_code=401)
 
     try:
-        task = _tasks_container.read_item(item=task_id, partition_key=task_id)
+        task = _tasks_container.read_item(item=task_id, partition_key=user_id)
     except Exception:
         return JSONResponse({"error": "Task plan not found"}, status_code=404)
 
@@ -950,10 +957,10 @@ def get_task(task_id: str, req: Request) -> JSONResponse:
 
 
 # ============================================================================
-# PATCH /api/tasks/{task_id}/steps/{step_id} — Toggle step completion
+# PATCH /api/task-plans/{task_id}/steps/{step_id} — Toggle step completion
 # ============================================================================
 
-@app.patch("/api/tasks/{task_id}/steps/{step_id}")
+@app.patch("/api/task-plans/{task_id}/steps/{step_id}")
 async def toggle_step(task_id: str, step_id: str, req: Request) -> JSONResponse:
     """Mark a step as completed or uncompleted."""
     try:
@@ -969,7 +976,7 @@ async def toggle_step(task_id: str, step_id: str, req: Request) -> JSONResponse:
     completed = body.get("completed", False)
 
     try:
-        task = _tasks_container.read_item(item=task_id, partition_key=task_id)
+        task = _tasks_container.read_item(item=task_id, partition_key=user_id)
     except Exception:
         return JSONResponse({"error": "Task plan not found"}, status_code=404)
 
@@ -994,11 +1001,11 @@ async def toggle_step(task_id: str, step_id: str, req: Request) -> JSONResponse:
 
 
 # ============================================================================
-# DELETE /api/tasks/{task_id} — Delete a task plan
+# DELETE /api/task-plans/{task_id} — Delete a task plan
 # ============================================================================
 
-@app.delete("/api/tasks/{task_id}")
-def delete_task(task_id: str, req: Request) -> JSONResponse:
+@app.delete("/api/task-plans/{task_id}")
+def delete_task_plan(task_id: str, req: Request) -> Response:
     """Delete a task decomposition plan."""
     try:
         user_id = _get_user_id(req.headers.get("Authorization"))
@@ -1006,18 +1013,18 @@ def delete_task(task_id: str, req: Request) -> JSONResponse:
         return JSONResponse({"error": str(e)}, status_code=401)
 
     try:
-        _tasks_container.delete_item(item=task_id, partition_key=task_id)
+        _tasks_container.delete_item(item=task_id, partition_key=user_id)
     except Exception:
         return JSONResponse({"error": "Task plan not found"}, status_code=404)
 
-    return JSONResponse(None, status_code=204)
+    return Response(status_code=204)
 
 
 # ============================================================================
-# POST /api/tasks/{task_id}/remind — Queue a Service Bus reminder
+# POST /api/task-plans/{task_id}/remind — Queue a Service Bus reminder
 # ============================================================================
 
-@app.post("/api/tasks/{task_id}/remind")
+@app.post("/api/task-plans/{task_id}/remind")
 async def send_reminder(task_id: str, req: Request) -> JSONResponse:
     """Queue a reminder for a specific task step via Service Bus.
 
@@ -1038,7 +1045,7 @@ async def send_reminder(task_id: str, req: Request) -> JSONResponse:
     notify_email = body.get("email", "")
 
     try:
-        task = _tasks_container.read_item(item=task_id, partition_key=task_id)
+        task = _tasks_container.read_item(item=task_id, partition_key=user_id)
     except Exception:
         return JSONResponse({"error": "Task plan not found"}, status_code=404)
 
@@ -1214,7 +1221,7 @@ def api_delete_task(task_id: str, req: Request) -> JSONResponse:
     except Exception:
         return JSONResponse({"error": "Task not found"}, status_code=404)
 
-    return JSONResponse(None, status_code=204)
+    return Response(status_code=204)
 
 
 # ============================================================================
@@ -1318,178 +1325,7 @@ def _check_content_safety(text: str, user_id: str) -> tuple[bool, str]:
         return True, ""
 
 
-async def _get_openai_bearer_token() -> str:
-    """Acquire a short-lived bearer token for Azure OpenAI via managed identity."""
-    async with AsyncDefaultAzureCredential() as credential:
-        token = await credential.get_token("https://cognitiveservices.azure.com/.default")
-        return token.token
 
-
-@app.websocket("/ws/realtime")
-async def realtime_voice(websocket: WebSocket) -> None:
-    """Relay audio between browser client and Azure OpenAI GPT Realtime API."""
-    await websocket.accept()
-
-    # ── Auth: first message must be {"type":"auth","token":"Bearer <jwt>"} ──
-    try:
-        auth_frame = await asyncio.wait_for(websocket.receive_json(), timeout=10.0)
-    except asyncio.TimeoutError:
-        await websocket.close(code=4001, reason="Authentication timeout")
-        return
-    except Exception:
-        await websocket.close(code=4002, reason="Malformed auth frame")
-        return
-
-    raw_token = auth_frame.get("token", "")
-    client_id = os.environ.get("AZURE_CLIENT_ID", "")
-
-    if _LOCAL_DEV:
-        user_id = "local-dev-user"
-    elif client_id:
-        try:
-            claims = validate_token(raw_token.replace("Bearer ", ""), client_id)
-            user_id = claims.get("oid", claims.get("sub", "unknown"))
-        except AuthError as e:
-            await websocket.send_json({"type": "error", "error": str(e)})
-            await websocket.close(code=4001)
-            return
-    else:
-        user_id = "anonymous"
-
-    logger.info("voice_session_start user=%s", user_id)
-
-    # ── LOCAL_DEV stub ───────────────────────────────────────────────────────
-    if _LOCAL_DEV:
-        await websocket.send_json({"type": "ready", "userId": user_id})
-        try:
-            async for frame in websocket.iter_text():
-                event = json.loads(frame)
-                if event.get("type") == "input_audio_buffer.commit":
-                    await websocket.send_text(json.dumps({
-                        "type": "response.audio_transcript.done",
-                        "transcript": (
-                            "[Local dev mode — voice relay disabled. "
-                            "Set deployVoice=true and point AZURE_OPENAI_ENDPOINT "
-                            "at a real deployment to enable.]"
-                        ),
-                    }))
-        except WebSocketDisconnect:
-            pass
-        finally:
-            logger.info("voice_session_end user=%s duration_s=0 (local-dev)", user_id)
-        return
-
-    # ── Connect to Azure OpenAI Realtime API ─────────────────────────────────
-    endpoint = os.environ["AZURE_OPENAI_ENDPOINT"].rstrip("/")
-    host = endpoint.replace("https://", "")
-    realtime_url = (
-        f"wss://{host}/openai/realtime"
-        f"?api-version={_REALTIME_API_VERSION}"
-        f"&deployment={_REALTIME_MODEL}"
-    )
-
-    try:
-        openai_token = await _get_openai_bearer_token()
-    except Exception:
-        logger.exception("Failed to acquire OpenAI bearer token for voice session")
-        await websocket.send_json({"type": "error", "error": "Backend auth failed"})
-        await websocket.close(code=1011)
-        return
-
-    session_start = time.monotonic()
-
-    try:
-        async with websockets.connect(
-            realtime_url,
-            additional_headers={"Authorization": f"Bearer {openai_token}"},
-        ) as openai_ws:
-
-            # Configure the Realtime session
-            await openai_ws.send(json.dumps({
-                "type": "session.update",
-                "session": {
-                    "instructions": _VOICE_INSTRUCTIONS,
-                    "voice": "alloy",
-                    "input_audio_format": "pcm16",
-                    "output_audio_format": "pcm16",
-                    "input_audio_transcription": {"model": "whisper-1"},
-                    "turn_detection": {
-                        "type": "semantic_vad",
-                        "create_response": True,
-                    },
-                    "tools": [],
-                },
-            }))
-
-            await websocket.send_json({"type": "ready", "userId": user_id})
-
-            # ── Relay: client → OpenAI ───────────────────────────────────────
-            async def _client_to_openai() -> None:
-                try:
-                    async for frame in websocket.iter_text():
-                        await openai_ws.send(frame)
-                except WebSocketDisconnect:
-                    pass
-
-            # ── Relay: OpenAI → client (with Content Safety check) ───────────
-            async def _openai_to_client() -> None:
-                try:
-                    async for raw in openai_ws:
-                        try:
-                            event = json.loads(raw)
-                        except json.JSONDecodeError:
-                            await websocket.send_text(raw)
-                            continue
-
-                        if event.get("type") == "response.audio_transcript.done":
-                            transcript = event.get("transcript", "")
-
-                            # ── Content Safety check (was TODO P0) ──────────
-                            # Run synchronous SDK call in a thread to avoid
-                            # blocking the event loop.
-                            is_safe, reason = await asyncio.to_thread(
-                                _check_content_safety, transcript, user_id
-                            )
-
-                            if not is_safe:
-                                logger.warning(
-                                    "voice_transcript_blocked user=%s reason=%s chars=%d",
-                                    user_id, reason, len(transcript),
-                                )
-                                # Replace flagged content with safe fallback
-                                safe_event = {
-                                    **event,
-                                    "transcript": _CONTENT_SAFETY_FALLBACK,
-                                    "_moderated": True,
-                                }
-                                await websocket.send_text(json.dumps(safe_event))
-                                continue  # Don't forward the original event
-
-                            # Log transcript metadata only (not raw content)
-                            logger.info(
-                                "voice_transcript user=%s chars=%d safe=True",
-                                user_id, len(transcript),
-                            )
-                            # ────────────────────────────────────────────────
-
-                        await websocket.send_text(raw)
-
-                except websockets.exceptions.ConnectionClosed:
-                    pass
-
-            await asyncio.gather(_client_to_openai(), _openai_to_client())
-
-    except websockets.exceptions.InvalidHandshake as exc:
-        logger.error("OpenAI Realtime handshake failed: %s", exc)
-        try:
-            await websocket.send_json({"type": "error", "error": "OpenAI connection failed"})
-        except Exception:
-            pass
-    except Exception:
-        logger.exception("Unexpected voice relay error user=%s", user_id)
-    finally:
-        duration_s = int(time.monotonic() - session_start)
-        logger.info("voice_session_end user=%s duration_s=%d", user_id, duration_s)
 
 # ---------------------------------------------------------------------------
 # Register sub-routers from routes/ modules
