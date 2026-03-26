@@ -37,7 +37,7 @@ class UserMemoryProvider(BaseContextProvider):
         self,
         *,
         agent: Any,
-        session: AgentSession | None,
+        session: Any | None,
         context: SessionContext,
         state: dict[str, Any],
     ) -> None:
@@ -58,7 +58,7 @@ class UserMemoryProvider(BaseContextProvider):
         self,
         *,
         agent: Any,
-        session: AgentSession | None,
+        session: Any | None,
         context: SessionContext,
         state: dict[str, Any],
     ) -> None:
@@ -75,12 +75,14 @@ class UserMemoryProvider(BaseContextProvider):
 class CosmosDBHistoryProvider(BaseHistoryProvider):
     """A history provider that persists messages to Cosmos DB."""
 
+    DEFAULT_SOURCE_ID = "cosmos_history"
+
     def __init__(self, session_id: str, user_id: str, load_messages: bool = True):
-        super().__init__(load_messages=load_messages)
+        super().__init__(self.DEFAULT_SOURCE_ID, load_messages=load_messages)
         self.session_id = session_id
         self.user_id = user_id
 
-    async def load(self) -> List[Message]:
+    async def get_messages(self, session_id: str | None = None, **kwargs) -> List[Message]:
         """Load recent messages for this session from Cosmos DB."""
         container = get_messages_container()
         if not container:
@@ -112,11 +114,10 @@ class CosmosDBHistoryProvider(BaseHistoryProvider):
             logger.exception("Failed to load history from Cosmos DB for session=%s", self.session_id)
             return []
 
-    async def store(self, messages: List[Message]) -> None:
-        """Store new messages into Cosmos DB.
-        
-        Note: The framework usually passes ONLY the new messages.
-        """
+    async def save_messages(self, session_id: str | None = None, messages: list[Message] | None = None, **kwargs) -> None:
+        """Store new messages into Cosmos DB."""
+        if not messages:
+            return
         container = get_messages_container()
         if not container:
             return

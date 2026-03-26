@@ -138,7 +138,7 @@ resource containerApp 'Microsoft.App/containerApps@2024-03-01' = {
         transport: 'http'         // http transport enables HTTP/1.1, HTTP/2, WebSocket, gRPC
         corsPolicy: {
           allowedOrigins: corsOrigins
-          allowedMethods: ['GET', 'POST', 'DELETE', 'OPTIONS']
+          allowedMethods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS']
           allowedHeaders: ['Authorization', 'Content-Type']
           allowCredentials: true
         }
@@ -180,7 +180,7 @@ resource containerApp 'Microsoft.App/containerApps@2024-03-01' = {
             { name: 'DOC_INTELLIGENCE_ENDPOINT',   value: docIntelEndpoint }
             { name: 'WEBPUBSUB_ENDPOINT',           value: webPubSubEndpoint }
             { name: 'AZURE_CONTENT_SAFETY_ENDPOINT', value: aiServicesEndpoint }
-            { name: 'ENTRA_CLIENT_ID',            value: entraClientId }
+            { name: 'AZURE_CLIENT_ID',            value: entraClientId }
           ]
         }
       ]

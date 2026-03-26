@@ -6,6 +6,7 @@ export interface OnboardingI18n {
   next: string;
   back: string;
   finish: string;
+  skip: string;
   letsGo: string;
   doneTitle: string;
   doneSubtitle: string;
@@ -50,6 +51,7 @@ const en: OnboardingI18n = {
   next: "Next",
   back: "Back",
   finish: "Finish",
+  skip: "Skip",
   letsGo: "Let's Go",
   doneTitle: "You're all set!",
   doneSubtitle:
@@ -142,6 +144,7 @@ const es: OnboardingI18n = {
   next: "Siguiente",
   back: "Atrás",
   finish: "Finalizar",
+  skip: "Omitir",
   letsGo: "¡Vamos!",
   doneTitle: "¡Todo listo!",
   doneSubtitle:
@@ -234,6 +237,7 @@ const it: OnboardingI18n = {
   next: "Avanti",
   back: "Indietro",
   finish: "Fine",
+  skip: "Salta",
   letsGo: "Andiamo!",
   doneTitle: "Tutto pronto!",
   doneSubtitle:
@@ -326,6 +330,7 @@ const pt: OnboardingI18n = {
   next: "Próximo",
   back: "Voltar",
   finish: "Concluir",
+  skip: "Pular",
   letsGo: "Vamos!",
   doneTitle: "Tudo pronto!",
   doneSubtitle:
@@ -418,6 +423,7 @@ const de: OnboardingI18n = {
   next: "Weiter",
   back: "Zurück",
   finish: "Fertig",
+  skip: "Überspringen",
   letsGo: "Los geht's!",
   doneTitle: "Alles bereit!",
   doneSubtitle:
@@ -510,6 +516,7 @@ const ja: OnboardingI18n = {
   next: "次へ",
   back: "戻る",
   finish: "完了",
+  skip: "スキップ",
   letsGo: "はじめましょう！",
   doneTitle: "準備完了！",
   doneSubtitle:

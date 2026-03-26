@@ -16,6 +16,7 @@ import "./onboarding.css";
 interface OnboardingWizardProps {
   language: string;
   onComplete: () => void;
+  onSkip?: () => void;
 }
 
 // ── Step keys (order matters) ────────────────────────────────────────────────
@@ -51,7 +52,7 @@ function SpeakingIndicator() {
 
 // ── Component ────────────────────────────────────────────────────────────────
 
-export function OnboardingWizard({ language, onComplete }: OnboardingWizardProps) {
+export function OnboardingWizard({ language, onComplete, onSkip }: OnboardingWizardProps) {
   const { getAccessToken } = useAuth();
   const { updateSettings } = useSettings();
   const [step, setStep] = useState(0);
@@ -118,7 +119,7 @@ export function OnboardingWizard({ language, onComplete }: OnboardingWizardProps
       try {
         const token = await getAccessToken();
         if (speakIdRef.current !== id) return; // cancelled
-        const blob = await apiClient.speechSynthesize(text, token, ttsVoice, "slow");
+        const blob = await apiClient.speechSynthesize(text, token, ttsVoice, "medium", language);
         if (speakIdRef.current !== id) return; // cancelled
         const url = URL.createObjectURL(blob);
         const audio = new Audio(url);
@@ -385,6 +386,18 @@ export function OnboardingWizard({ language, onComplete }: OnboardingWizardProps
           >
             {step < STEP_KEYS.length - 1 ? t.next : t.finish}
           </Button>
+          {onSkip && (
+            <Button
+              appearance="subtle"
+              onClick={() => {
+                stopSpeaking();
+                onSkip();
+              }}
+              style={{ marginLeft: "auto" }}
+            >
+              {t.skip} →
+            </Button>
+          )}
         </div>
       </div>
     </div>

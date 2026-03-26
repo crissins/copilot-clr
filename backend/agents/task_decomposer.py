@@ -1,15 +1,11 @@
 """
 Task Decomposer — AI Foundry Agent for breaking complex goals into steps.
-
 Uses the Azure AI Foundry Agent Framework to decompose a complex goal
 into numbered, time-boxed sub-tasks with priority, duration, and focus tips.
-
 All sync SDK calls are wrapped in asyncio.to_thread() to avoid blocking
 FastAPI's event loop (consistent with chat_agent.py pattern).
-
 RAI: Instructions enforce calm, supportive language — no urgency words.
 """
-
 import asyncio
 import json
 import logging
@@ -22,7 +18,6 @@ logger = logging.getLogger(__name__)
 # ============================================================================
 # Agent instructions — calm, supportive persona (RAI requirement)
 # ============================================================================
-
 DECOMPOSER_INSTRUCTIONS = """You are the Task Decomposer for Copilot CLR — a calm, supportive AI assistant
 designed for neurodiverse users including people with ADHD, autism, and dyslexia.
 
@@ -55,14 +50,13 @@ You MUST respond with valid JSON in this exact format (no markdown, no extra tex
 }
 """
 
-DECOMPOSER_AGENT_NAME = "Copilot-CLR-Task-Decomposer"
+DECOMPOSER_AGENT_NAME = "Copilot CLR Task Decomposer"
 DECOMPOSER_MODEL = "gpt-4.1-mini"
 
 
 # ============================================================================
 # Local dev stub
 # ============================================================================
-
 def _local_decompose(goal: str) -> dict:
     """Return sample decomposition for LOCAL_DEV mode."""
     return {
@@ -123,83 +117,53 @@ def _local_decompose(goal: str) -> dict:
 # ============================================================================
 # AI Foundry Agent calls (synchronous — always run via asyncio.to_thread)
 # ============================================================================
+_decomposer_agent_id: str | None = None
 
-_decomposer_agent_id: tuple[str, str] | None = None
 
-
-def _ensure_decomposer_agent_sync(client) -> tuple[str, str]:
-    """Create or retrieve the Task Decomposer agent. Returns (agent_name, agent_version)."""
+def _ensure_decomposer_agent_sync(client) -> str:
+    """Create or retrieve the Task Decomposer agent. Returns agent ID."""
     global _decomposer_agent_id
     if _decomposer_agent_id:
-        # Return stored (name, version) tuple from when it was created
         return _decomposer_agent_id
 
-    # Try to get existing agent by name
-    try:
-        from azure.core.exceptions import ResourceNotFoundError  # noqa: PLC0415
-        agent = client.agents.get(agent_name=DECOMPOSER_AGENT_NAME)
-        # Return (agent_name, latest_version)
-        agent_version = agent.versions.latest.version
-        _decomposer_agent_id = (DECOMPOSER_AGENT_NAME, agent_version)
-        logger.info(
-            "Found existing decomposer agent: %s (version: %s)",
-            DECOMPOSER_AGENT_NAME,
-            agent_version,
-        )
-        return _decomposer_agent_id
-    except ResourceNotFoundError:
-        pass
+    agents = client.agents.list_agents()
+    for agent in agents:
+        if agent.name == DECOMPOSER_AGENT_NAME:
+            _decomposer_agent_id = agent.id
+            logger.info("Found existing decomposer agent: %s", _decomposer_agent_id)
+            return _decomposer_agent_id
 
-    # Create new agent with version
-    from azure.ai.projects.models import PromptAgentDefinition  # noqa: PLC0415
-    agent = client.agents.create_version(
-        agent_name=DECOMPOSER_AGENT_NAME,
-        definition=PromptAgentDefinition(
-            model=DECOMPOSER_MODEL,
-            instructions=DECOMPOSER_INSTRUCTIONS,
-        ),
+    agent = client.agents.create_agent(
+        model=DECOMPOSER_MODEL,
+        name=DECOMPOSER_AGENT_NAME,
+        instructions=DECOMPOSER_INSTRUCTIONS,
     )
-    _decomposer_agent_id = (DECOMPOSER_AGENT_NAME, agent.version)
-    logger.info(
-        "Created new decomposer agent: %s (version: %s)",
-        DECOMPOSER_AGENT_NAME,
-        agent.version,
-    )
+    _decomposer_agent_id = agent.id
+    logger.info("Created new decomposer agent: %s", _decomposer_agent_id)
     return _decomposer_agent_id
 
 
-def _run_decomposition_sync(
-    project_client, openai_client, agent_name: str, agent_version: str, goal: str, reading_level: str
-) -> dict:
+def _run_decomposition_sync(client, agent_id: str, goal: str, reading_level: str) -> dict:
     """Send goal to decomposer agent, parse structured JSON response."""
-    # Create a conversation
-    conversation = openai_client.conversations.create(
-        items=[],
-    )
+    thread = client.agents.threads.create()
 
-    # Build the prompt
     prompt = f"Break down this goal into time-boxed steps: {goal}"
     if reading_level:
         prompt += f"\n\nWrite the steps at reading level: grade {reading_level}."
 
-    # Add user message to conversation
-    openai_client.conversations.items.create(
-        conversation_id=conversation.id,
-        items=[{"type": "message", "role": "user", "content": prompt}],
+    client.agents.messages.create(
+        thread_id=thread.id,
+        role="user",
+        content=prompt,
     )
 
-    # Create response with agent reference
-    response = openai_client.responses.create(
-        conversation=conversation.id,
-        extra_body={"agent_reference": {"name": agent_name, "type": "agent_reference"}},
+    run = client.agents.runs.create_and_process(
+        thread_id=thread.id,
+        agent_id=agent_id,
     )
 
-    # Clean up conversation
-    openai_client.conversations.delete(conversation_id=conversation.id)
-
-    # Check response status and extract output
-    if hasattr(response, "status") and response.status == "failed":
-        logger.error("Decomposer agent response failed")
+    if run.status == "failed":
+        logger.error("Decomposer agent run failed: %s", run.last_error)
         return {
             "steps": [],
             "explanation": (
@@ -208,9 +172,13 @@ def _run_decomposition_sync(
             ),
         }
 
-    # Parse response output_text
-    if hasattr(response, "output_text"):
-        return _parse_decomposition(response.output_text)
+    messages = client.agents.messages.list(thread_id=thread.id)
+    for msg in messages:
+        if msg.role in ("assistant", "agent"):
+            for block in msg.content:
+                if hasattr(block, "text"):
+                    raw_text = block.text.value
+                    return _parse_decomposition(raw_text)
 
     return {
         "steps": [],
@@ -221,6 +189,7 @@ def _run_decomposition_sync(
 def _parse_decomposition(raw_text: str) -> dict:
     """Parse the agent's JSON response, handling markdown code fences."""
     text = raw_text.strip()
+
     # Strip markdown code fences if present
     if text.startswith("```"):
         lines = text.split("\n")
@@ -262,7 +231,6 @@ def _parse_decomposition(raw_text: str) -> dict:
 # ============================================================================
 # Public API — called from main.py
 # ============================================================================
-
 async def decompose_task(
     goal: str,
     user_id: str,
@@ -284,24 +252,17 @@ async def decompose_task(
     from azure.identity import DefaultAzureCredential  # noqa: PLC0415
     from azure.ai.projects import AIProjectClient  # noqa: PLC0415
 
-    project_client = await asyncio.to_thread(
+    client = await asyncio.to_thread(
         lambda: AIProjectClient(
             endpoint=os.environ["AI_FOUNDRY_ENDPOINT"],
             credential=DefaultAzureCredential(),
         )
     )
 
-    agent_info = await asyncio.to_thread(_ensure_decomposer_agent_sync, project_client)
-    agent_name, agent_version = agent_info
-
-    # Get OpenAI client for conversations API
-    openai_client = project_client.get_openai_client()
+    agent_id = await asyncio.to_thread(_ensure_decomposer_agent_sync, client)
 
     result = await asyncio.to_thread(
-        _run_decomposition_sync, project_client, openai_client, agent_name, agent_version, goal, reading_level
+        _run_decomposition_sync, client, agent_id, goal, reading_level
     )
-
-    # Clean up client
-    project_client.close()
 
     return result

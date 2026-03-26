@@ -61,6 +61,10 @@ def validate_token(token: str, client_id: str) -> dict:
         jwk_client = _get_jwk_client()
         signing_key = jwk_client.get_signing_key_from_jwt(token)
 
+        # Decode without verification first to get the tenant ID
+        unverified_claims = jwt.decode(token, options={"verify_signature": False})
+        tenant_id = unverified_claims.get("tid", "")
+
         # Accept either v1.0 or v2.0 issuer format
         # v1.0: https://sts.windows.net/{tid}/
         # v2.0: https://login.microsoftonline.com/{tid}/v2.0
@@ -69,10 +73,13 @@ def validate_token(token: str, client_id: str) -> dict:
             f"https://login.microsoftonline.com/{tenant_id}/v2.0",
         ]
 
-        # v2.0 tokens issued for a custom API scope (api://{clientId}/access_as_user)
-        # have aud=api://{clientId}, while tokens for the app itself have aud={clientId}.
-        # Accept both so the backend works regardless of which scope the frontend used.
-        valid_audiences = [client_id, f"api://{client_id}"]
+        # Accept audience in either format:
+        # - Just the client ID: "xxxxxxxx-xxxx-xxxx-xxxxxxxxxxxxxxxxx"
+        # - API URI format: "api://xxxxxxxx-xxxx-xxxx-xxxxxxxxxxxxxxxxx"
+        valid_audiences = [
+            client_id,
+            f"api://{client_id}",
+        ]
 
         claims = jwt.decode(
             token,
@@ -90,10 +97,10 @@ def validate_token(token: str, client_id: str) -> dict:
 
     except jwt.ExpiredSignatureError:
         raise AuthError("Token has expired")
-    except jwt.InvalidAudienceError as e:
+    except jwt.InvalidAudienceError:
         logger.error("Invalid audience. Expected=%s, Got=%s", valid_audiences, jwt.decode(token, options={"verify_signature": False}).get("aud"))
         raise AuthError("Invalid token audience")
-    except jwt.InvalidIssuerError as e:
+    except jwt.InvalidIssuerError:
         decoded = jwt.decode(token, options={"verify_signature": False})
         logger.error("Invalid issuer. Got=%s", decoded.get("iss"))
         raise AuthError("Invalid token issuer")

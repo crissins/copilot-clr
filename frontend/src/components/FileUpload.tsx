@@ -1,6 +1,7 @@
 ﻿import { useState, useCallback, useRef } from "react";
 import { apiClient } from "../services/api";
 import { useAuth } from "../hooks/useAuth";
+import { useI18n } from "../I18nContext";
 
 interface Props {
   onUploadComplete?: (filename: string) => void;
@@ -8,6 +9,7 @@ interface Props {
 
 export function FileUpload({ onUploadComplete }: Props) {
   const { getAccessToken } = useAuth();
+  const { t } = useI18n();
   const [uploading, setUploading] = useState(false);
   const [status, setStatus] = useState("");
   const fileRef = useRef<HTMLInputElement>(null);
@@ -20,10 +22,10 @@ export function FileUpload({ onUploadComplete }: Props) {
     try {
       const token = await getAccessToken();
       const result = await apiClient.uploadDocument(file, token);
-      setStatus(`Uploaded: ${result.filename} (${result.chunks} chunks)`);
+      setStatus(t.upload.uploadedStatus(result.filename, result.chunks));
       onUploadComplete?.(result.filename);
     } catch (err) {
-      setStatus("Upload failed. Only PDF files under 10 MB are supported.");
+      setStatus(t.upload.errorGeneric);
       console.error(err);
     } finally {
       setUploading(false);
@@ -34,11 +36,11 @@ export function FileUpload({ onUploadComplete }: Props) {
   return (
     <div className="file-upload">
       <label className="btn-secondary file-upload-label">
-        {uploading ? "Uploading..." : "\uD83D\uDCC4 Upload PDF"}
+        {uploading ? t.upload.uploading : t.upload.label}
         <input
           ref={fileRef}
           type="file"
-          accept=".pdf"
+          accept=".pdf,.docx,.mp4,.mov,.avi,.mkv,.webm"
           onChange={handleUpload}
           disabled={uploading}
           hidden

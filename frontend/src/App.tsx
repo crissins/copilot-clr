@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useMemo, useEffect } from "react";
 import {
   FluentProvider,
   webLightTheme,
@@ -30,6 +30,8 @@ import { LanguageSelector } from "./components/LanguageSelector";
 import { OnboardingWizard } from "./components/OnboardingWizard";
 import { useAuth } from "./hooks/useAuth";
 import { useSettings } from "./hooks/useSettings";
+import { getAppI18n } from "./i18n";
+import { I18nProvider } from "./I18nContext";
 import { Feature1Page } from "./features/feature1/Feature1Page";
 import { Feature2Page } from "./features/feature2/Feature2Page";
 import { Feature3Page } from "./features/feature3/Feature3Page";
@@ -37,6 +39,7 @@ import { Feature4Page } from "./features/feature4/Feature4Page";
 import { Feature5Page } from "./features/feature5/Feature5Page";
 import { Feature6Page } from "./features/feature6/Feature6Page";
 import { Feature7Page } from "./features/feature7/Feature7Page";
+import { FeedbackPage } from "./components/FeedbackPage";
 
 const LOCAL_DEV = import.meta.env.VITE_LOCAL_DEV === "true";
 
@@ -102,6 +105,7 @@ function ViewContent({ activeView, onStartOnboarding }: { activeView: string; on
     case "feature5": return <Feature5Page />;
     case "feature6": return <Feature6Page />;
     case "feature7": return <Feature7Page />;
+    case "feedback": return <FeedbackPage />;
     case "settings": return <SettingsPage onStartOnboarding={onStartOnboarding} />;
     default:         return <Chat />;
   }
@@ -120,10 +124,24 @@ function AppShell() {
 
   // Onboarding: "lang" → language selector, "wizard" → step wizard, null → done/not needed
   const [onboardingPhase, setOnboardingPhase] = useState<"lang" | "wizard" | null>(null);
-  const [selectedLanguage, setSelectedLanguage] = useState("en");
+  const [selectedLanguage, setSelectedLanguage] = useState<string>("");
   const [onboardingDismissed, setOnboardingDismissed] = useState(false);
 
   const isAuthed = LOCAL_DEV || !!user;
+
+  // Sync language from saved settings once loaded
+  useEffect(() => {
+    if (settings?.language && !selectedLanguage) {
+      setSelectedLanguage(settings.language);
+    }
+  }, [settings?.language]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Derive effective language: onboarding selection → saved settings → "en"
+  const effectiveLanguage = selectedLanguage || settings?.language || "en";
+  const i18nValue = useMemo(
+    () => ({ language: effectiveLanguage, t: getAppI18n(effectiveLanguage) }),
+    [effectiveLanguage],
+  );
 
   // Detect first-time user (no updatedAt means they've never saved settings)
   const needsOnboarding =
@@ -139,12 +157,18 @@ function AppShell() {
     setOnboardingPhase("lang");
   };
 
+  const skipOnboarding = () => {
+    setOnboardingPhase(null);
+    setOnboardingDismissed(true);
+  };
+
   return (
     <FluentProvider theme={darkMode ? webDarkTheme : webLightTheme}>
+      <I18nProvider value={i18nValue}>
       <div className={styles.appShell}>
         {/* ── Header ─────────────────────────────────────────────────── */}
         <header className={styles.header} role="banner">
-          <Text className={styles.headerTitle}>Copilot CLR</Text>
+          <Text className={styles.headerTitle}>{i18nValue.t.appTitle}</Text>
 
           {isAuthed && (
             <div className={styles.headerActions}>
@@ -153,7 +177,7 @@ function AppShell() {
                 appearance="subtle"
                 icon={darkMode ? <WeatherSunny24Regular /> : <WeatherMoon24Regular />}
                 onClick={() => setDarkMode(!darkMode)}
-                aria-label={darkMode ? "Switch to light mode" : "Switch to dark mode"}
+                aria-label={darkMode ? i18nValue.t.switchToLight : i18nValue.t.switchToDark}
                 style={{ color: tokens.colorNeutralForegroundOnBrand }}
               />
 
@@ -162,7 +186,7 @@ function AppShell() {
                 appearance="subtle"
                 icon={<Settings24Regular />}
                 onClick={() => setShowPrefs(true)}
-                aria-label="Accessibility preferences"
+                aria-label={i18nValue.t.accessibilityPrefs}
                 style={{ color: tokens.colorNeutralForegroundOnBrand }}
               />
 
@@ -181,7 +205,7 @@ function AppShell() {
                   appearance="subtle"
                   icon={<SignOut24Regular />}
                   onClick={logout}
-                  aria-label="Sign out"
+                  aria-label={i18nValue.t.signOut}
                   style={{ color: tokens.colorNeutralForegroundOnBrand }}
                 />
               )}
@@ -200,6 +224,7 @@ function AppShell() {
                     setSelectedLanguage(lang);
                     setOnboardingPhase("wizard");
                   }}
+                  onSkip={skipOnboarding}
                 />
               </main>
             ) : activeOnboarding === "wizard" ? (
@@ -211,6 +236,7 @@ function AppShell() {
                     setOnboardingDismissed(true);
                     reloadSettings();
                   }}
+                  onSkip={skipOnboarding}
                 />
               </main>
             ) : (
@@ -236,6 +262,7 @@ function AppShell() {
                         setSelectedLanguage(lang);
                         setOnboardingPhase("wizard");
                       }}
+                      onSkip={skipOnboarding}
                     />
                   </main>
                 ) : activeOnboarding === "wizard" ? (
@@ -247,6 +274,7 @@ function AppShell() {
                         setOnboardingDismissed(true);
                         reloadSettings();
                       }}
+                      onSkip={skipOnboarding}
                     />
                   </main>
                 ) : (
@@ -276,6 +304,7 @@ function AppShell() {
           <PreferencesPanel isOpen={showPrefs} onClose={() => setShowPrefs(false)} />
         )}
       </div>
+      </I18nProvider>
     </FluentProvider>
   );
 }

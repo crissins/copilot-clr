@@ -68,7 +68,7 @@ app.add_middleware(
     CORSMiddleware,
     allow_origins=_allowed_origins,
     allow_credentials=True,
-    allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
+    allow_methods=["GET", "POST", "PATCH", "PUT", "DELETE", "OPTIONS"],
     allow_headers=["Authorization", "Content-Type"],
 )
 
@@ -141,6 +141,7 @@ if _LOCAL_DEV or not os.environ.get("COSMOS_DB_ENDPOINT"):
     _preferences_container: _InMemoryContainer | ContainerProxy = _InMemoryContainer()
     _reminders_container: _InMemoryContainer | ContainerProxy = _InMemoryContainer()
     _tasks_container: _InMemoryContainer | ContainerProxy = _InMemoryContainer()
+    _feedback_container: _InMemoryContainer | ContainerProxy = _InMemoryContainer()
 else:
     _credential = DefaultAzureCredential()
     _cosmos_client = CosmosClient(
@@ -156,6 +157,7 @@ else:
     _preferences_container = _database.get_container_client("preferences")
     _reminders_container = _database.get_container_client("reminders")
     _tasks_container = _database.get_container_client("tasks")
+    _feedback_container = _database.get_container_client("feedback")
 
 
 # ---------------------------------------------------------------------------
@@ -326,15 +328,18 @@ async def speech_synthesize(req: Request):
         )
 
     # Validate voice and rate at API boundary (defense in depth — also validated in SSML builder)
-    voice = body.get("voice", "en-US-JennyNeural")
+    voice = body.get("voice", "en-US-EmmaMultilingualNeural")
     style = body.get("style", "calm")
     rate = body.get("rate", "slow")
+    lang = body.get("lang", None)  # e.g. "es", "de", "ja"
     if not isinstance(voice, str) or len(voice) > 100:
-        voice = "en-US-JennyNeural"
+        voice = "en-US-EmmaMultilingualNeural"
     if not isinstance(style, str) or len(style) > 50:
         style = "calm"
     if not isinstance(rate, str) or len(rate) > 20:
         rate = "slow"
+    if lang is not None and (not isinstance(lang, str) or len(lang) > 10):
+        lang = None
 
     result = await asyncio.to_thread(
         synthesize_speech_sync,
@@ -342,6 +347,7 @@ async def speech_synthesize(req: Request):
         voice,
         style,
         rate,
+        lang,
     )
 
     if result.get("local_dev"):
@@ -652,11 +658,16 @@ def list_sessions(req: Request) -> JSONResponse:
     except AuthError as e:
         return JSONResponse({"error": str(e)}, status_code=401)
 
-    sessions = list(_sessions_container.query_items(
-        query="SELECT * FROM c WHERE c.userId = @userId ORDER BY c.updatedAt DESC",
-        parameters=[{"name": "@userId", "value": user_id}],
-        partition_key=user_id,
-    ))
+    try:
+        sessions = list(_sessions_container.query_items(
+            query="SELECT * FROM c WHERE c.userId = @userId ORDER BY c.updatedAt DESC",
+            parameters=[{"name": "@userId", "value": user_id}],
+            enable_cross_partition_query=True,
+        ))
+    except Exception:
+        logger.exception("Failed to list sessions for user=%s", user_id)
+        return JSONResponse({"error": "Failed to load sessions."}, status_code=502)
+
     return JSONResponse({"sessions": [
         {k: v for k, v in s.items() if not k.startswith("_")} for s in sessions
     ]})
@@ -708,11 +719,15 @@ def get_session(session_id: str, req: Request) -> JSONResponse:
     except Exception:
         return JSONResponse({"error": "Session not found"}, status_code=404)
 
-    messages = list(_messages_container.query_items(
-        query="SELECT * FROM c WHERE c.sessionId = @sid ORDER BY c.createdAt ASC",
-        parameters=[{"name": "@sid", "value": session_id}],
-        partition_key=session_id,
-    ))
+    try:
+        messages = list(_messages_container.query_items(
+            query="SELECT * FROM c WHERE c.sessionId = @sid ORDER BY c.createdAt ASC",
+            parameters=[{"name": "@sid", "value": session_id}],
+            enable_cross_partition_query=True,
+        ))
+    except Exception:
+        logger.exception("Failed to load messages for session=%s", session_id)
+        messages = []
     return JSONResponse({
         "session": {k: v for k, v in session.items() if not k.startswith("_")},
         "messages": [
@@ -741,7 +756,7 @@ def delete_session(session_id: str, req: Request) -> JSONResponse:
     messages = list(_messages_container.query_items(
         query="SELECT c.id FROM c WHERE c.sessionId = @sid",
         parameters=[{"name": "@sid", "value": session_id}],
-        partition_key=session_id,
+        enable_cross_partition_query=True,
     ))
     for msg in messages:
         try:
@@ -833,7 +848,11 @@ async def update_settings(req: Request) -> JSONResponse:
         "email": profile["email"],
         "updatedAt": datetime.now(timezone.utc).isoformat(),
     }
-    _preferences_container.upsert_item(settings_doc)
+    try:
+        _preferences_container.upsert_item(settings_doc)
+    except Exception:
+        logger.exception("Failed to save settings for user=%s", user_id)
+        return JSONResponse({"error": "Failed to save settings."}, status_code=502)
     return JSONResponse({k: v for k, v in settings_doc.items() if not k.startswith("_")})
 
 
@@ -1134,11 +1153,15 @@ def api_list_tasks(req: Request) -> JSONResponse:
     except AuthError as e:
         return JSONResponse({"error": str(e)}, status_code=401)
 
-    tasks = list(_tasks_container.query_items(
-        query="SELECT * FROM c WHERE c.userId = @userId ORDER BY c.createdAt DESC",
-        parameters=[{"name": "@userId", "value": user_id}],
-        enable_cross_partition_query=False,
-    ))
+    try:
+        tasks = list(_tasks_container.query_items(
+            query="SELECT * FROM c WHERE c.userId = @userId ORDER BY c.createdAt DESC",
+            parameters=[{"name": "@userId", "value": user_id}],
+            enable_cross_partition_query=True,
+        ))
+    except Exception:
+        logger.exception("Failed to load tasks for user=%s", user_id)
+        return JSONResponse({"error": "Failed to load tasks."}, status_code=502)
     return JSONResponse({"tasks": [
         {k: v for k, v in t.items() if not k.startswith("_")} for t in tasks
     ]})
@@ -1162,8 +1185,10 @@ async def api_create_task(req: Request) -> JSONResponse:
         return JSONResponse({"error": "Title is required"}, status_code=400)
 
     now = datetime.now(timezone.utc).isoformat()
+    task_id = str(uuid.uuid4())
     task_doc = {
-        "id": str(uuid.uuid4()),
+        "id": task_id,
+        "taskId": task_id,
         "userId": user_id,
         "title": title,
         "description": body.get("description", ""),
@@ -1194,7 +1219,7 @@ async def api_update_task(task_id: str, req: Request) -> JSONResponse:
         return JSONResponse({"error": "Invalid JSON"}, status_code=400)
 
     try:
-        task = _tasks_container.read_item(item=task_id, partition_key=user_id)
+        task = _tasks_container.read_item(item=task_id, partition_key=task_id)
     except Exception:
         return JSONResponse({"error": "Task not found"}, status_code=404)
 
@@ -1217,11 +1242,336 @@ def api_delete_task(task_id: str, req: Request) -> JSONResponse:
         return JSONResponse({"error": str(e)}, status_code=401)
 
     try:
-        _tasks_container.delete_item(item=task_id, partition_key=user_id)
+        _tasks_container.delete_item(item=task_id, partition_key=task_id)
     except Exception:
         return JSONResponse({"error": "Task not found"}, status_code=404)
 
     return Response(status_code=204)
+
+
+# ============================================================================
+# POST /api/tasks/decompose — Break a complex goal into time-boxed steps
+# ============================================================================
+
+@app.post("/api/tasks/decompose")
+async def decompose_goal(req: Request) -> JSONResponse:
+    """Decompose a complex goal into numbered, time-boxed sub-tasks."""
+    try:
+        user_id = _get_user_id(req.headers.get("Authorization"))
+    except AuthError as e:
+        return JSONResponse({"error": str(e)}, status_code=401)
+
+    try:
+        body = await req.json()
+    except Exception:
+        return JSONResponse({"error": "Invalid JSON"}, status_code=400)
+
+    goal = body.get("goal", "").strip()
+    reading_level = body.get("readingLevel", "")
+
+    if not goal:
+        return JSONResponse({"error": "Goal is required"}, status_code=400)
+
+    start = time.monotonic()
+    try:
+        result = await decompose_task(
+            goal=goal,
+            user_id=user_id,
+            reading_level=reading_level,
+        )
+    except Exception:
+        logger.exception("Task decomposition error for user=%s", user_id)
+        return JSONResponse(
+            {"error": "Something went wrong while breaking down your goal. Please try again."},
+            status_code=500,
+        )
+
+    duration_ms = int((time.monotonic() - start) * 1000)
+    logger.info("task_decompose_duration_ms=%d user=%s", duration_ms, user_id)
+
+    now = datetime.now(timezone.utc).isoformat()
+    task_id = str(uuid.uuid4())
+
+    task_doc = {
+        "id": task_id,
+        "taskId": task_id,
+        "userId": user_id,
+        "goal": goal,
+        "steps": result.get("steps", []),
+        "explanation": result.get("explanation", ""),
+        "readingLevel": reading_level,
+        "createdAt": now,
+        "updatedAt": now,
+    }
+    _tasks_container.upsert_item(task_doc)
+
+    return JSONResponse({
+        "task": {k: v for k, v in task_doc.items() if not k.startswith("_")},
+        "meta": {"latencyMs": duration_ms},
+    }, status_code=201)
+
+
+# ============================================================================
+# GET /api/tasks/plans — List all task decomposition plans
+# ============================================================================
+
+@app.get("/api/tasks/plans")
+def list_task_plans(req: Request) -> JSONResponse:
+    """List all task decomposition plans for the user, newest first."""
+    try:
+        user_id = _get_user_id(req.headers.get("Authorization"))
+    except AuthError as e:
+        return JSONResponse({"error": str(e)}, status_code=401)
+
+    try:
+        tasks = list(_tasks_container.query_items(
+            query="SELECT * FROM c WHERE c.userId = @userId AND IS_DEFINED(c.goal) ORDER BY c.createdAt DESC",
+            parameters=[{"name": "@userId", "value": user_id}],
+            enable_cross_partition_query=True,
+        ))
+    except Exception:
+        logger.exception("Failed to load task plans for user=%s", user_id)
+        return JSONResponse({"error": "Failed to load task plans."}, status_code=502)
+    return JSONResponse({"tasks": [
+        {k: v for k, v in t.items() if not k.startswith("_")} for t in tasks
+    ]})
+
+
+# ============================================================================
+# GET /api/tasks/plans/{task_id} — Get a specific task plan
+# ============================================================================
+
+@app.get("/api/tasks/plans/{task_id}")
+def get_task_plan(task_id: str, req: Request) -> JSONResponse:
+    """Return a task plan document with all steps."""
+    try:
+        user_id = _get_user_id(req.headers.get("Authorization"))
+    except AuthError as e:
+        return JSONResponse({"error": str(e)}, status_code=401)
+
+    try:
+        task = _tasks_container.read_item(item=task_id, partition_key=task_id)
+    except Exception:
+        return JSONResponse({"error": "Task plan not found"}, status_code=404)
+
+    return JSONResponse({
+        "task": {k: v for k, v in task.items() if not k.startswith("_")},
+    })
+
+
+# ============================================================================
+# PATCH /api/tasks/plans/{task_id}/steps/{step_id} — Toggle step completion
+# ============================================================================
+
+@app.patch("/api/tasks/plans/{task_id}/steps/{step_id}")
+async def toggle_step(task_id: str, step_id: str, req: Request) -> JSONResponse:
+    """Mark a step as completed or uncompleted."""
+    try:
+        user_id = _get_user_id(req.headers.get("Authorization"))
+    except AuthError as e:
+        return JSONResponse({"error": str(e)}, status_code=401)
+
+    try:
+        body = await req.json()
+    except Exception:
+        return JSONResponse({"error": "Invalid JSON"}, status_code=400)
+
+    completed = body.get("completed", False)
+
+    try:
+        task = _tasks_container.read_item(item=task_id, partition_key=task_id)
+    except Exception:
+        return JSONResponse({"error": "Task plan not found"}, status_code=404)
+
+    step_found = False
+    now = datetime.now(timezone.utc).isoformat()
+
+    for step in task.get("steps", []):
+        if step["id"] == step_id:
+            step["completed"] = completed
+            step["completedAt"] = now if completed else None
+            step_found = True
+            break
+
+    if not step_found:
+        return JSONResponse({"error": "Step not found"}, status_code=404)
+
+    task["updatedAt"] = now
+    _tasks_container.upsert_item(task)
+
+    return JSONResponse({
+        "task": {k: v for k, v in task.items() if not k.startswith("_")},
+    })
+
+
+# ============================================================================
+# DELETE /api/tasks/plans/{task_id} — Delete a task plan
+# ============================================================================
+
+@app.delete("/api/tasks/plans/{task_id}")
+def delete_task_plan(task_id: str, req: Request) -> JSONResponse:
+    """Delete a task decomposition plan."""
+    try:
+        user_id = _get_user_id(req.headers.get("Authorization"))
+    except AuthError as e:
+        return JSONResponse({"error": str(e)}, status_code=401)
+
+    try:
+        _tasks_container.delete_item(item=task_id, partition_key=task_id)
+    except Exception:
+        return JSONResponse({"error": "Task plan not found"}, status_code=404)
+
+    return JSONResponse(None, status_code=204)
+
+
+# ============================================================================
+# POST /api/tasks/plans/{task_id}/remind — Queue a Service Bus reminder
+# ============================================================================
+
+@app.post("/api/tasks/plans/{task_id}/remind")
+async def send_reminder(task_id: str, req: Request) -> JSONResponse:
+    """Queue a reminder for a specific task step via Service Bus."""
+    try:
+        user_id = _get_user_id(req.headers.get("Authorization"))
+    except AuthError as e:
+        return JSONResponse({"error": str(e)}, status_code=401)
+
+    try:
+        body = await req.json()
+    except Exception:
+        return JSONResponse({"error": "Invalid JSON"}, status_code=400)
+
+    step_id = body.get("stepId", "")
+    notify_email = body.get("email", "")
+
+    try:
+        task = _tasks_container.read_item(item=task_id, partition_key=task_id)
+    except Exception:
+        return JSONResponse({"error": "Task plan not found"}, status_code=404)
+
+    # Find the step
+    target_step = None
+    for step in task.get("steps", []):
+        if step["id"] == step_id:
+            target_step = step
+            break
+
+    if not target_step:
+        return JSONResponse({"error": "Step not found"}, status_code=404)
+
+    # Queue reminder to Service Bus
+    sb_conn_str = os.environ.get("SERVICE_BUS_CONNECTION_STRING", "")
+    queue_name = os.environ.get("SERVICE_BUS_QUEUE_NAME", "task-reminders")
+
+    reminder_payload = {
+        "taskId": task_id,
+        "stepId": step_id,
+        "stepTitle": target_step["title"],
+        "estimatedMinutes": target_step["estimatedMinutes"],
+        "userId": user_id,
+        "email": notify_email,
+        "goal": task.get("goal", ""),
+        "queuedAt": datetime.now(timezone.utc).isoformat(),
+    }
+
+    if not sb_conn_str or _LOCAL_DEV:
+        logger.info(
+            "LOCAL_DEV or no Service Bus configured — reminder logged only: %s",
+            json.dumps(reminder_payload),
+        )
+        return JSONResponse({
+            "status": "queued",
+            "message": "Reminder noted (Service Bus not configured — logged locally).",
+            "reminder": reminder_payload,
+        })
+
+    try:
+        from azure.servicebus import ServiceBusClient, ServiceBusMessage  # noqa: PLC0415
+        sb_client = ServiceBusClient.from_connection_string(sb_conn_str)
+        with sb_client:
+            sender = sb_client.get_queue_sender(queue_name=queue_name)
+            with sender:
+                message = ServiceBusMessage(json.dumps(reminder_payload))
+                sender.send_messages(message)
+        logger.info("Reminder queued for task=%s step=%s", task_id, step_id)
+    except Exception:
+        logger.exception("Failed to queue reminder for task=%s step=%s", task_id, step_id)
+        return JSONResponse(
+            {"error": "Could not queue reminder. Please try again later."},
+            status_code=500,
+        )
+
+    return JSONResponse({
+        "status": "queued",
+        "message": "Reminder has been queued. You will be notified when it is time.",
+        "reminder": reminder_payload,
+    })
+
+
+# ============================================================================
+# Feedback API — Submit and list user feedback
+# ============================================================================
+
+@app.post("/api/feedback")
+async def submit_feedback(req: Request) -> JSONResponse:
+    """Submit user feedback (rating, comment, category)."""
+    try:
+        user_id = _get_user_id(req.headers.get("Authorization"))
+    except AuthError as e:
+        return JSONResponse({"error": str(e)}, status_code=401)
+
+    try:
+        body = await req.json()
+    except Exception:
+        return JSONResponse({"error": "Invalid JSON"}, status_code=400)
+
+    comment = body.get("comment", "").strip()
+    rating = body.get("rating", 0)
+    category = body.get("category", "general")
+
+    if not comment and not rating:
+        return JSONResponse({"error": "Provide a comment or rating."}, status_code=400)
+    if not isinstance(rating, (int, float)) or rating < 0 or rating > 5:
+        rating = 0
+    if not isinstance(category, str) or len(category) > 50:
+        category = "general"
+    if len(comment) > 2000:
+        comment = comment[:2000]
+
+    now = datetime.now(timezone.utc).isoformat()
+    feedback_id = str(uuid.uuid4())
+    feedback_doc = {
+        "id": feedback_id,
+        "userId": user_id,
+        "comment": comment,
+        "rating": rating,
+        "category": category,
+        "createdAt": now,
+    }
+    _feedback_container.upsert_item(feedback_doc)
+    logger.info("feedback_submitted id=%s user=%s category=%s", feedback_id, user_id, category)
+    return JSONResponse(
+        {k: v for k, v in feedback_doc.items() if not k.startswith("_")},
+        status_code=201,
+    )
+
+
+@app.get("/api/feedback")
+def list_feedback(req: Request) -> JSONResponse:
+    """List all feedback submitted by the authenticated user."""
+    try:
+        user_id = _get_user_id(req.headers.get("Authorization"))
+    except AuthError as e:
+        return JSONResponse({"error": str(e)}, status_code=401)
+
+    items = list(_feedback_container.query_items(
+        query="SELECT * FROM c WHERE c.userId = @userId ORDER BY c.createdAt DESC",
+        parameters=[{"name": "@userId", "value": user_id}],
+        enable_cross_partition_query=True,
+    ))
+    return JSONResponse({"feedback": [
+        {k: v for k, v in item.items() if not k.startswith("_")} for item in items
+    ]})
 
 
 # ============================================================================

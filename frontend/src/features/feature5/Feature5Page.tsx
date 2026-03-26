@@ -1,572 +1,330 @@
-/**
+﻿/**
  * Feature 5 — Task Decomposer
  *
- * Users paste a complex goal and the AI breaks it into numbered, time-boxed
- * sub-tasks with priority, duration, and focus tips. Results render as an
- * interactive checklist. Task state persists across sessions via Cosmos DB.
+ * AI-powered task decomposition for neurodiverse users. Takes a complex goal
+ * and breaks it into numbered, time-boxed sub-tasks with priority, duration,
+ * and focus tips. Uses calm, supportive language (RAI requirement).
  *
- * RAI: Language is calm and supportive. Agent explains decomposition choices.
+ * Backend: POST /api/tasks/decompose, GET/PATCH/DELETE /api/tasks/plans/*
  */
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useCallback, useEffect } from "react";
 import {
   Button,
-  Textarea,
-  Spinner,
+  Card,
+  CardHeader,
   Text,
   Badge,
   Checkbox,
-  Card,
+  Spinner,
+  Textarea,
+  Select,
   Tooltip,
   Divider,
+  MessageBar,
+  MessageBarBody,
+  MessageBarTitle,
   makeStyles,
   tokens,
   shorthands,
-  mergeClasses,
 } from "@fluentui/react-components";
 import {
-  Send24Regular,
   Delete24Regular,
+  Trophy24Regular,
   Clock24Regular,
   Info24Regular,
-  Alert24Regular,
-  Lightbulb24Regular,
-  ChevronDown24Regular,
-  ChevronUp24Regular,
-  ArrowClockwise24Regular,
 } from "@fluentui/react-icons";
-import { apiClient, type TaskPlan, type TaskStep } from "../../services/api";
-import { useAuth } from "../../hooks/useAuth";
-
-// ── Styles ──────────────────────────────────────────────────────────────────
+import { useMsal } from "@azure/msal-react";
+import { apiClient } from "../../services/api";
+import type { TaskPlan, TaskStep } from "../../services/api";
+import { apiRequest } from "../../auth/msalConfig";
 
 const useStyles = makeStyles({
-  root: {
+  container: {
     display: "flex",
     flexDirection: "column",
-    flex: 1,
-    maxWidth: "860px",
-    margin: "0 auto",
-    width: "100%",
-    height: "100%",
-    overflow: "hidden",
+    gap: "20px",
+    maxWidth: "800px",
+    marginLeft: "auto",
+    marginRight: "auto",
+    ...shorthands.padding("24px"),
   },
   header: {
-    ...shorthands.padding("20px", "24px", "12px"),
-    flexShrink: 0,
-  },
-  title: {
-    fontSize: tokens.fontSizeBase600,
-    fontWeight: tokens.fontWeightSemibold,
-    color: tokens.colorNeutralForeground1,
-    marginBottom: "4px",
-  },
-  subtitle: {
-    fontSize: tokens.fontSizeBase300,
-    color: tokens.colorNeutralForeground3,
-    lineHeight: tokens.lineHeightBase300,
+    display: "flex",
+    flexDirection: "column",
+    gap: "8px",
   },
   inputSection: {
-    ...shorthands.padding("0", "24px", "16px"),
-    flexShrink: 0,
+    display: "flex",
+    flexDirection: "column",
+    gap: "12px",
   },
   inputRow: {
     display: "flex",
-    gap: "8px",
+    gap: "12px",
     alignItems: "flex-end",
   },
-  textarea: {
-    flex: 1,
-    minHeight: "60px",
-    maxHeight: "120px",
-    resize: "none",
+  goalInput: {
+    flexGrow: 1,
   },
-  sendBtn: {
-    flexShrink: 0,
-    height: "44px",
-    minWidth: "140px",
-  },
-  content: {
-    flex: 1,
-    overflowY: "auto",
-    ...shorthands.padding("0", "24px", "24px"),
-    display: "flex",
-    flexDirection: "column",
-    gap: "16px",
-  },
-  loadingBox: {
-    display: "flex",
-    flexDirection: "column",
-    alignItems: "center",
-    justifyContent: "center",
-    gap: "12px",
-    ...shorthands.padding("40px"),
-    color: tokens.colorNeutralForeground3,
-  },
-  emptyState: {
-    display: "flex",
-    flexDirection: "column",
-    alignItems: "center",
-    justifyContent: "center",
-    flex: 1,
-    textAlign: "center",
-    color: tokens.colorNeutralForeground3,
-    gap: "8px",
-    ...shorthands.padding("48px", "24px"),
-  },
-  taskCard: {
+  stepCard: {
     ...shorthands.padding("16px"),
-    ...shorthands.borderRadius(tokens.borderRadiusLarge),
+    ...shorthands.margin("0"),
   },
-  taskCardHeader: {
+  stepHeader: {
     display: "flex",
-    justifyContent: "space-between",
-    alignItems: "flex-start",
+    alignItems: "center",
     gap: "12px",
-    marginBottom: "8px",
+    justifyContent: "space-between",
   },
-  goalText: {
-    fontSize: tokens.fontSizeBase400,
-    fontWeight: tokens.fontWeightSemibold,
-    color: tokens.colorNeutralForeground1,
-    flex: 1,
-  },
-  taskActions: {
-    display: "flex",
-    gap: "4px",
-    flexShrink: 0,
-  },
-  progressRow: {
+  stepLeft: {
     display: "flex",
     alignItems: "center",
     gap: "8px",
+    flexGrow: 1,
+  },
+  stepMeta: {
+    display: "flex",
+    gap: "8px",
+    alignItems: "center",
+    flexWrap: "wrap" as const,
+  },
+  focusTip: {
+    display: "flex",
+    alignItems: "center",
+    gap: "6px",
+    ...shorthands.padding("8px", "12px"),
+    backgroundColor: tokens.colorNeutralBackground3,
+    ...shorthands.borderRadius("6px"),
+    marginTop: "8px",
+  },
+  completedStep: {
+    opacity: 0.6,
+    textDecoration: "line-through",
+  },
+  explanation: {
+    ...shorthands.padding("12px", "16px"),
+    backgroundColor: tokens.colorNeutralBackground3,
+    ...shorthands.borderRadius("8px"),
+    fontStyle: "italic",
   },
   progressBar: {
-    flex: 1,
-    height: "6px",
-    ...shorthands.borderRadius("3px"),
-    backgroundColor: tokens.colorNeutralBackground5,
+    width: "100%",
+    height: "8px",
+    backgroundColor: tokens.colorNeutralBackground3,
+    ...shorthands.borderRadius("4px"),
     overflow: "hidden",
   },
   progressFill: {
     height: "100%",
-    ...shorthands.borderRadius("3px"),
     backgroundColor: tokens.colorBrandBackground,
-    transition: "width 300ms ease",
+    ...shorthands.borderRadius("4px"),
+    transition: "width 0.3s ease",
   },
-  progressText: {
-    fontSize: tokens.fontSizeBase200,
-    color: tokens.colorNeutralForeground3,
-    whiteSpace: "nowrap",
-  },
-  stepList: {
-    display: "flex",
-    flexDirection: "column",
-    gap: "8px",
-    maxHeight: "400px",
-    overflowY: "auto",
-  },
-  stepItem: {
-    display: "flex",
-    alignItems: "flex-start",
-    gap: "8px",
-    ...shorthands.padding("10px", "12px"),
-    ...shorthands.borderRadius(tokens.borderRadiusMedium),
-    backgroundColor: tokens.colorNeutralBackground2,
-    transition: "background-color 200ms ease, opacity 200ms ease",
-  },
-  stepItemCompleted: {
-    opacity: 0.7,
-    backgroundColor: tokens.colorNeutralBackground3,
-  },
-  stepContent: {
-    flex: 1,
-    display: "flex",
-    flexDirection: "column",
-    gap: "4px",
-  },
-  stepTitle: {
-    fontSize: tokens.fontSizeBase300,
-    color: tokens.colorNeutralForeground1,
-    lineHeight: tokens.lineHeightBase300,
-  },
-  stepTitleCompleted: {
-    textDecoration: "line-through",
-    color: tokens.colorNeutralForeground3,
-  },
-  stepMeta: {
-    display: "flex",
-    alignItems: "center",
-    gap: "8px",
-    flexWrap: "wrap",
-  },
-  metaItem: {
-    display: "flex",
-    alignItems: "center",
-    gap: "3px",
-    fontSize: tokens.fontSizeBase200,
-    color: tokens.colorNeutralForeground3,
-  },
-  focusTip: {
-    display: "flex",
-    alignItems: "flex-start",
-    gap: "4px",
-    fontSize: tokens.fontSizeBase200,
-    color: tokens.colorBrandForeground1,
-    ...shorthands.padding("4px", "8px"),
-    ...shorthands.borderRadius(tokens.borderRadiusSmall),
-    backgroundColor: tokens.colorBrandBackground2,
-    marginTop: "4px",
-  },
-  explanationBox: {
-    ...shorthands.padding("12px", "16px"),
-    ...shorthands.borderRadius(tokens.borderRadiusMedium),
-    backgroundColor: tokens.colorNeutralBackground3,
-    fontSize: tokens.fontSizeBase300,
-    color: tokens.colorNeutralForeground2,
-    lineHeight: tokens.lineHeightBase300,
-    display: "flex",
-    alignItems: "flex-start",
-    gap: "8px",
-  },
-  sectionHeader: {
+  planHeader: {
     display: "flex",
     justifyContent: "space-between",
     alignItems: "center",
-    ...shorthands.padding("8px", "0"),
   },
-  sectionTitle: {
-    fontSize: tokens.fontSizeBase400,
-    fontWeight: tokens.fontWeightSemibold,
-    color: tokens.colorNeutralForeground1,
-  },
-  totalTime: {
+  planActions: {
     display: "flex",
-    alignItems: "center",
-    gap: "6px",
-    fontSize: tokens.fontSizeBase300,
-    color: tokens.colorNeutralForeground2,
-    ...shorthands.padding("8px", "0"),
+    gap: "8px",
+  },
+  historyItem: {
+    cursor: "pointer",
+    "&:hover": {
+      backgroundColor: tokens.colorNeutralBackground2Hover,
+    },
+  },
+  emptyState: {
+    textAlign: "center" as const,
+    ...shorthands.padding("40px"),
+    color: tokens.colorNeutralForeground3,
   },
 });
 
-// ── Priority badge helper ───────────────────────────────────────────────────
-
-function PriorityBadge({ priority }: { priority: string }) {
-  const colorMap: Record<string, "danger" | "warning" | "success"> = {
-    high: "danger",
-    medium: "warning",
-    low: "success",
-  };
-  return (
-    <Badge
-      size="small"
-      color={colorMap[priority] ?? "informative"}
-      appearance="filled"
-    >
-      {priority}
-    </Badge>
-  );
-}
-
-// ── Step item component ─────────────────────────────────────────────────────
-
-interface StepItemProps {
-  step: TaskStep;
-  stepNumber: number;
-  onToggle: (stepId: string, completed: boolean) => void;
-  disabled: boolean;
-}
-
-function StepItem({ step, stepNumber, onToggle, disabled }: StepItemProps) {
-  const styles = useStyles();
-  const [showTip, setShowTip] = useState(false);
-
-  return (
-    <div
-      className={mergeClasses(
-        styles.stepItem,
-        step.completed && styles.stepItemCompleted
-      )}
-    >
-      <Checkbox
-        checked={step.completed}
-        onChange={() => onToggle(step.id, !step.completed)}
-        disabled={disabled}
-        aria-label={`Step ${stepNumber}: ${step.title}`}
-      />
-      <div className={styles.stepContent}>
-        <Text
-          className={mergeClasses(
-            styles.stepTitle,
-            step.completed && styles.stepTitleCompleted
-          )}
-        >
-          {stepNumber}. {step.title}
-        </Text>
-        <div className={styles.stepMeta}>
-          <span className={styles.metaItem}>
-            <Clock24Regular style={{ width: 14, height: 14 }} />
-            {step.estimatedMinutes} min
-          </span>
-          <PriorityBadge priority={step.priority} />
-          <Tooltip content={showTip ? "Hide focus tip" : "Show focus tip"} relationship="label">
-            <Button
-              disabled={step.completed}
-              appearance="subtle"
-              size="small"
-              icon={<Lightbulb24Regular />}
-              onClick={() => setShowTip(!showTip)}
-              aria-label="Toggle focus tip"
-              style={{ minWidth: "auto", padding: "2px 4px" }}
-            />
-          </Tooltip>
-        </div>
-        {showTip && (
-          <div className={styles.focusTip}>
-            <Lightbulb24Regular style={{ width: 14, height: 14, flexShrink: 0, marginTop: 1 }} />
-            {step.focusTip}
-          </div>
-        )}
-      </div>
-    </div>
-  );
-}
-
-// ── Task plan card component ────────────────────────────────────────────────
-
-interface TaskPlanCardProps {
-  plan: TaskPlan;
-  onToggleStep: (taskId: string, stepId: string, completed: boolean) => void;
-  onDelete: (taskId: string) => void;
-  isUpdating: boolean;
-}
-
-function TaskPlanCard({ plan, onToggleStep, onDelete, isUpdating }: TaskPlanCardProps) {
-  const styles = useStyles();
-  const [expanded, setExpanded] = useState(true);
-  const [showExplanation, setShowExplanation] = useState(false);
-
-  const completedCount = plan.steps.filter((s) => s.completed).length;
-  const totalCount = plan.steps.length;
-  const progressPct = totalCount > 0 ? (completedCount / totalCount) * 100 : 0;
-  const totalMinutes = plan.steps.reduce((sum, s) => sum + s.estimatedMinutes, 0);
-  const remainingMinutes = plan.steps
-    .filter((s) => !s.completed)
-    .reduce((sum, s) => sum + s.estimatedMinutes, 0);
-
-  return (
-    <Card className={styles.taskCard}>
-      <div className={styles.taskCardHeader}>
-        <Text className={styles.goalText}>{plan.goal}</Text>
-        <div className={styles.taskActions}>
-          {plan.explanation && (
-            <Tooltip content="Why was it split this way?" relationship="label">
-              <Button
-                appearance="subtle"
-                size="small"
-                icon={<Info24Regular />}
-                onClick={() => setShowExplanation(!showExplanation)}
-                aria-label="Show decomposition explanation"
-              />
-            </Tooltip>
-          )}
-          <Tooltip content={expanded ? "Collapse steps" : "Expand steps"} relationship="label">
-            <Button
-              appearance="subtle"
-              size="small"
-              icon={expanded ? <ChevronUp24Regular /> : <ChevronDown24Regular />}
-              onClick={() => setExpanded(!expanded)}
-              aria-label={expanded ? "Collapse steps" : "Expand steps"}
-            />
-          </Tooltip>
-          <Tooltip content="Delete this plan" relationship="label">
-            <Button
-              appearance="subtle"
-              size="small"
-              icon={<Delete24Regular />}
-              onClick={() => onDelete(plan.id)}
-              aria-label="Delete task plan"
-            />
-          </Tooltip>
-        </div>
-      </div>
-
-      {/* Progress bar */}
-      {expanded && (
-        <div className={styles.progressRow}>
-          <div className={styles.progressBar}>
-            <div
-              className={styles.progressFill}
-              style={{ width: `${progressPct}%` }}
-            />
-          </div>
-          <Text className={styles.progressText}>
-            {completedCount}/{totalCount} done
-          </Text>
-        </div>
-      )}
-
-      {/* Time estimate */}
-      {expanded && (
-        <div className={styles.totalTime}>
-          <Clock24Regular style={{ width: 16, height: 16 }} />
-          {remainingMinutes > 0 ? (
-            <span>About {remainingMinutes} min remaining (total: {totalMinutes} min)</span>
-          ) : (
-            <span>All steps completed! Total was {totalMinutes} min</span>
-          )}
-        </div>
-      )}
-
-      {/* Explanation */}
-      {showExplanation && plan.explanation && (
-        <div className={styles.explanationBox}>
-          <Info24Regular style={{ width: 16, height: 16, flexShrink: 0, marginTop: 2 }} />
-          <span>{plan.explanation}</span>
-        </div>
-      )}
-
-      {/* Steps */}
-      {expanded && (
-        <div className={styles.stepList}>
-          {plan.steps.map((step, idx) => (
-            <StepItem
-              key={step.id}
-              step={step}
-              stepNumber={idx + 1}
-              onToggle={(stepId, completed) => onToggleStep(plan.id, stepId, completed)}
-              disabled={isUpdating}
-            />
-          ))}
-        </div>
-      )}
-    </Card>
-  );
-}
-
-// ── Main page component ─────────────────────────────────────────────────────
+const PRIORITY_COLOR: Record<string, "important" | "informative" | "subtle"> = {
+  high: "important",
+  medium: "informative",
+  low: "subtle",
+};
 
 export function Feature5Page() {
   const styles = useStyles();
-  const { getAccessToken } = useAuth();
-  const [goalInput, setGoalInput] = useState("");
-  const [isDecomposing, setIsDecomposing] = useState(false);
-  const [isUpdating, setIsUpdating] = useState(false);
-  const [isLoadingPlans, setIsLoadingPlans] = useState(true);
-  const [taskPlans, setTaskPlans] = useState<TaskPlan[]>([]);
+  const { instance, accounts } = useMsal();
+
+  const [goal, setGoal] = useState("");
+  const [readingLevel, setReadingLevel] = useState("");
+  const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [currentPlan, setCurrentPlan] = useState<TaskPlan | null>(null);
+  const [history, setHistory] = useState<TaskPlan[]>([]);
+  const [showHistory, setShowHistory] = useState(false);
 
-  // Load existing task plans on mount
-  const loadPlans = useCallback(async () => {
+  const getToken = useCallback(async (): Promise<string | null> => {
+    if (!accounts.length) return null;
     try {
-      const token = await getAccessToken();
-      const plans = await apiClient.listTaskPlans(token);
-      setTaskPlans(plans);
-    } catch (err) {
-      console.error("Failed to load task plans:", err);
-    } finally {
-      setIsLoadingPlans(false);
+      const response = await instance.acquireTokenSilent({
+        ...apiRequest,
+        account: accounts[0],
+      });
+      return response.accessToken;
+    } catch {
+      return null;
     }
-  }, [getAccessToken]);
+  }, [instance, accounts]);
 
+  // Load history on mount
   useEffect(() => {
-    loadPlans();
-  }, [loadPlans]);
+    let cancelled = false;
+    (async () => {
+      try {
+        const token = await getToken();
+        const plans = await apiClient.listTaskPlans(token);
+        if (!cancelled) setHistory(plans);
+      } catch {
+        // Silently ignore — history is optional
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [getToken]);
 
   const handleDecompose = useCallback(async () => {
-    const goal = goalInput.trim();
-    if (!goal || isDecomposing) return;
-
+    if (!goal.trim()) return;
+    setLoading(true);
     setError(null);
-    setIsDecomposing(true);
-
     try {
-      const token = await getAccessToken();
-      const response = await apiClient.decomposeTask(goal, "", token);
-      setTaskPlans((prev) => [response.task, ...prev]);
-      setGoalInput("");
+      const token = await getToken();
+      const res = await apiClient.decomposeTask(goal.trim(), readingLevel, token);
+      setCurrentPlan(res.task);
+      setHistory((prev) => [res.task, ...prev]);
+      setGoal("");
     } catch (err) {
-      console.error("Decompose failed:", err);
-      setError(
-        "Something went wrong while breaking down your goal. Please try again."
-      );
+      setError(err instanceof Error ? err.message : "Something went wrong.");
     } finally {
-      setIsDecomposing(false);
+      setLoading(false);
     }
-  }, [goalInput, isDecomposing, getAccessToken]);
+  }, [goal, readingLevel, getToken]);
 
   const handleToggleStep = useCallback(
-    async (taskId: string, stepId: string, completed: boolean) => {
-      setIsUpdating(true);
+    async (stepId: string, completed: boolean) => {
+      if (!currentPlan) return;
       try {
-        const token = await getAccessToken();
-        const updatedTask = await apiClient.toggleStep(taskId, stepId, completed, token);
-        setTaskPlans((prev) =>
-          prev.map((p) => (p.id === taskId ? updatedTask : p))
+        const token = await getToken();
+        const updated = await apiClient.toggleStep(
+          currentPlan.id,
+          stepId,
+          completed,
+          token
         );
-      } catch (err) {
-        console.error("Toggle step failed:", err);
-      } finally {
-        setIsUpdating(false);
+        setCurrentPlan(updated);
+        setHistory((prev) =>
+          prev.map((p) => (p.id === updated.id ? updated : p))
+        );
+      } catch {
+        setError("Could not update step. Please try again.");
       }
     },
-    [getAccessToken]
+    [currentPlan, getToken]
   );
 
-  const handleDelete = useCallback(
-    async (taskId: string) => {
+  const handleDeletePlan = useCallback(
+    async (planId: string) => {
       try {
-        const token = await getAccessToken();
-        await apiClient.deleteTaskPlan(taskId, token);
-        setTaskPlans((prev) => prev.filter((p) => p.id !== taskId));
-      } catch (err) {
-        console.error("Delete task plan failed:", err);
+        const token = await getToken();
+        await apiClient.deleteTaskPlan(planId, token);
+        setHistory((prev) => prev.filter((p) => p.id !== planId));
+        if (currentPlan?.id === planId) setCurrentPlan(null);
+      } catch {
+        setError("Could not delete plan.");
       }
     },
-    [getAccessToken]
+    [currentPlan, getToken]
   );
 
-  const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
-    if (e.key === "Enter" && !e.shiftKey) {
-      e.preventDefault();
-      handleDecompose();
-    }
-  };
+  const handleLoadPlan = useCallback(
+    async (planId: string) => {
+      try {
+        const token = await getToken();
+        const plan = await apiClient.getTaskPlan(planId, token);
+        setCurrentPlan(plan);
+        setShowHistory(false);
+      } catch {
+        setError("Could not load plan.");
+      }
+    },
+    [getToken]
+  );
+
+  const completedCount =
+    currentPlan?.steps.filter((s) => s.completed).length ?? 0;
+  const totalSteps = currentPlan?.steps.length ?? 0;
+  const progressPct = totalSteps > 0 ? (completedCount / totalSteps) * 100 : 0;
+  const totalMinutes =
+    currentPlan?.steps.reduce((sum, s) => sum + s.estimatedMinutes, 0) ?? 0;
+  const remainingMinutes =
+    currentPlan?.steps
+      .filter((s) => !s.completed)
+      .reduce((sum, s) => sum + s.estimatedMinutes, 0) ?? 0;
 
   return (
-    <div className={styles.root}>
+    <div className={styles.container}>
       {/* Header */}
       <div className={styles.header}>
-        <Text className={styles.title}>Task Decomposer</Text>
-        <br />
-        <Text className={styles.subtitle}>
-          Paste a complex goal and let the AI break it into clear, time-boxed
-          steps you can check off one by one. Take your time — there is no rush.
+        <Text size={700} weight="bold">
+          Task Decomposer
+        </Text>
+        <Text size={300} style={{ color: tokens.colorNeutralForeground3 }}>
+          Break a complex goal into clear, time-boxed steps. Take it one piece
+          at a time — no rush.
         </Text>
       </div>
 
-      {/* Input section */}
+      {/* Error banner */}
+      {error && (
+        <MessageBar intent="error">
+          <MessageBarBody>
+            <MessageBarTitle>Something went wrong</MessageBarTitle>
+            {error}
+          </MessageBarBody>
+        </MessageBar>
+      )}
+
+      {/* Input */}
       <div className={styles.inputSection}>
+        <Textarea
+          className={styles.goalInput}
+          placeholder="Describe your goal… e.g. 'Write a 2-page essay on climate change'"
+          value={goal}
+          onChange={(_, data) => setGoal(data.value)}
+          resize="vertical"
+          disabled={loading}
+        />
         <div className={styles.inputRow}>
-          <Textarea
-            className={styles.textarea}
-            value={goalInput}
-            onChange={(_, d) => setGoalInput(d.value)}
-            onKeyDown={handleKeyDown}
-            placeholder='Describe your goal, e.g. "Set up my tax return" or "Organize my study schedule for next week"'
-            disabled={isDecomposing}
-            resize="none"
-            aria-label="Goal input"
-          />
-          <Button
-            className={styles.sendBtn}
-            appearance="primary"
-            icon={isDecomposing ? <Spinner size="tiny" /> : <Send24Regular />}
-            onClick={handleDecompose}
-            disabled={!goalInput.trim() || isDecomposing}
+          <Select
+            value={readingLevel}
+            onChange={(_, data) => setReadingLevel(data.value)}
+            style={{ minWidth: 160 }}
           >
-            {isDecomposing ? "Breaking down..." : "Break it down"}
+            <option value="">Reading level (auto)</option>
+            <option value="3">Grade 3</option>
+            <option value="5">Grade 5</option>
+            <option value="8">Grade 8</option>
+            <option value="10">Grade 10</option>
+          </Select>
+          <Button
+            appearance="primary"
+            onClick={handleDecompose}
+            disabled={loading || !goal.trim()}
+            icon={loading ? <Spinner size="tiny" /> : undefined}
+          >
+            {loading ? "Breaking it down…" : "Break it down"}
+          </Button>
+          <Button
+            appearance="subtle"
+            onClick={() => setShowHistory(!showHistory)}
+          >
+            {showHistory ? "Hide history" : "History"}
           </Button>
         </div>
         {error && (
@@ -646,6 +404,173 @@ export function Feature5Page() {
           </>
         )}
       </div>
+
+      <Divider />
+
+      {/* History panel */}
+      {showHistory && (
+        <div>
+          <Text size={500} weight="semibold">
+            Past Plans
+          </Text>
+          {history.length === 0 ? (
+            <div className={styles.emptyState}>
+              <Text>No plans yet. Decompose a goal to get started.</Text>
+            </div>
+          ) : (
+            history.map((plan) => (
+              <Card
+                key={plan.id}
+                className={styles.historyItem}
+                style={{ marginTop: 8 }}
+              >
+                <CardHeader
+                  header={
+                    <Text weight="semibold" truncate wrap={false}>
+                      {plan.goal}
+                    </Text>
+                  }
+                  description={
+                    <Text size={200}>
+                      {plan.steps.length} steps ·{" "}
+                      {new Date(plan.createdAt).toLocaleDateString()}
+                    </Text>
+                  }
+                  action={
+                    <div className={styles.planActions}>
+                      <Button
+                        size="small"
+                        appearance="subtle"
+                        onClick={() => handleLoadPlan(plan.id)}
+                      >
+                        Open
+                      </Button>
+                      <Button
+                        size="small"
+                        appearance="subtle"
+                        icon={<Delete24Regular />}
+                        onClick={() => handleDeletePlan(plan.id)}
+                      />
+                    </div>
+                  }
+                />
+              </Card>
+            ))
+          )}
+          <Divider style={{ marginTop: 16 }} />
+        </div>
+      )}
+
+      {/* Current plan */}
+      {currentPlan && (
+        <div>
+          {/* Plan header + progress */}
+          <div className={styles.planHeader}>
+            <div>
+              <Text size={500} weight="semibold">
+                {currentPlan.goal}
+              </Text>
+              <div className={styles.stepMeta} style={{ marginTop: 4 }}>
+                <Badge appearance="outline" icon={<Trophy24Regular />}>
+                  {completedCount}/{totalSteps} done
+                </Badge>
+                <Badge appearance="outline" icon={<Clock24Regular />}>
+                  ~{remainingMinutes} min left of {totalMinutes} min
+                </Badge>
+              </div>
+            </div>
+            <div className={styles.planActions}>
+              <Tooltip content="Delete this plan" relationship="label">
+                <Button
+                  appearance="subtle"
+                  icon={<Delete24Regular />}
+                  onClick={() => handleDeletePlan(currentPlan.id)}
+                />
+              </Tooltip>
+            </div>
+          </div>
+
+          {/* Progress bar */}
+          <div className={styles.progressBar} style={{ marginTop: 12 }}>
+            <div
+              className={styles.progressFill}
+              style={{ width: `${progressPct}%` }}
+            />
+          </div>
+
+          {/* Steps */}
+          <div style={{ marginTop: 16, display: "flex", flexDirection: "column", gap: 12 }}>
+            {currentPlan.steps.map((step: TaskStep, idx: number) => (
+              <Card key={step.id} className={styles.stepCard}>
+                <div className={styles.stepHeader}>
+                  <div className={styles.stepLeft}>
+                    <Checkbox
+                      checked={step.completed}
+                      onChange={(_, data) =>
+                        handleToggleStep(step.id, !!data.checked)
+                      }
+                    />
+                    <div>
+                      <Text
+                        weight="semibold"
+                        className={step.completed ? styles.completedStep : ""}
+                      >
+                        {idx + 1}. {step.title}
+                      </Text>
+                      <div className={styles.stepMeta}>
+                        <Badge
+                          size="small"
+                          color={PRIORITY_COLOR[step.priority] ?? "informative"}
+                        >
+                          {step.priority}
+                        </Badge>
+                        <Badge size="small" appearance="outline" icon={<Clock24Regular />}>
+                          {step.estimatedMinutes} min
+                        </Badge>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+                {step.focusTip && (
+                  <div className={styles.focusTip}>
+                    <Info24Regular />
+                    <Text size={200}>{step.focusTip}</Text>
+                  </div>
+                )}
+              </Card>
+            ))}
+          </div>
+
+          {/* Explanation */}
+          {currentPlan.explanation && (
+            <div className={styles.explanation} style={{ marginTop: 16 }}>
+              <Text size={200}>
+                <strong>Why this breakdown:</strong> {currentPlan.explanation}
+              </Text>
+            </div>
+          )}
+
+          {/* All done celebration */}
+          {completedCount === totalSteps && totalSteps > 0 && (
+            <MessageBar intent="success" style={{ marginTop: 16 }}>
+              <MessageBarBody>
+                <MessageBarTitle>All done!</MessageBarTitle>
+                Great work — you completed every step. Take a moment to feel
+                good about what you achieved.
+              </MessageBarBody>
+            </MessageBar>
+          )}
+        </div>
+      )}
+
+      {/* Empty state */}
+      {!currentPlan && !showHistory && (
+        <div className={styles.emptyState}>
+          <Text size={400}>
+            Type a goal above and press "Break it down" to get started.
+          </Text>
+        </div>
+      )}
     </div>
   );
 }

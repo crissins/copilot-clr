@@ -51,6 +51,9 @@ opentelemetry-instrumentation-fastapi
 # Text analysis
 textstat
 
+# PDF fallback extraction (when Document Intelligence is unavailable)
+PyPDF2
+
 # Env loading (used by create_speech_agent.py)
 python-dotenv
 

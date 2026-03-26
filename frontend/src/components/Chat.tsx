@@ -5,6 +5,7 @@ import {
   Spinner,
   Toolbar,
   ToolbarButton,
+  Text,
   makeStyles,
   tokens,
   shorthands,
@@ -12,11 +13,14 @@ import {
 import {
   Send24Regular,
   Add24Regular,
+  Delete24Regular,
+  History24Regular,
 } from "@fluentui/react-icons";
-import { apiClient, type Message } from "../services/api";
+import { apiClient, type Message, type Session } from "../services/api";
 import { MessageList } from "./MessageList";
 import { FileUpload } from "./FileUpload";
 import { useAuth } from "../hooks/useAuth";
+import { useI18n } from "../I18nContext";
 
 const useStyles = makeStyles({
   root: {
@@ -83,16 +87,64 @@ const useStyles = makeStyles({
     lineHeight: tokens.lineHeightBase400,
     maxWidth: "480px",
   },
+  sessionPanel: {
+    display: "flex",
+    flexDirection: "column",
+    gap: "4px",
+    ...shorthands.padding("12px", "16px"),
+    ...shorthands.borderBottom("1px", "solid", tokens.colorNeutralStroke1),
+    maxHeight: "220px",
+    overflowY: "auto",
+  },
+  sessionPanelHeader: {
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "space-between",
+    marginBottom: "4px",
+  },
+  sessionItem: {
+    display: "flex",
+    alignItems: "center",
+    gap: "8px",
+    ...shorthands.padding("6px", "8px"),
+    ...shorthands.borderRadius(tokens.borderRadiusMedium),
+    cursor: "pointer",
+    backgroundColor: "transparent",
+    ":hover": {
+      backgroundColor: tokens.colorNeutralBackground3,
+    },
+  },
+  sessionItemActive: {
+    backgroundColor: tokens.colorBrandBackground2,
+  },
+  sessionTitle: {
+    flex: 1,
+    overflow: "hidden",
+    textOverflow: "ellipsis",
+    whiteSpace: "nowrap",
+    fontSize: tokens.fontSizeBase200,
+  },
+  sessionDate: {
+    fontSize: tokens.fontSizeBase100,
+    color: tokens.colorNeutralForeground3,
+    flexShrink: 0,
+  },
 });
 
 export function Chat() {
   const styles = useStyles();
   const { getAccessToken } = useAuth();
+  const { t } = useI18n();
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [sessionId, setSessionId] = useState<string | null>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+
+  // Session list state
+  const [sessions, setSessions] = useState<Session[]>([]);
+  const [showSessions, setShowSessions] = useState(false);
+  const [sessionsLoading, setSessionsLoading] = useState(false);
 
   useEffect(() => {
     textareaRef.current?.focus();
@@ -146,7 +198,7 @@ export function Chat() {
           id: crypto.randomUUID(),
           sessionId: sessionId || "",
           role: "assistant",
-          content: "Something went wrong. Please try again in a moment.",
+          content: t.chat.errorGeneric,
           createdAt: new Date().toISOString(),
         },
       ]);
@@ -154,7 +206,7 @@ export function Chat() {
       setIsLoading(false);
       textareaRef.current?.focus();
     }
-  }, [input, isLoading, sessionId, getAccessToken]);
+  }, [input, isLoading, sessionId, getAccessToken, t.chat.errorGeneric]);
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
     if (e.key === "Enter" && !e.shiftKey) {
@@ -170,6 +222,56 @@ export function Chat() {
     textareaRef.current?.focus();
   };
 
+  // Load previous sessions
+  const loadSessions = useCallback(async () => {
+    setSessionsLoading(true);
+    try {
+      const token = await getAccessToken();
+      const list = await apiClient.listSessions(token);
+      setSessions(list);
+    } catch (err) {
+      console.error("Load sessions failed:", err);
+    } finally {
+      setSessionsLoading(false);
+    }
+  }, [getAccessToken]);
+
+  const toggleSessions = useCallback(() => {
+    const next = !showSessions;
+    setShowSessions(next);
+    if (next) loadSessions();
+  }, [showSessions, loadSessions]);
+
+  // Load a previous session
+  const loadSession = useCallback(async (sid: string) => {
+    setIsLoading(true);
+    try {
+      const token = await getAccessToken();
+      const detail = await apiClient.getSession(sid, token);
+      setSessionId(sid);
+      setMessages(detail.messages);
+      setShowSessions(false);
+    } catch (err) {
+      console.error("Load session failed:", err);
+    } finally {
+      setIsLoading(false);
+      textareaRef.current?.focus();
+    }
+  }, [getAccessToken]);
+
+  // Delete a session
+  const deleteSession = useCallback(async (sid: string, e: React.MouseEvent) => {
+    e.stopPropagation();
+    try {
+      const token = await getAccessToken();
+      await apiClient.deleteSession(sid, token);
+      setSessions((prev) => prev.filter((s) => s.id !== sid));
+      if (sessionId === sid) handleNewChat();
+    } catch (err) {
+      console.error("Delete session failed:", err);
+    }
+  }, [getAccessToken, sessionId]);
+
   const isEmpty = messages.length === 0 && !isLoading;
 
   return (
@@ -178,25 +280,64 @@ export function Chat() {
       <Toolbar className={styles.toolbar} aria-label="Chat toolbar">
         <FileUpload />
         <ToolbarButton
+          icon={<History24Regular />}
+          onClick={toggleSessions}
+          aria-label={t.chat.previousChats}
+        >
+          {t.chat.previousChats}
+        </ToolbarButton>
+        <ToolbarButton
           icon={<Add24Regular />}
           onClick={handleNewChat}
-          aria-label="Start new chat"
+          aria-label={t.chat.newChat}
         >
-          New Chat
+          {t.chat.newChat}
         </ToolbarButton>
       </Toolbar>
+
+      {/* Session list panel */}
+      {showSessions && (
+        <div className={styles.sessionPanel}>
+          <div className={styles.sessionPanelHeader}>
+            <Text size={300} weight="semibold">{t.chat.previousChats}</Text>
+          </div>
+          {sessionsLoading ? (
+            <Text size={200}>{t.chat.loadingSessions}</Text>
+          ) : sessions.length === 0 ? (
+            <Text size={200} style={{ opacity: 0.6 }}>{t.chat.noSessions}</Text>
+          ) : (
+            sessions.map((s) => (
+              <div
+                key={s.id}
+                className={`${styles.sessionItem} ${sessionId === s.id ? styles.sessionItemActive : ""}`}
+                onClick={() => loadSession(s.id)}
+                role="button"
+                tabIndex={0}
+                onKeyDown={(e) => e.key === "Enter" && loadSession(s.id)}
+              >
+                <span className={styles.sessionTitle}>{s.title || "Untitled"}</span>
+                <span className={styles.sessionDate}>
+                  {new Date(s.updatedAt || s.createdAt).toLocaleDateString()}
+                </span>
+                <Button
+                  appearance="subtle"
+                  icon={<Delete24Regular />}
+                  size="small"
+                  onClick={(e) => deleteSession(s.id, e)}
+                  aria-label={t.chat.deleteSession}
+                />
+              </div>
+            ))
+          )}
+        </div>
+      )}
 
       {/* Message area */}
       <div className={styles.messageArea} role="log" aria-live="polite" aria-label="Chat messages">
         {isEmpty ? (
           <div className={styles.welcome}>
-            <div className={styles.welcomeTitle}>Welcome to Copilot CLR</div>
-            <div className={styles.welcomeBody}>
-              I help reduce cognitive load by breaking down complex tasks,
-              simplifying documents, and adapting to your accessibility
-              preferences. Try asking me to simplify something, or upload a
-              document to chat with it.
-            </div>
+            <div className={styles.welcomeTitle}>{t.chat.welcomeTitle}</div>
+            <div className={styles.welcomeBody}>{t.chat.welcomeBody}</div>
           </div>
         ) : (
           <MessageList
@@ -215,7 +356,7 @@ export function Chat() {
           value={input}
           onChange={(_, d) => setInput(d.value)}
           onKeyDown={handleKeyDown}
-          placeholder="Type a message… (Enter to send, Shift+Enter for new line)"
+          placeholder={t.chat.placeholder}
           disabled={isLoading}
           resize="none"
           aria-label="Message input"
@@ -226,7 +367,7 @@ export function Chat() {
           icon={isLoading ? <Spinner size="tiny" /> : <Send24Regular />}
           onClick={handleSend}
           disabled={!input.trim() || isLoading}
-          aria-label="Send message"
+          aria-label={t.chat.send}
           shape="circular"
         />
       </div>

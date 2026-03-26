@@ -19,7 +19,9 @@ import {
   ChevronLeft24Regular,
   ChevronRight24Regular,
   Settings24Regular,
+  ChatBubblesQuestion24Regular,
 } from "@fluentui/react-icons";
+import { useI18n } from "../I18nContext";
 
 export interface NavItem {
   id: string;
@@ -27,20 +29,17 @@ export interface NavItem {
   icon: JSX.Element;
 }
 
-const NAV_ITEMS: NavItem[] = [
-  { id: "chat",     label: "Chat",              icon: <Chat24Regular /> },
-  { id: "feature1", label: "Document Upload",   icon: <DocumentBulletList24Regular /> },
-  { id: "feature2", label: "Simplify Content",  icon: <TextGrammarSettings24Regular /> },
-  { id: "feature3", label: "Voice Chat",        icon: <Mic24Regular /> },
-  { id: "feature4", label: "Media Processing",  icon: <VideoClip24Regular /> },
-  { id: "feature5", label: "Task Decomposer",   icon: <CalendarClock24Regular /> },
-  { id: "feature6", label: "Accessibility Hub", icon: <PersonVoice24Regular /> },
-  { id: "feature7", label: "Speech Assistant", icon: <Record24Regular /> },
-];
-
-const BOTTOM_ITEMS: NavItem[] = [
-  { id: "settings", label: "Settings", icon: <Settings24Regular /> },
-];
+const NAV_ITEM_ICONS: Record<string, JSX.Element> = {
+  chat: <Chat24Regular />,
+  feature1: <DocumentBulletList24Regular />,
+  feature2: <TextGrammarSettings24Regular />,
+  feature3: <Mic24Regular />,
+  feature4: <VideoClip24Regular />,
+  feature5: <CalendarClock24Regular />,
+  feature6: <PersonVoice24Regular />,
+  feature7: <Record24Regular />,
+  feedback: <ChatBubblesQuestion24Regular />,
+};
 
 interface SidebarProps {
   activeView: string;
@@ -119,6 +118,23 @@ const useStyles = makeStyles({
 
 export function Sidebar({ activeView, onNavigate, collapsed = false, onToggle }: SidebarProps): ReactNode {
   const styles = useStyles();
+  const { t } = useI18n();
+
+  const NAV_ITEMS: NavItem[] = [
+    { id: "chat",     label: t.nav.chat,              icon: NAV_ITEM_ICONS.chat },
+    { id: "feature1", label: t.nav.documentUpload,    icon: NAV_ITEM_ICONS.feature1 },
+    { id: "feature2", label: t.nav.simplifyContent,   icon: NAV_ITEM_ICONS.feature2 },
+    { id: "feature3", label: t.nav.voiceChat,         icon: NAV_ITEM_ICONS.feature3 },
+    { id: "feature4", label: t.nav.mediaProcessing,   icon: NAV_ITEM_ICONS.feature4 },
+    { id: "feature5", label: t.nav.taskDecomposer,    icon: NAV_ITEM_ICONS.feature5 },
+    { id: "feature6", label: t.nav.accessibilityHub,  icon: NAV_ITEM_ICONS.feature6 },
+    { id: "feature7", label: t.nav.speechAssistant,   icon: NAV_ITEM_ICONS.feature7 },
+    { id: "feedback",  label: t.nav.feedback,           icon: NAV_ITEM_ICONS.feedback },
+  ];
+
+  const BOTTOM_ITEMS: NavItem[] = [
+    { id: "settings", label: t.nav.settings, icon: <Settings24Regular /> },
+  ];
 
   return (
     <nav
@@ -128,7 +144,7 @@ export function Sidebar({ activeView, onNavigate, collapsed = false, onToggle }:
       {/* Collapse toggle */}
       <div className={styles.toggleRow}>
         <Tooltip
-          content={collapsed ? "Expand navigation" : "Collapse navigation"}
+          content={collapsed ? t.nav.expandNav : t.nav.collapseNav}
           relationship="label"
           positioning="after"
         >
@@ -136,7 +152,7 @@ export function Sidebar({ activeView, onNavigate, collapsed = false, onToggle }:
             appearance="subtle"
             icon={collapsed ? <ChevronRight24Regular /> : <ChevronLeft24Regular />}
             onClick={onToggle}
-            aria-label={collapsed ? "Expand navigation" : "Collapse navigation"}
+            aria-label={collapsed ? t.nav.expandNav : t.nav.collapseNav}
             size="small"
           />
         </Tooltip>
