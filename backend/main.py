@@ -341,14 +341,18 @@ async def speech_synthesize(req: Request):
     if lang is not None and (not isinstance(lang, str) or len(lang) > 10):
         lang = None
 
-    result = await asyncio.to_thread(
-        synthesize_speech_sync,
-        text,
-        voice,
-        style,
-        rate,
-        lang,
-    )
+    try:
+        result = await asyncio.to_thread(
+            synthesize_speech_sync,
+            text,
+            voice,
+            style,
+            rate,
+            lang,
+        )
+    except Exception:
+        logger.exception("TTS synthesis error for user=%s", user_id)
+        return JSONResponse({"error": "Speech synthesis service error."}, status_code=502)
 
     if result.get("local_dev"):
         return JSONResponse({"message": "TTS requires Azure Speech Service.", "ssml": result.get("ssml", "")})
@@ -394,7 +398,11 @@ async def speech_onboarding(req: Request):
     if len(ssml) > 10000:
         return JSONResponse({"error": "SSML too long."}, status_code=400)
 
-    result = await asyncio.to_thread(synthesize_ssml_raw_sync, ssml)
+    try:
+        result = await asyncio.to_thread(synthesize_ssml_raw_sync, ssml)
+    except Exception:
+        logger.exception("TTS onboarding synthesis error")
+        return JSONResponse({"error": "Speech synthesis service error."}, status_code=502)
 
     if result.get("local_dev"):
         return JSONResponse({"message": "TTS requires Azure Speech Service.", "ssml": ssml})
@@ -1680,17 +1688,17 @@ def _check_content_safety(text: str, user_id: str) -> tuple[bool, str]:
 # ---------------------------------------------------------------------------
 # Register sub-routers from routes/ modules
 # ---------------------------------------------------------------------------
-# from routes.content import router as content_router, init_routes as init_content
+from routes.content import router as content_router, init_routes as init_content
 # from routes.reminders import router as reminders_router, init_routes as init_reminders
 # from routes.avatar_routes import router as avatar_router, init_routes as init_avatar
 # from routes.speech_routes import router as speech_router, init_routes as init_speech_routes
 
-# init_content(_content_container, _adapted_container, _audio_container, _get_user_id, _check_content_safety)
+init_content(_content_container, _adapted_container, _audio_container, _get_user_id, _check_content_safety)
 # init_reminders(_get_user_id, _reminders_container)
 # init_avatar(_get_user_id, _preferences_container, _adapted_container)
 # init_speech_routes(_get_user_id)
 
-# app.include_router(content_router)
+app.include_router(content_router)
 # app.include_router(reminders_router)
 # app.include_router(avatar_router)
 # app.include_router(speech_router)

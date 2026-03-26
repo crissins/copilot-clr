@@ -51,7 +51,7 @@ You MUST respond with valid JSON in this exact format (no markdown, no extra tex
 """
 
 DECOMPOSER_AGENT_NAME = "Copilot CLR Task Decomposer"
-DECOMPOSER_MODEL = "gpt-4.1-mini"
+DECOMPOSER_MODEL = "gpt-4o-mini"
 
 
 # ============================================================================
