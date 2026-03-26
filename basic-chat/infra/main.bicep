@@ -34,6 +34,9 @@ param backendImageTag string = 'latest'
 @description('Allowed origins for API CORS')
 param allowedOrigins string = 'http://localhost:5173'
 
+@description('User-assigned managed identity name for backend')
+param backendUamiName string = 'uami-cognitive-backend'
+
 /* ============================
    Foundry
 ============================ */
@@ -126,6 +129,60 @@ resource staticWebApp 'Microsoft.Web/staticSites@2023-12-01' = {
   }
 }
 
+/* ============================
+   User Assigned Identity
+============================ */
+
+resource backendUami 'Microsoft.ManagedIdentity/userAssignedIdentities@2023-01-31' = {
+  name: backendUamiName
+  location: location
+}
+
+/* ============================
+   Role Assignments for UAMI
+============================ */
+
+// Key Vault access for secrets
+resource backendUamiKvSecretsUser 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
+  name: guid(keyVault.id, backendUami.id, 'kv-secrets-user')
+  scope: keyVault
+  properties: {
+    roleDefinitionId: subscriptionResourceId(
+      'Microsoft.Authorization/roleDefinitions',
+      '4633458b-17de-408a-b874-0445c86b69e6' // Key Vault Secrets User
+    )
+    principalId: backendUami.properties.principalId
+    principalType: 'ServicePrincipal'
+  }
+}
+
+// ACR pull for image pull
+resource backendUamiAcrPull 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
+  name: guid(acr.id, backendUami.id, 'acr-pull')
+  scope: acr
+  properties: {
+    roleDefinitionId: subscriptionResourceId(
+      'Microsoft.Authorization/roleDefinitions',
+      '7f951dda-4ed3-4680-a7ca-43fe172d538d' // AcrPull
+    )
+    principalId: backendUami.properties.principalId
+    principalType: 'ServicePrincipal'
+  }
+}
+
+// Foundry access
+resource backendUamiFoundryAccess 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
+  name: guid(foundryAccount.id, backendUami.id, 'foundry-access')
+  scope: foundryAccount
+  properties: {
+    roleDefinitionId: subscriptionResourceId(
+      'Microsoft.Authorization/roleDefinitions',
+      'a97b65f3-24c7-4388-baec-2e87135dc908' // Cognitive Services User
+    )
+    principalId: backendUami.properties.principalId
+    principalType: 'ServicePrincipal'
+  }
+}
 
 /* ============================
    Backend Container App
@@ -135,7 +192,10 @@ resource backendApp 'Microsoft.App/containerApps@2024-03-01' = {
   name: backendContainerAppName
   location: location
   identity: {
-    type: 'SystemAssigned'
+    type: 'SystemAssigned, UserAssigned'
+    userAssignedIdentities: {
+      '${backendUami.id}': {}
+    }
   }
   properties: {
     managedEnvironmentId: containerAppsEnv.id
@@ -144,44 +204,43 @@ resource backendApp 'Microsoft.App/containerApps@2024-03-01' = {
         external: true
         targetPort: 8000
       }
-      registries: [
-        {
-          server: acr.properties.loginServer
-          identity: 'system'
-        }
-      ]
-      secrets: [
-        {
-          name: 'foundry-project-endpoint'
-          keyVaultUrl: 'https://${keyVault.name}.vault.azure.net/secrets/foundry-project-endpoint'
-          identity: 'system'
-        }
-        {
-          name: 'agent-name'
-          keyVaultUrl: 'https://${keyVault.name}.vault.azure.net/secrets/agent-name'
-          identity: 'system'
-        }
-      ]
+      // registries: [
+      //   {
+      //     server: acr.properties.loginServer
+      //     identity: backendUami.id
+      //   }
+      // ]
+      // secrets: [
+      //   {
+      //     name: 'foundry-project-endpoint'
+      //     keyVaultUrl: 'https://${keyVault.name}.vault.azure.net/secrets/foundry-project-endpoint'
+      //     identity: backendUami.id
+      //   }
+      //   {
+      //     name: 'agent-name'
+      //     keyVaultUrl: 'https://${keyVault.name}.vault.azure.net/secrets/agent-name'
+      //     identity: backendUami.id
+      //   }
+      // ]
     }
     template: {
       containers: [
         {
           name: 'backend'
-          image: '${acr.properties.loginServer}/${backendImageName}:${backendImageTag}'
-          // image: 'mcr.microsoft.com/azuredocs/containerapps-helloworld:latest'
+          image: 'mcr.microsoft.com/azuredocs/containerapps-helloworld:latest'
           resources: {
             cpu: json('0.5')
             memory: '1Gi'
           }
           env: [
-            {
-              name: 'FOUNDRY_PROJECT_ENDPOINT'
-              secretRef: 'foundry-project-endpoint'
-            }
-            {
-              name: 'AGENT_NAME'
-              secretRef: 'agent-name'
-            }
+            // {
+            //   name: 'FOUNDRY_PROJECT_ENDPOINT'
+            //   secretRef: 'foundry-project-endpoint'
+            // }
+            // {
+            //   name: 'AGENT_NAME'
+            //   secretRef: 'agent-name'
+            // }
             {
               name: 'ALLOWED_ORIGINS'
               value: allowedOrigins
@@ -195,55 +254,12 @@ resource backendApp 'Microsoft.App/containerApps@2024-03-01' = {
       }
     }
   }
+  dependsOn: [
+    backendUamiKvSecretsUser
+    backendUamiAcrPull
+    backendUamiFoundryAccess
+  ]
 }
-
-
-/* ============================
-   Role Assignments
-============================ */
-
-// Key Vault access
-resource backendKvSecretsUser 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
-  name: guid(keyVault.id, backendApp.id, 'kv-access')
-  scope: keyVault
-  properties: {
-    roleDefinitionId: subscriptionResourceId(
-      'Microsoft.Authorization/roleDefinitions',
-      '4633458b-17de-408a-b874-0445c86b69e6' // Key Vault Secrets User
-    )
-    principalId: backendApp.identity.principalId
-    principalType: 'ServicePrincipal'
-  }
-}
-
-// ACR pull
-resource backendAcrPull 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
-  name: guid(acr.id, backendApp.id, 'acr-pull')
-  scope: acr
-  properties: {
-    roleDefinitionId: subscriptionResourceId(
-      'Microsoft.Authorization/roleDefinitions',
-      '7f951dda-4ed3-4680-a7ca-43fe172d538d' // AcrPull
-    )
-    principalId: backendApp.identity.principalId
-    principalType: 'ServicePrincipal'
-  }
-}
-
-// Foundry access (CRÍTICO)
-resource backendFoundryAccess 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
-  name: guid(foundryAccount.id, backendApp.id, 'foundry-access')
-  scope: foundryAccount
-  properties: {
-    roleDefinitionId: subscriptionResourceId(
-      'Microsoft.Authorization/roleDefinitions',
-      'a97b65f3-24c7-4388-baec-2e87135dc908' // Cognitive Services User
-    )
-    principalId: backendApp.identity.principalId
-    principalType: 'ServicePrincipal'
-  }
-}
-
 
 /* ============================
    Outputs
@@ -251,3 +267,4 @@ resource backendFoundryAccess 'Microsoft.Authorization/roleAssignments@2022-04-0
 
 output FOUNDRY_PROJECT_ENDPOINT string = 'https://${foundryAccount.name}.services.ai.azure.com/api/projects/${foundryProject.name}'
 output BACKEND_URL string = backendApp.properties.configuration.ingress.fqdn
+output BACKEND_UAMI_ID string = backendUami.id
