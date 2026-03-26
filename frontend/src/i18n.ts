@@ -16,7 +16,7 @@ export interface AppI18n {
     chat: string;
     documentUpload: string;
     simplifyContent: string;
-    voiceChat: string;
+    remindersFocus: string;
     mediaProcessing: string;
     taskDecomposer: string;
     accessibilityHub: string;
@@ -99,7 +99,7 @@ const en: AppI18n = {
     chat: "Chat",
     documentUpload: "Document Upload",
     simplifyContent: "Simplify Content",
-    voiceChat: "Voice Chat",
+    remindersFocus: "Reminders & Focus",
     mediaProcessing: "Media Processing",
     taskDecomposer: "Task Decomposer",
     accessibilityHub: "Accessibility Hub",
@@ -173,7 +173,7 @@ const es: AppI18n = {
     chat: "Chat",
     documentUpload: "Subir documento",
     simplifyContent: "Simplificar contenido",
-    voiceChat: "Chat de voz",
+    remindersFocus: "Recordatorios y enfoque",
     mediaProcessing: "Procesamiento de medios",
     taskDecomposer: "Descomponer tareas",
     accessibilityHub: "Centro de accesibilidad",
@@ -247,7 +247,7 @@ const it: AppI18n = {
     chat: "Chat",
     documentUpload: "Carica documento",
     simplifyContent: "Semplifica contenuto",
-    voiceChat: "Chat vocale",
+    remindersFocus: "Promemoria e concentrazione",
     mediaProcessing: "Elaborazione media",
     taskDecomposer: "Scomponi attività",
     accessibilityHub: "Centro accessibilità",
@@ -321,7 +321,7 @@ const pt: AppI18n = {
     chat: "Chat",
     documentUpload: "Enviar documento",
     simplifyContent: "Simplificar conteúdo",
-    voiceChat: "Chat de voz",
+    remindersFocus: "Lembretes e foco",
     mediaProcessing: "Processamento de mídia",
     taskDecomposer: "Decompor tarefas",
     accessibilityHub: "Centro de acessibilidade",
@@ -395,7 +395,7 @@ const de: AppI18n = {
     chat: "Chat",
     documentUpload: "Dokument hochladen",
     simplifyContent: "Inhalt vereinfachen",
-    voiceChat: "Sprachchat",
+    remindersFocus: "Erinnerungen & Fokus",
     mediaProcessing: "Medienverarbeitung",
     taskDecomposer: "Aufgaben aufteilen",
     accessibilityHub: "Barrierefreiheits-Center",
@@ -469,7 +469,7 @@ const ja: AppI18n = {
     chat: "チャット",
     documentUpload: "ドキュメントのアップロード",
     simplifyContent: "コンテンツを簡略化",
-    voiceChat: "音声チャット",
+    remindersFocus: "リマインダーと集中",
     mediaProcessing: "メディア処理",
     taskDecomposer: "タスク分割",
     accessibilityHub: "アクセシビリティ ハブ",

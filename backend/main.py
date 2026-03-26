@@ -1583,6 +1583,101 @@ def list_feedback(req: Request) -> JSONResponse:
 
 
 # ============================================================================
+# GET /api/insights — Adaptive behavior: user interaction insights
+# ============================================================================
+
+@app.get("/api/insights")
+def get_user_insights(req: Request) -> JSONResponse:
+    """Return adaptive insights based on the user's interaction history.
+
+    Aggregates: total sessions, messages, tasks created, tasks completed,
+    preferred reading level, average task completion rate, content uploads,
+    and personalized suggestions.
+    """
+    try:
+        user_id = _get_user_id(req.headers.get("Authorization"))
+    except AuthError as e:
+        return JSONResponse({"error": str(e)}, status_code=401)
+
+    # Count sessions
+    sessions = list(_sessions_container.query_items(
+        query="SELECT VALUE COUNT(1) FROM c WHERE c.userId = @uid",
+        parameters=[{"name": "@uid", "value": user_id}],
+        partition_key=user_id,
+    ))
+    total_sessions = sessions[0] if sessions else 0
+
+    # Count messages
+    messages = list(_messages_container.query_items(
+        query="SELECT VALUE COUNT(1) FROM c WHERE c.userId = @uid",
+        parameters=[{"name": "@uid", "value": user_id}],
+        enable_cross_partition_query=True,
+    ))
+    total_messages = messages[0] if messages else 0
+
+    # Task plans and completion
+    tasks = list(_tasks_container.query_items(
+        query="SELECT c.steps, c.readingLevel FROM c WHERE c.userId = @uid",
+        parameters=[{"name": "@uid", "value": user_id}],
+        partition_key=user_id,
+    ))
+    total_task_plans = len(tasks)
+    total_steps = 0
+    completed_steps = 0
+    reading_levels_used: dict[str, int] = {}
+    for t in tasks:
+        steps = t.get("steps", [])
+        total_steps += len(steps)
+        completed_steps += sum(1 for s in steps if s.get("completed"))
+        rl = t.get("readingLevel", "")
+        if rl:
+            reading_levels_used[rl] = reading_levels_used.get(rl, 0) + 1
+
+    completion_rate = round(completed_steps / total_steps * 100, 1) if total_steps else 0.0
+
+    # Content uploads
+    content_items = list(_content_container.query_items(
+        query="SELECT VALUE COUNT(1) FROM c WHERE c.userId = @uid",
+        parameters=[{"name": "@uid", "value": user_id}],
+        partition_key=user_id,
+    ))
+    total_uploads = content_items[0] if content_items else 0
+
+    # Preferred reading level (most frequently used)
+    preferred_reading_level = ""
+    if reading_levels_used:
+        preferred_reading_level = max(reading_levels_used, key=reading_levels_used.get)
+
+    # Build adaptive suggestions
+    suggestions = []
+    if total_sessions == 0:
+        suggestions.append("Try starting a conversation — I can help simplify complex topics.")
+    if total_task_plans == 0:
+        suggestions.append("The Task Decomposer can break big goals into small, manageable steps.")
+    if total_uploads == 0:
+        suggestions.append("Upload a document and I can simplify it to your preferred reading level.")
+    if completion_rate > 0 and completion_rate < 50:
+        suggestions.append("You've started some tasks — try completing one step at a time. No rush!")
+    if completion_rate >= 80:
+        suggestions.append("You're completing tasks consistently — great momentum!")
+    if total_messages > 20 and not preferred_reading_level:
+        suggestions.append("Setting a reading level in your preferences can personalize responses.")
+
+    return JSONResponse({
+        "totalSessions": total_sessions,
+        "totalMessages": total_messages,
+        "totalTaskPlans": total_task_plans,
+        "totalSteps": total_steps,
+        "completedSteps": completed_steps,
+        "completionRate": completion_rate,
+        "totalUploads": total_uploads,
+        "preferredReadingLevel": preferred_reading_level,
+        "readingLevelsUsed": reading_levels_used,
+        "suggestions": suggestions,
+    })
+
+
+# ============================================================================
 # Real-time voice via Azure Web PubSub + Voice Live + Foundry Agent
 #
 # Architecture (replaces direct WebSocket because SWA can't proxy WS):
@@ -1689,17 +1784,17 @@ def _check_content_safety(text: str, user_id: str) -> tuple[bool, str]:
 # Register sub-routers from routes/ modules
 # ---------------------------------------------------------------------------
 from routes.content import router as content_router, init_routes as init_content
-# from routes.reminders import router as reminders_router, init_routes as init_reminders
+from routes.reminders import router as reminders_router, init_routes as init_reminders
 # from routes.avatar_routes import router as avatar_router, init_routes as init_avatar
 # from routes.speech_routes import router as speech_router, init_routes as init_speech_routes
 
 init_content(_content_container, _adapted_container, _audio_container, _get_user_id, _check_content_safety)
-# init_reminders(_get_user_id, _reminders_container)
+init_reminders(_get_user_id, _reminders_container)
 # init_avatar(_get_user_id, _preferences_container, _adapted_container)
 # init_speech_routes(_get_user_id)
 
 app.include_router(content_router)
-# app.include_router(reminders_router)
+app.include_router(reminders_router)
 # app.include_router(avatar_router)
 # app.include_router(speech_router)
 

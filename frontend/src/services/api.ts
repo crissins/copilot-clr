@@ -428,6 +428,78 @@ class ApiClient {
     const data = await res.json();
     return data.feedback;
   }
+
+  // ── Content Adaptation ──────────────────────────────────────────────
+
+  async adaptContent(
+    contentId: string,
+    profile: string,
+    token: string | null,
+  ): Promise<AdaptationResult> {
+    const res = await fetch(`${API_BASE}/api/content/${encodeURIComponent(contentId)}/adapt`, {
+      method: "POST",
+      headers: this.getHeaders(token),
+      body: JSON.stringify({ profile }),
+    });
+    if (!res.ok) throw new Error(`Adapt content failed: ${res.status}`);
+    return res.json();
+  }
+
+  // ── Reminders ───────────────────────────────────────────────────────
+
+  async createReminder(
+    reminder: { title: string; description?: string; scheduledTime: string; channel?: string; recurring?: string },
+    token: string | null,
+  ): Promise<Reminder> {
+    const res = await fetch(`${API_BASE}/api/reminders`, {
+      method: "POST",
+      headers: this.getHeaders(token),
+      body: JSON.stringify(reminder),
+    });
+    if (!res.ok) throw new Error(`Create reminder failed: ${res.status}`);
+    return res.json();
+  }
+
+  async listReminders(token: string | null, status?: string): Promise<Reminder[]> {
+    const params = status ? `?status=${status}` : "";
+    const res = await fetch(`${API_BASE}/api/reminders${params}`, {
+      headers: this.getHeaders(token),
+    });
+    if (!res.ok) throw new Error(`List reminders failed: ${res.status}`);
+    return res.json();
+  }
+
+  async updateReminder(
+    id: string,
+    updates: Partial<Reminder>,
+    token: string | null,
+  ): Promise<Reminder> {
+    const res = await fetch(`${API_BASE}/api/reminders/${encodeURIComponent(id)}`, {
+      method: "PUT",
+      headers: this.getHeaders(token),
+      body: JSON.stringify(updates),
+    });
+    if (!res.ok) throw new Error(`Update reminder failed: ${res.status}`);
+    return res.json();
+  }
+
+  async deleteReminder(id: string, token: string | null): Promise<void> {
+    const res = await fetch(`${API_BASE}/api/reminders/${encodeURIComponent(id)}`, {
+      method: "DELETE",
+      headers: this.getHeaders(token),
+    });
+    if (!res.ok) throw new Error(`Delete reminder failed: ${res.status}`);
+  }
+
+  // ── Adaptive Insights ──────────────────────────────────────────────
+
+  async getInsights(token: string | null): Promise<UserInsights> {
+    const res = await fetch(`${API_BASE}/api/insights`, {
+      headers: this.getHeaders(token),
+    });
+    if (!res.ok) throw new Error(`Get insights failed: ${res.status}`);
+    return res.json();
+  }
 }
 
 interface UserPreferences {
@@ -545,6 +617,41 @@ interface FeedbackItem {
   createdAt: string;
 }
 
+interface AdaptationResult {
+  adaptedContentId: string;
+  profile: string;
+  summary: string;
+  audioChunks: number;
+  tasks: number;
+  adaptationMs: number;
+}
+
+interface Reminder {
+  id: string;
+  userId: string;
+  title: string;
+  description: string;
+  scheduledTime: string;
+  channel: string;
+  recurring: string | null;
+  status: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+interface UserInsights {
+  totalSessions: number;
+  totalMessages: number;
+  totalTaskPlans: number;
+  totalSteps: number;
+  completedSteps: number;
+  completionRate: number;
+  totalUploads: number;
+  preferredReadingLevel: string;
+  readingLevelsUsed: Record<string, number>;
+  suggestions: string[];
+}
+
 export const apiClient = new ApiClient();
 export type {
   ChatResponse,
@@ -561,4 +668,7 @@ export type {
   ContentItem,
   ContentDetail,
   FeedbackItem,
+  AdaptationResult,
+  Reminder,
+  UserInsights,
 };

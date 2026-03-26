@@ -36,5 +36,8 @@ Desktop.ini
 
 # My files
 tmp/
-*backend/routes
-*backend/services
+*my_other_project/
+*github/agents/
+*github/hooks/
+*github/instructions/
+*github
