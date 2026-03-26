@@ -1,11 +1,11 @@
 from fastapi import APIRouter, HTTPException
 
-from models.immersive_reader_models import (
+from app.models.immersive_reader_models import (
     ImmersiveReaderLaunchRequest,
     ImmersiveReaderLaunchResponse,
     ImmersiveReaderTokenResponse,
 )
-from service.immersive_reader_service import ImmersiveReaderService
+from app.services.immersive_reader_service import ImmersiveReaderService
 
 router = APIRouter()
 immersive_reader_service = ImmersiveReaderService()

@@ -3,7 +3,7 @@ from typing import Optional
 from azure.ai.projects import AIProjectClient
 from azure.identity import DefaultAzureCredential
 
-from core.config import get_settings
+from app.core.config import get_settings
 
 settings = get_settings()
 

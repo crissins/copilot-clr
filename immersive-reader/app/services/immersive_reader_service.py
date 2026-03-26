@@ -1,10 +1,10 @@
 import math
 import re
 
-from core.config import get_settings
-from models.accessibility_models import AccessibilityPresetName
-from models.simplify_models import SimplifyRequest, SimplifyResponse
-from service.foundry_service import FoundryService
+from app.core.config import get_settings
+from app.models.accessibility_models import AccessibilityPresetName
+from app.models.simplify_models import SimplifyRequest, SimplifyResponse
+from app.services.foundry_service import FoundryService
 
 settings = get_settings()
 

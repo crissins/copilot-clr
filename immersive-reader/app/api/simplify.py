@@ -1,8 +1,8 @@
 from fastapi import APIRouter, HTTPException, Query
 
-from models.accessibility_models import AccessibilityPresetName
-from models.simplify_models import SimplifyRequest, SimplifyResponse
-from service.simplifier_service import SimplifierService
+from app.models.accessibility_models import AccessibilityPresetName
+from app.models.simplify_models import SimplifyRequest, SimplifyResponse
+from app.services.simplifier_service import SimplifierService
 
 router = APIRouter()
 simplifier_service = SimplifierService()

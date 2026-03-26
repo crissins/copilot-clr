@@ -1,10 +1,10 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from api.accessibility import router as accessibility_router
-from api.immersive_reader import router as immersive_reader_router
-from api.simplify import router as simplify_router
-from core.config import get_settings
+from app.api.accessibility import router as accessibility_router
+from app.api.immersive_reader import router as immersive_reader_router
+from app.api.simplify import router as simplify_router
+from app.core.config import get_settings
 
 settings = get_settings()
 
