@@ -307,7 +307,7 @@ class ApiClient {
     readingLevel: string,
     token: string | null
   ): Promise<DecomposeResponse> {
-    const res = await fetch(`${API_BASE}/api/tasks/decompose`, {
+    const res = await fetch(`${API_BASE}/api/task-plans/decompose`, {
       method: "POST",
       headers: this.getHeaders(token),
       body: JSON.stringify({ goal, readingLevel }),
@@ -317,7 +317,7 @@ class ApiClient {
   }
 
   async listTaskPlans(token: string | null): Promise<TaskPlan[]> {
-    const res = await fetch(`${API_BASE}/api/tasks`, {
+    const res = await fetch(`${API_BASE}/api/task-plans`, {
       headers: this.getHeaders(token),
     });
     if (!res.ok) throw new Error(`List tasks failed: ${res.status}`);
@@ -329,7 +329,7 @@ class ApiClient {
     taskId: string,
     token: string | null
   ): Promise<TaskPlan> {
-    const res = await fetch(`${API_BASE}/api/tasks/${encodeURIComponent(taskId)}`, {
+    const res = await fetch(`${API_BASE}/api/task-plans/${encodeURIComponent(taskId)}`, {
       headers: this.getHeaders(token),
     });
     if (!res.ok) throw new Error(`Get task failed: ${res.status}`);
@@ -344,7 +344,7 @@ class ApiClient {
     token: string | null
   ): Promise<TaskPlan> {
     const res = await fetch(
-      `${API_BASE}/api/tasks/${encodeURIComponent(taskId)}/steps/${encodeURIComponent(stepId)}`,
+      `${API_BASE}/api/task-plans/${encodeURIComponent(taskId)}/steps/${encodeURIComponent(stepId)}`,
       {
         method: "PATCH",
         headers: this.getHeaders(token),
@@ -360,7 +360,7 @@ class ApiClient {
     taskId: string,
     token: string | null
   ): Promise<void> {
-    const res = await fetch(`${API_BASE}/api/tasks/${encodeURIComponent(taskId)}`, {
+    const res = await fetch(`${API_BASE}/api/task-plans/${encodeURIComponent(taskId)}`, {
       method: "DELETE",
       headers: this.getHeaders(token),
     });
@@ -374,7 +374,7 @@ class ApiClient {
     token: string | null
   ): Promise<{ status: string; message: string }> {
     const res = await fetch(
-      `${API_BASE}/api/tasks/${encodeURIComponent(taskId)}/remind`,
+      `${API_BASE}/api/task-plans/${encodeURIComponent(taskId)}/remind`,
       {
         method: "POST",
         headers: this.getHeaders(token),

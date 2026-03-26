@@ -164,7 +164,7 @@ def list_sessions(req: func.HttpRequest) -> func.HttpResponse:
     sessions = list(sessions_container.query_items(
         query="SELECT * FROM c WHERE c.userId = @userId ORDER BY c.updatedAt DESC",
         parameters=[{"name": "@userId", "value": user_id}],
-        enable_cross_partition_query=True,
+        partition_key=user_id,
     ))
 
     # Strip Cosmos metadata
@@ -233,7 +233,7 @@ def get_session(req: func.HttpRequest) -> func.HttpResponse:
     messages = list(messages_container.query_items(
         query="SELECT * FROM c WHERE c.sessionId = @sessionId ORDER BY c.createdAt ASC",
         parameters=[{"name": "@sessionId", "value": session_id}],
-        enable_cross_partition_query=True,
+        partition_key=session_id,
     ))
 
     cleaned_messages = [
@@ -273,7 +273,7 @@ def delete_session(req: func.HttpRequest) -> func.HttpResponse:
     messages = list(messages_container.query_items(
         query="SELECT c.id FROM c WHERE c.sessionId = @sessionId",
         parameters=[{"name": "@sessionId", "value": session_id}],
-        enable_cross_partition_query=True,
+        partition_key=session_id,
     ))
     for msg in messages:
         try:
