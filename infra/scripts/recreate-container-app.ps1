@@ -21,6 +21,8 @@ $ir       = (az cognitiveservices account show -n ir-kvhky -g $rg --query "prope
 $appi     = (az resource show --ids "/subscriptions/edd0e1f4-aaca-4046-888f-dbd0c67914a0/resourceGroups/$rg/providers/Microsoft.Insights/components/appi-kvhky" --query "properties.ConnectionString" -o tsv 2>$null).Trim()
 $swa      = (az staticwebapp show -n swa-kvhky -g $rg --query "defaultHostname" -o tsv 2>$null).Trim()
 $sb       = "sb-kvhky.servicebus.windows.net"
+$storage  = "staccountkvhky"
+$speechId = (az cognitiveservices account show -n speech-kvhky -g $rg --query "id" -o tsv 2>$null).Trim()
 # AI Foundry project discovery URL: standard pattern
 $aiProject = "ai-project-kvhky"
 $aiFoundry = "https://eastus2.api.azureml.ms/discovery"
@@ -66,14 +68,17 @@ az containerapp create `
     SERVICE_BUS_NAMESPACE="$sb" `
     KEY_VAULT_URI="$kv" `
     AI_PROJECT_NAME="$aiProject" `
-    AI_FOUNDRY_ENDPOINT="$aiFoundry" `
+    PROJECT_ENDPOINT="$aiFoundry" `
     SPEECH_ENDPOINT="$speech" `
+    SPEECH_RESOURCE_ID="$speechId" `
     SPEECH_REGION="eastus2" `
+    STORAGE_ACCOUNT_NAME="$storage" `
     IR_ENDPOINT="$ir" `
     DOC_INTELLIGENCE_ENDPOINT="$di" `
     WEBPUBSUB_ENDPOINT="https://webpubsub-kvhky.webpubsub.azure.com" `
+    AZURE_CONTENT_SAFETY_ENDPOINT="$ais" `
     STATIC_WEB_APP_HOSTNAME="$swa" `
-    ENTRA_CLIENT_ID="" `
+    AZURE_CLIENT_ID="" `
   --query "{fqdn:properties.configuration.ingress.fqdn, state:properties.provisioningState}" `
   -o json 2>&1
 

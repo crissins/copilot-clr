@@ -26,19 +26,12 @@ SDK packages (pin these versions):
 
 import logging
 import os
-from dataclasses import dataclass, field
 
 from dotenv import load_dotenv
 
 load_dotenv(override=False)
 
-from agent_framework import (
-    Executor,
-    Message,
-    WorkflowBuilder,
-    WorkflowContext,
-    handler,
-)
+from agent_framework import Message
 from agent_framework.azure import AzureAIClient
 from azure.identity.aio import DefaultAzureCredential
 
@@ -55,21 +48,6 @@ from agents.agent_tools import (
 )
 
 logger = logging.getLogger(__name__)
-
-# ============================================================================
-# Shared pipeline state
-# ============================================================================
-
-
-@dataclass
-class PipelineState:
-    """Mutable state carried between workflow executors."""
-
-    user_id: str = ""
-    session_id: str = ""
-    preferences: dict = field(default_factory=dict)
-    recent_history: list[dict] = field(default_factory=list)
-    response_text: str = ""
 
 
 # ============================================================================
@@ -129,105 +107,63 @@ def _build_instructions(preferences: dict) -> str:
 
 
 # ============================================================================
-# Stage 1 — IntakeExecutor: load user context
+# Stage 1 — Load user context (preferences from Cosmos DB)
 # ============================================================================
 
 
-class IntakeExecutor(Executor):
-    """Load user preferences and recent chat history into PipelineState."""
-
-    @handler
-    async def handle(
-        self,
-        messages: list[Message],
-        ctx: WorkflowContext[PipelineState],
-    ) -> list[Message]:
-        state = ctx.state
-
-        # Load accessibility preferences from Cosmos DB
-        try:
-            container = get_preferences_container()
-            if container:
-                doc = container.read_item(
-                    item=state.user_id, partition_key=state.user_id
-                )
-                state.preferences = {
-                    k: v for k, v in doc.items() if not k.startswith("_")
-                }
-        except Exception:
-            logger.debug(
-                "No saved preferences for user=%s, using defaults", state.user_id
+async def _load_preferences(user_id: str) -> dict:
+    """Load accessibility preferences from Cosmos DB."""
+    try:
+        container = get_preferences_container()
+        if container:
+            import asyncio
+            doc = await asyncio.to_thread(
+                container.read_item, item=user_id, partition_key=user_id
             )
-            state.preferences = {}
-
-        return messages
+            return {k: v for k, v in doc.items() if not k.startswith("_")}
+    except Exception:
+        logger.debug("No saved preferences for user=%s, using defaults", user_id)
+    return {}
 
 
 # ============================================================================
-# Stage 2 — AgentExecutor: run the AI agent with tools
+# Stage 2 — Run the AI agent with tools
 # ============================================================================
 
 
-class AgentExecutor(Executor):
+async def _run_agent(
+    messages: list[Message],
+    user_id: str,
+    session_id: str,
+    preferences: dict,
+) -> str:
     """Run the Copilot CLR agent with file search, web search, and task tools."""
+    set_tool_context(user_id, session_id)
 
-    @handler
-    async def handle(
-        self,
-        messages: list[Message],
-        ctx: WorkflowContext[PipelineState],
-    ) -> list[Message]:
-        state = ctx.state
+    instructions = _build_instructions(preferences)
+    credential = DefaultAzureCredential()
 
-        # Bind user context so tool functions can read it via contextvars
-        set_tool_context(state.user_id, state.session_id)
+    tools = [
+        search_documents,
+        search_web,
+        create_task,
+        list_tasks,
+        update_task,
+        delete_task,
+        get_chat_history,
+    ]
 
-        instructions = _build_instructions(state.preferences)
-        credential = DefaultAzureCredential()
-
-        tools = [
-            search_documents,
-            search_web,
-            create_task,
-            list_tasks,
-            update_task,
-            delete_task,
-            get_chat_history,
-        ]
-
-        async with AzureAIClient(
-            project_endpoint=os.getenv("PROJECT_ENDPOINT", ""),
-            model_deployment_name=os.getenv(
-                "MODEL_DEPLOYMENT_NAME", "gpt-4o-mini"
-            ),
-            credential=credential,
-        ).as_agent(
-            name="CopilotCLR-Workflow",
-            instructions=instructions,
-            tools=tools,
-        ) as agent:
-            response = await agent.run(messages)
-            state.response_text = (
-                response.text
-                if hasattr(response, "text")
-                else str(response)
-            )
-
-        return messages
-
-
-# ============================================================================
-# Workflow assembly
-# ============================================================================
-
-_intake = IntakeExecutor()
-_agent = AgentExecutor()
-
-_workflow = (
-    WorkflowBuilder(start_executor=_intake)
-    .add_edge(_intake, _agent)
-    .build()
-)
+    async with AzureAIClient(
+        project_endpoint=os.getenv("PROJECT_ENDPOINT", ""),
+        model_deployment_name=os.getenv("MODEL_DEPLOYMENT_NAME", "gpt-4o-mini"),
+        credential=credential,
+    ).as_agent(
+        name="CopilotCLR-Workflow",
+        instructions=instructions,
+        tools=tools,
+    ) as agent:
+        response = await agent.run(messages)
+        return response.text if hasattr(response, "text") else str(response)
 
 
 # ============================================================================
@@ -250,14 +186,7 @@ async def run_workflow(
     Returns:
         The agent's text response.
     """
-    state = PipelineState(user_id=user_id, session_id=session_id)
-
-    # Wrap the user message as a Message list for the workflow
+    preferences = await _load_preferences(user_id)
     input_messages = [Message(role="user", content=message)]
-
-    ctx = WorkflowContext(state=state)
-    await _workflow.run(input_messages, ctx)
-
-    return state.response_text or (
-        "I wasn't able to generate a response. Please try again."
-    )
+    result = await _run_agent(input_messages, user_id, session_id, preferences)
+    return result or "I wasn't able to generate a response. Please try again."

@@ -170,7 +170,7 @@ def _get_user_id(authorization: str | None) -> str:
     if _LOCAL_DEV:
         return "local-dev-user"
 
-    client_id = os.environ.get("AZURE_CLIENT_ID", "")
+    client_id = os.environ.get("ENTRA_CLIENT_ID", "")
     if not client_id:
         return "anonymous"
 
@@ -190,7 +190,7 @@ def _get_user_profile(authorization: str | None) -> dict:
     if _LOCAL_DEV:
         return {"userId": "local-dev-user", "displayName": "Local Dev User", "email": "dev@localhost"}
 
-    client_id = os.environ.get("AZURE_CLIENT_ID", "")
+    client_id = os.environ.get("ENTRA_CLIENT_ID", "")
     if not client_id:
         return {"userId": "anonymous", "displayName": "Anonymous", "email": ""}
 
@@ -652,11 +652,16 @@ def list_sessions(req: Request) -> JSONResponse:
     except AuthError as e:
         return JSONResponse({"error": str(e)}, status_code=401)
 
-    sessions = list(_sessions_container.query_items(
-        query="SELECT * FROM c WHERE c.userId = @userId ORDER BY c.updatedAt DESC",
-        parameters=[{"name": "@userId", "value": user_id}],
-        enable_cross_partition_query=True,
-    ))
+    try:
+        sessions = list(_sessions_container.query_items(
+            query="SELECT * FROM c WHERE c.userId = @userId ORDER BY c.updatedAt DESC",
+            parameters=[{"name": "@userId", "value": user_id}],
+            enable_cross_partition_query=True,
+        ))
+    except Exception:
+        logger.exception("Failed to list sessions for user=%s", user_id)
+        return JSONResponse({"error": "Failed to load sessions."}, status_code=502)
+
     return JSONResponse({"sessions": [
         {k: v for k, v in s.items() if not k.startswith("_")} for s in sessions
     ]})
@@ -708,11 +713,15 @@ def get_session(session_id: str, req: Request) -> JSONResponse:
     except Exception:
         return JSONResponse({"error": "Session not found"}, status_code=404)
 
-    messages = list(_messages_container.query_items(
-        query="SELECT * FROM c WHERE c.sessionId = @sid ORDER BY c.createdAt ASC",
-        parameters=[{"name": "@sid", "value": session_id}],
-        enable_cross_partition_query=True,
-    ))
+    try:
+        messages = list(_messages_container.query_items(
+            query="SELECT * FROM c WHERE c.sessionId = @sid ORDER BY c.createdAt ASC",
+            parameters=[{"name": "@sid", "value": session_id}],
+            enable_cross_partition_query=True,
+        ))
+    except Exception:
+        logger.exception("Failed to load messages for session=%s", session_id)
+        messages = []
     return JSONResponse({
         "session": {k: v for k, v in session.items() if not k.startswith("_")},
         "messages": [
@@ -833,7 +842,11 @@ async def update_settings(req: Request) -> JSONResponse:
         "email": profile["email"],
         "updatedAt": datetime.now(timezone.utc).isoformat(),
     }
-    _preferences_container.upsert_item(settings_doc)
+    try:
+        _preferences_container.upsert_item(settings_doc)
+    except Exception:
+        logger.exception("Failed to save settings for user=%s", user_id)
+        return JSONResponse({"error": "Failed to save settings."}, status_code=502)
     return JSONResponse({k: v for k, v in settings_doc.items() if not k.startswith("_")})
 
 
@@ -876,11 +889,15 @@ def api_list_tasks(req: Request) -> JSONResponse:
     except AuthError as e:
         return JSONResponse({"error": str(e)}, status_code=401)
 
-    tasks = list(_tasks_container.query_items(
-        query="SELECT * FROM c WHERE c.userId = @userId ORDER BY c.createdAt DESC",
-        parameters=[{"name": "@userId", "value": user_id}],
-        enable_cross_partition_query=True,
-    ))
+    try:
+        tasks = list(_tasks_container.query_items(
+            query="SELECT * FROM c WHERE c.userId = @userId ORDER BY c.createdAt DESC",
+            parameters=[{"name": "@userId", "value": user_id}],
+            enable_cross_partition_query=True,
+        ))
+    except Exception:
+        logger.exception("Failed to load tasks for user=%s", user_id)
+        return JSONResponse({"error": "Failed to load tasks."}, status_code=502)
     return JSONResponse({"tasks": [
         {k: v for k, v in t.items() if not k.startswith("_")} for t in tasks
     ]})
@@ -1042,11 +1059,15 @@ def list_task_plans(req: Request) -> JSONResponse:
     except AuthError as e:
         return JSONResponse({"error": str(e)}, status_code=401)
 
-    tasks = list(_tasks_container.query_items(
-        query="SELECT * FROM c WHERE c.userId = @userId AND IS_DEFINED(c.goal) ORDER BY c.createdAt DESC",
-        parameters=[{"name": "@userId", "value": user_id}],
-        enable_cross_partition_query=True,
-    ))
+    try:
+        tasks = list(_tasks_container.query_items(
+            query="SELECT * FROM c WHERE c.userId = @userId AND IS_DEFINED(c.goal) ORDER BY c.createdAt DESC",
+            parameters=[{"name": "@userId", "value": user_id}],
+            enable_cross_partition_query=True,
+        ))
+    except Exception:
+        logger.exception("Failed to load task plans for user=%s", user_id)
+        return JSONResponse({"error": "Failed to load task plans."}, status_code=502)
     return JSONResponse({"tasks": [
         {k: v for k, v in t.items() if not k.startswith("_")} for t in tasks
     ]})

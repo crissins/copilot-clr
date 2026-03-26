@@ -309,6 +309,32 @@ resource audioContainer 'Microsoft.DocumentDB/databaseAccounts/sqlDatabases/cont
   }
 }
 
+// Feedback container
+resource feedbackContainer 'Microsoft.DocumentDB/databaseAccounts/sqlDatabases/containers@2024-02-15-preview' = {
+  parent: database
+  name: 'feedback'
+  properties: {
+    resource: {
+      id: 'feedback'
+      partitionKey: {
+        paths: ['/userId']
+        kind: 'Hash'
+        version: 2
+      }
+      indexingPolicy: {
+        indexingMode: 'consistent'
+        includedPaths: [
+          { path: '/userId/?' }
+          { path: '/createdAt/?' }
+        ]
+        excludedPaths: [
+          { path: '/*' }
+        ]
+      }
+    }
+  }
+}
+
 // Reminders container
 resource remindersContainer 'Microsoft.DocumentDB/databaseAccounts/sqlDatabases/containers@2024-02-15-preview' = {
   parent: database

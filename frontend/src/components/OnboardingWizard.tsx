@@ -119,7 +119,7 @@ export function OnboardingWizard({ language, onComplete, onSkip }: OnboardingWiz
       try {
         const token = await getAccessToken();
         if (speakIdRef.current !== id) return; // cancelled
-        const blob = await apiClient.speechSynthesize(text, token, ttsVoice, "slow", language);
+        const blob = await apiClient.speechSynthesize(text, token, ttsVoice, "medium", language);
         if (speakIdRef.current !== id) return; // cancelled
         const url = URL.createObjectURL(blob);
         const audio = new Audio(url);
