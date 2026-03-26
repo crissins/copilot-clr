@@ -23,6 +23,7 @@ $swa      = (az staticwebapp show -n swa-kvhky -g $rg --query "defaultHostname" 
 $sb       = "sb-kvhky.servicebus.windows.net"
 $storage  = "staccountkvhky"
 $speechId = (az cognitiveservices account show -n speech-kvhky -g $rg --query "id" -o tsv 2>$null).Trim()
+$entraId  = (az ad app list --display-name "Copilot CLR" --query "[0].appId" -o tsv 2>$null).Trim()
 # AI Foundry project discovery URL: standard pattern
 $aiProject = "ai-project-kvhky"
 $aiFoundry = "https://eastus2.api.azureml.ms/discovery"
@@ -37,6 +38,7 @@ Write-Host "DI:      $di"
 Write-Host "IR:      $ir"
 Write-Host "APPI:    $($appi.Substring(0, [Math]::Min(50, $appi.Length)))..."
 Write-Host "SWA:     $swa"
+Write-Host "ENTRA:   $entraId"
 Write-Host ""
 
 Write-Host "Creating Container App..." -ForegroundColor Cyan
@@ -78,7 +80,7 @@ az containerapp create `
     WEBPUBSUB_ENDPOINT="https://webpubsub-kvhky.webpubsub.azure.com" `
     AZURE_CONTENT_SAFETY_ENDPOINT="$ais" `
     STATIC_WEB_APP_HOSTNAME="$swa" `
-    AZURE_CLIENT_ID="" `
+    ENTRA_CLIENT_ID="$entraId" `
   --query "{fqdn:properties.configuration.ingress.fqdn, state:properties.provisioningState}" `
   -o json 2>&1
 

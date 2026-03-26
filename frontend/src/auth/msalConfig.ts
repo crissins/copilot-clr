@@ -35,5 +35,5 @@ export const loginRequest = {
 };
 
 export const apiRequest = {
-  scopes: [`api://${import.meta.env.VITE_ENTRA_BACKEND_CLIENT_ID || "YOUR_CLIENT_ID"}/access_as_user`],
+  scopes: [`api://${import.meta.env.VITE_ENTRA_CLIENT_ID || "YOUR_CLIENT_ID"}/access_as_user`],
 };
