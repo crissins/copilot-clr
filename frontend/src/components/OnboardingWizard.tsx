@@ -8,7 +8,7 @@ import {
 } from "@fluentui/react-icons";
 import { apiClient } from "../services/api";
 import { useAuth } from "../hooks/useAuth";
-import { useSettings } from "../hooks/useSettings";
+import { useSharedSettings } from "../hooks/SettingsContext";
 import type { NeurodiverseSettings } from "../services/api";
 import { getI18n, LANG_VOICES } from "./onboardingI18n";
 import "./onboarding.css";
@@ -54,7 +54,7 @@ function SpeakingIndicator() {
 
 export function OnboardingWizard({ language, onComplete, onSkip }: OnboardingWizardProps) {
   const { getAccessToken } = useAuth();
-  const { updateSettings } = useSettings();
+  const { updateSettings } = useSharedSettings();
   const [step, setStep] = useState(0);
   const [exiting, setExiting] = useState(false);
   const [speaking, setSpeaking] = useState(false);

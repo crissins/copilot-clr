@@ -1,4 +1,4 @@
-import { useState, useMemo, useEffect } from "react";
+import { useState, useMemo, useEffect, useCallback } from "react";
 import {
   FluentProvider,
   webLightTheme,
@@ -29,7 +29,8 @@ import { SettingsPage } from "./components/SettingsPage";
 import { LanguageSelector } from "./components/LanguageSelector";
 import { OnboardingWizard } from "./components/OnboardingWizard";
 import { useAuth } from "./hooks/useAuth";
-import { useSettings } from "./hooks/useSettings";
+import { SettingsProvider, useSharedSettings } from "./hooks/SettingsContext";
+import { useFocusTimer } from "./hooks/useFocusTimer";
 import { getAppI18n } from "./i18n";
 import { I18nProvider } from "./I18nContext";
 import { Feature1Page } from "./features/feature1/Feature1Page";
@@ -111,16 +112,111 @@ function ViewContent({ activeView, onStartOnboarding }: { activeView: string; on
   }
 }
 
+// ── Visual settings → CSS variables ─────────────────────────────────────────
+
+const FONT_SIZE_MAP: Record<string, string> = {
+  small: "14px",
+  medium: "16px",
+  large: "18px",
+  "x-large": "22px",
+};
+
+const FONT_FAMILY_MAP: Record<string, string> = {
+  default: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif',
+  OpenDyslexic: '"OpenDyslexic", sans-serif',
+  "Comic Sans MS": '"Comic Sans MS", "Comic Sans", cursive',
+  Arial: "Arial, Helvetica, sans-serif",
+  Verdana: "Verdana, Geneva, sans-serif",
+};
+
+const LINE_SPACING_MAP: Record<string, string> = {
+  compact: "1.2",
+  normal: "1.5",
+  relaxed: "1.8",
+  spacious: "2.2",
+};
+
+const COLOR_OVERLAY_MAP: Record<string, string> = {
+  none: "transparent",
+  yellow: "rgba(255, 255, 0, 0.08)",
+  blue: "rgba(0, 100, 255, 0.06)",
+  green: "rgba(0, 200, 0, 0.06)",
+  pink: "rgba(255, 105, 180, 0.06)",
+  peach: "rgba(255, 218, 185, 0.1)",
+};
+
+function useApplyVisualSettings() {
+  const { settings } = useSharedSettings();
+
+  useEffect(() => {
+    if (!settings) return;
+    const root = document.documentElement;
+
+    // Font size
+    root.style.setProperty(
+      "--user-font-size",
+      FONT_SIZE_MAP[settings.fontSize] || "16px",
+    );
+
+    // Font family (dyslexiaFont toggle overrides fontFamily)
+    const family = settings.dyslexiaFont
+      ? FONT_FAMILY_MAP["OpenDyslexic"]
+      : FONT_FAMILY_MAP[settings.fontFamily] || FONT_FAMILY_MAP["default"];
+    root.style.setProperty("--user-font-family", family);
+
+    // Line spacing
+    root.style.setProperty(
+      "--user-line-spacing",
+      LINE_SPACING_MAP[settings.lineSpacing] || "1.5",
+    );
+
+    // Text alignment
+    root.style.setProperty("--user-text-align", settings.textAlignment || "left");
+
+    // Color overlay
+    root.style.setProperty(
+      "--user-color-overlay",
+      COLOR_OVERLAY_MAP[settings.colorOverlay] || "transparent",
+    );
+
+    // High contrast
+    root.classList.toggle("high-contrast", !!settings.highContrast);
+
+    // Reduced motion
+    root.classList.toggle("reduced-motion", !!settings.reducedMotion);
+  }, [settings]);
+}
+
 // ── App shell ────────────────────────────────────────────────────────────────
 
 function AppShell() {
   const styles = useStyles();
   const { user, logout } = useAuth();
-  const { settings, loading: settingsLoading, reload: reloadSettings } = useSettings();
+  const { settings, loading: settingsLoading, updateSettings, reload: reloadSettings } = useSharedSettings();
   const [showPrefs, setShowPrefs] = useState(false);
   const [activeView, setActiveView] = useState("chat");
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
-  const [darkMode, setDarkMode] = useState(false);
+
+  // Apply all visual settings (font, spacing, overlay, etc.) to DOM
+  useApplyVisualSettings();
+
+  // Focus timer & break reminders
+  useFocusTimer();
+
+  // Derive dark mode from settings.theme (fallback: system preference)
+  const darkMode = useMemo(() => {
+    if (!settings) return false;
+    if (settings.theme === "dark") return true;
+    if (settings.theme === "light") return false;
+    // "system" — use OS preference
+    return window.matchMedia?.("(prefers-color-scheme: dark)").matches ?? false;
+  }, [settings?.theme]);
+
+  // Toggle theme between light/dark via header button
+  const handleToggleTheme = useCallback(() => {
+    const next = darkMode ? "light" : "dark";
+    updateSettings({ theme: next }).catch(() => {});
+  }, [darkMode, updateSettings]);
 
   // Onboarding: "lang" → language selector, "wizard" → step wizard, null → done/not needed
   const [onboardingPhase, setOnboardingPhase] = useState<"lang" | "wizard" | null>(null);
@@ -176,7 +272,7 @@ function AppShell() {
               <Button
                 appearance="subtle"
                 icon={darkMode ? <WeatherSunny24Regular /> : <WeatherMoon24Regular />}
-                onClick={() => setDarkMode(!darkMode)}
+                onClick={handleToggleTheme}
                 aria-label={darkMode ? i18nValue.t.switchToLight : i18nValue.t.switchToDark}
                 style={{ color: tokens.colorNeutralForegroundOnBrand }}
               />
@@ -310,7 +406,10 @@ function AppShell() {
 }
 
 export default function App() {
-  // FluentProvider lives inside AppShell so dark mode state can control it.
-  // Wrap with a minimal provider here so any MSAL context works outside AppShell.
-  return <AppShell />;
+  // SettingsProvider wraps the entire shell so settings are shared globally.
+  return (
+    <SettingsProvider>
+      <AppShell />
+    </SettingsProvider>
+  );
 }

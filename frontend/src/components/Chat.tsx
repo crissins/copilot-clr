@@ -21,6 +21,7 @@ import { MessageList } from "./MessageList";
 import { FileUpload } from "./FileUpload";
 import { useAuth } from "../hooks/useAuth";
 import { useI18n } from "../I18nContext";
+import { useSharedSettings } from "../hooks/SettingsContext";
 
 const useStyles = makeStyles({
   root: {
@@ -135,11 +136,13 @@ export function Chat() {
   const styles = useStyles();
   const { getAccessToken } = useAuth();
   const { t } = useI18n();
+  const { settings } = useSharedSettings();
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [sessionId, setSessionId] = useState<string | null>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const lastMsgCountRef = useRef(0);
 
   // Session list state
   const [sessions, setSessions] = useState<Session[]>([]);
@@ -157,6 +160,41 @@ export function Chat() {
     el.style.height = "auto";
     el.style.height = `${Math.min(el.scrollHeight, 120)}px`;
   }, [input]);
+
+  // Auto-read: speak new assistant messages via TTS when enabled
+  useEffect(() => {
+    if (!settings?.autoReadResponses) {
+      lastMsgCountRef.current = messages.length;
+      return;
+    }
+    if (messages.length <= lastMsgCountRef.current) {
+      lastMsgCountRef.current = messages.length;
+      return;
+    }
+    const newMessages = messages.slice(lastMsgCountRef.current);
+    lastMsgCountRef.current = messages.length;
+    const lastAssistant = [...newMessages].reverse().find((m) => m.role === "assistant");
+    if (!lastAssistant) return;
+
+    (async () => {
+      try {
+        const token = await getAccessToken();
+        const blob = await apiClient.speechSynthesize(
+          lastAssistant.content,
+          token,
+          settings.preferredVoice !== "default" ? settings.preferredVoice : undefined,
+          settings.voiceSpeed !== "1.0" ? settings.voiceSpeed : undefined,
+          settings.language !== "en" ? settings.language : undefined,
+        );
+        const url = URL.createObjectURL(blob);
+        const audio = new Audio(url);
+        audio.onended = () => URL.revokeObjectURL(url);
+        audio.play().catch(() => {});
+      } catch {
+        // TTS is best-effort; don't break chat
+      }
+    })();
+  }, [messages, settings, getAccessToken]);
 
   const handleSend = useCallback(async () => {
     const text = input.trim();

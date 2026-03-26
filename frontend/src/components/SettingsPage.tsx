@@ -26,7 +26,7 @@ import {
   Person24Regular,
   Wand24Regular,
 } from "@fluentui/react-icons";
-import { useSettings } from "../hooks/useSettings";
+import { useSharedSettings } from "../hooks/SettingsContext";
 import type { NeurodiverseSettings } from "../services/api";
 
 const useStyles = makeStyles({
@@ -131,7 +131,7 @@ interface SettingsPageProps {
 
 export function SettingsPage({ onStartOnboarding }: SettingsPageProps) {
   const styles = useStyles();
-  const { settings, loading, saving, error, updateSettings } = useSettings();
+  const { settings, loading, saving, error, updateSettings } = useSharedSettings();
   const [draft, setDraft] = useState<Partial<NeurodiverseSettings>>({});
   const [saved, setSaved] = useState(false);
 
