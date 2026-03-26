@@ -402,7 +402,7 @@ class ContentAdaptExecutor(Executor):
                         + ", ".join(req.web_search_queries)
                     )
 
-                adapt_messages = [Message(role="user", content=prompt)]
+                adapt_messages = [Message(role="user", contents=[prompt])]
                 response = await agent.run(adapt_messages)
                 adapted = response.text if hasattr(response, "text") else str(response)
 
@@ -785,7 +785,7 @@ async def build_request_from_chat(
         pass
 
     messages = [
-        Message(role=m.get("role", "user"), content=m.get("content", ""))
+        Message(role=m.get("role", "user"), contents=[m.get("content", "")])
         for m in chat_messages
     ]
 

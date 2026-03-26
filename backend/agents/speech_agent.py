@@ -318,7 +318,7 @@ async def _run_agent_chat_async(
         tools=tools,
         context_providers=[history_provider, memory_provider],
     ) as agent:
-        input_messages = [Message(role="user", content=message)]
+        input_messages = [Message(role="user", contents=[message])]
         response = await agent.run(input_messages)
         
         text = response.text if hasattr(response, "text") else str(response)

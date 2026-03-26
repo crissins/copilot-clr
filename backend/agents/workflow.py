@@ -187,6 +187,6 @@ async def run_workflow(
         The agent's text response.
     """
     preferences = await _load_preferences(user_id)
-    input_messages = [Message(role="user", content=message)]
+    input_messages = [Message(role="user", contents=[message])]
     result = await _run_agent(input_messages, user_id, session_id, preferences)
     return result or "I wasn't able to generate a response. Please try again."

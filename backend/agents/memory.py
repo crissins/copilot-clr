@@ -107,7 +107,7 @@ class CosmosDBHistoryProvider(BaseHistoryProvider):
             for item in reversed(items):
                 role = item.get("role", "user")
                 content = item.get("content", "")
-                messages.append(Message(role=role, content=content))
+                messages.append(Message(role=role, contents=[content]))
             
             return messages
         except Exception:
