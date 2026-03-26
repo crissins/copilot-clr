@@ -24,7 +24,7 @@ import { Chat } from "./components/Chat";
 import { LandingPage } from "./components/LandingPage";
 
 import { Sidebar } from "./components/Sidebar";
-import { HistorySidebar } from "./components/HistorySidebar";
+import { SmartContextSidebar } from "./components/SmartContextSidebar";
 import { SettingsPage } from "./components/SettingsPage";
 import { LanguageSelector } from "./components/LanguageSelector";
 import { OnboardingWizard } from "./components/OnboardingWizard";
@@ -204,7 +204,7 @@ function AppShell() {
   const { settings, loading: settingsLoading, updateSettings, reload: reloadSettings } = useSharedSettings();
   const [activeView, setActiveView] = useState("chat");
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
-  const [historySidebarCollapsed, setHistorySidebarCollapsed] = useState(false);
+  const [historySidebarCollapsed, setHistorySidebarCollapsed] = useState(true);
 
   // Session loading from history sidebar
   const [pendingSessionId, setPendingSessionId] = useState<string | null>(null);
@@ -353,7 +353,7 @@ function AppShell() {
                   collapsed={sidebarCollapsed}
                   onToggle={() => setSidebarCollapsed(!sidebarCollapsed)}
                 />
-                <HistorySidebar
+                <SmartContextSidebar
                   collapsed={historySidebarCollapsed}
                   onToggle={() => setHistorySidebarCollapsed(!historySidebarCollapsed)}
                   onLoadSession={handleLoadSession}
@@ -403,7 +403,7 @@ function AppShell() {
                       collapsed={sidebarCollapsed}
                       onToggle={() => setSidebarCollapsed(!sidebarCollapsed)}
                     />
-                    <HistorySidebar
+                    <SmartContextSidebar
                       collapsed={historySidebarCollapsed}
                       onToggle={() => setHistorySidebarCollapsed(!historySidebarCollapsed)}
                       onLoadSession={handleLoadSession}

@@ -82,6 +82,19 @@ export interface AppI18n {
     };
   };
 
+  // Context sidebar
+  contextSidebar?: {
+    promptLabel: string;
+    promptPlaceholder: string;
+    activeNow: string;
+    noActiveItems: string;
+    recent: string;
+    loading: string;
+    expand: string;
+    collapse: string;
+    ariaLabel: string;
+  };
+
   // Common
   skip: string;
   cancel: string;
@@ -159,6 +172,17 @@ const en: AppI18n = {
       bug: "Bug Report",
     },
   },
+  contextSidebar: {
+    promptLabel: "What are you working on?",
+    promptPlaceholder: "e.g. remind me in 30 min…",
+    activeNow: "Active now",
+    noActiveItems: "All clear — nothing in progress",
+    recent: "Recent",
+    loading: "Loading…",
+    expand: "Show context",
+    collapse: "Hide context",
+    ariaLabel: "Context panel",
+  },
   skip: "Skip",
   cancel: "Cancel",
   save: "Save",
@@ -234,6 +258,17 @@ const es: AppI18n = {
       feature_request: "Solicitud de función",
       bug: "Reporte de error",
     },
+  },
+  contextSidebar: {
+    promptLabel: "¿En qué estás trabajando?",
+    promptPlaceholder: "ej. recuérdame en 30 min…",
+    activeNow: "Activo ahora",
+    noActiveItems: "Todo en orden — nada en progreso",
+    recent: "Reciente",
+    loading: "Cargando…",
+    expand: "Mostrar contexto",
+    collapse: "Ocultar contexto",
+    ariaLabel: "Panel de contexto",
   },
   skip: "Omitir",
   cancel: "Cancelar",
@@ -311,6 +346,17 @@ const it: AppI18n = {
       bug: "Segnalazione bug",
     },
   },
+  contextSidebar: {
+    promptLabel: "A cosa stai lavorando?",
+    promptPlaceholder: "es. ricordami tra 30 min…",
+    activeNow: "Attivo ora",
+    noActiveItems: "Tutto a posto — niente in corso",
+    recent: "Recenti",
+    loading: "Caricamento…",
+    expand: "Mostra contesto",
+    collapse: "Nascondi contesto",
+    ariaLabel: "Pannello contesto",
+  },
   skip: "Salta",
   cancel: "Annulla",
   save: "Salva",
@@ -386,6 +432,17 @@ const pt: AppI18n = {
       feature_request: "Solicitação de funcionalidade",
       bug: "Relatório de bug",
     },
+  },
+  contextSidebar: {
+    promptLabel: "No que você está trabalhando?",
+    promptPlaceholder: "ex. me lembre em 30 min…",
+    activeNow: "Ativo agora",
+    noActiveItems: "Tudo certo — nada em andamento",
+    recent: "Recente",
+    loading: "Carregando…",
+    expand: "Mostrar contexto",
+    collapse: "Ocultar contexto",
+    ariaLabel: "Painel de contexto",
   },
   skip: "Pular",
   cancel: "Cancelar",
@@ -463,6 +520,17 @@ const de: AppI18n = {
       bug: "Fehlerbericht",
     },
   },
+  contextSidebar: {
+    promptLabel: "Woran arbeitest du?",
+    promptPlaceholder: "z.B. erinnere mich in 30 Min…",
+    activeNow: "Gerade aktiv",
+    noActiveItems: "Alles klar — nichts in Arbeit",
+    recent: "Neueste",
+    loading: "Laden…",
+    expand: "Kontext anzeigen",
+    collapse: "Kontext ausblenden",
+    ariaLabel: "Kontextbereich",
+  },
   skip: "Überspringen",
   cancel: "Abbrechen",
   save: "Speichern",
@@ -538,6 +606,17 @@ const ja: AppI18n = {
       feature_request: "機能リクエスト",
       bug: "バグ報告",
     },
+  },
+  contextSidebar: {
+    promptLabel: "何に取り組んでいますか？",
+    promptPlaceholder: "例: 30分後にリマインド…",
+    activeNow: "アクティブ",
+    noActiveItems: "すべてクリア — 進行中のものなし",
+    recent: "最近",
+    loading: "読み込み中…",
+    expand: "コンテキストを表示",
+    collapse: "コンテキストを非表示",
+    ariaLabel: "コンテキストパネル",
   },
   skip: "スキップ",
   cancel: "キャンセル",
