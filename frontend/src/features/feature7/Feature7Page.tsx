@@ -415,6 +415,7 @@ export function Feature7Page() {
   // Refs
   const recognizerRef = useRef<speechSdk.SpeechRecognizer | null>(null);
   const transcriptRef = useRef<string>("");
+  const transcriptSentRef = useRef<boolean>(false);
   const backendTokenRef = useRef<string | null>(null);
   const conversationEndRef = useRef<HTMLDivElement | null>(null);
   const currentAudioRef = useRef<HTMLAudioElement | null>(null);
@@ -436,6 +437,7 @@ export function Feature7Page() {
       setIsRecording(true);
       setStatus("Connecting to speech service...");
       transcriptRef.current = "";
+      transcriptSentRef.current = false;
 
       const backendToken = await getAccessToken();
       backendTokenRef.current = backendToken;
@@ -498,9 +500,10 @@ export function Feature7Page() {
           }
           setIsRecording(false);
           const text = transcriptRef.current.trim();
-          if (text) {
+          if (text && !transcriptSentRef.current) {
+            transcriptSentRef.current = true;
             processTranscriptionRef.current?.(text, backendTokenRef.current);
-          } else {
+          } else if (!text) {
             setStatus("I didn't catch that. No worries — try again when you're ready.");
           }
         }
@@ -514,9 +517,10 @@ export function Feature7Page() {
         }
         setIsRecording(false);
         const text = transcriptRef.current.trim();
-        if (text) {
+        if (text && !transcriptSentRef.current) {
+          transcriptSentRef.current = true;
           processTranscriptionRef.current?.(text, backendTokenRef.current);
-        } else {
+        } else if (!text) {
           setStatus("I didn't catch that. No worries — try again when you're ready.");
         }
       };
@@ -545,9 +549,10 @@ export function Feature7Page() {
           try { rec.close(); } catch { /* already disposed */ }
           setIsRecording(false);
           const text = transcriptRef.current.trim();
-          if (text) {
+          if (text && !transcriptSentRef.current) {
+            transcriptSentRef.current = true;
             processTranscriptionRef.current?.(text, backendTokenRef.current);
-          } else {
+          } else if (!text) {
             setStatus("I didn't catch that. No worries — try again when you're ready.");
           }
         },
@@ -556,9 +561,10 @@ export function Feature7Page() {
           try { rec.close(); } catch { /* already disposed */ }
           setIsRecording(false);
           const text = transcriptRef.current.trim();
-          if (text) {
+          if (text && !transcriptSentRef.current) {
+            transcriptSentRef.current = true;
             processTranscriptionRef.current?.(text, backendTokenRef.current);
-          } else {
+          } else if (!text) {
             setStatus("I didn't catch that. No worries — try again when you're ready.");
           }
         }

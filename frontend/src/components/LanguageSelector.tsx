@@ -6,6 +6,7 @@ import "./onboarding.css";
 
 interface LanguageSelectorProps {
   onSelect: (language: string) => void;
+  onSkip?: () => void;
 }
 
 const LANGUAGES = [
@@ -22,7 +23,7 @@ const GREETING_DURATION_MS = 3000;
 // Fade-out starts this many ms before the next greeting
 const FADE_MS = 800;
 
-export function LanguageSelector({ onSelect }: LanguageSelectorProps) {
+export function LanguageSelector({ onSelect, onSkip }: LanguageSelectorProps) {
   const { getAccessToken } = useAuth();
   const [currentIndex, setCurrentIndex] = useState(0);
   const [visible, setVisible] = useState(true);
@@ -111,6 +112,22 @@ export function LanguageSelector({ onSelect }: LanguageSelectorProps) {
 
   return (
     <div className="lang-selector" role="region" aria-label="Language selection">
+      {onSkip && (
+        <button
+          className="lang-skip-btn"
+          onClick={() => {
+            if (intervalRef.current) clearInterval(intervalRef.current);
+            if (audioRef.current) {
+              audioRef.current.pause();
+              audioRef.current = null;
+            }
+            onSkip();
+          }}
+          aria-label="Skip onboarding"
+        >
+          Skip →
+        </button>
+      )}
       <div className={`lang-hello ${visible ? "visible" : "hidden"}`} aria-live="polite">
         {current.hello}
       </div>

@@ -204,7 +204,7 @@ resource auditContainer 'Microsoft.DocumentDB/databaseAccounts/sqlDatabases/cont
   }
 }
 
-// User tasks container (managed by AI agent workflow)
+// User tasks container (managed by AI agent workflow + Task Decomposer)
 resource tasksContainer 'Microsoft.DocumentDB/databaseAccounts/sqlDatabases/containers@2024-02-15-preview' = {
   parent: database
   name: 'tasks'
@@ -212,15 +212,15 @@ resource tasksContainer 'Microsoft.DocumentDB/databaseAccounts/sqlDatabases/cont
     resource: {
       id: 'tasks'
       partitionKey: {
-        paths: ['/userId']
+        paths: ['/taskId']
         kind: 'Hash'
         version: 2
       }
       indexingPolicy: {
         indexingMode: 'consistent'
         includedPaths: [
+          { path: '/taskId/?' }
           { path: '/userId/?' }
-          { path: '/status/?' }
           { path: '/createdAt/?' }
         ]
         excludedPaths: [

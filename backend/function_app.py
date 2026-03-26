@@ -42,7 +42,7 @@ messages_container = database.get_container_client("messages")
 
 def get_user_id(req: func.HttpRequest) -> str:
     """Extract and validate user ID from Entra ID token."""
-    client_id = os.environ.get("ENTRA_CLIENT_ID", "")
+    client_id = os.environ.get("AZURE_CLIENT_ID", "")
     if not client_id:
         # Dev mode: allow anonymous with a default user
         return req.headers.get("X-User-Id", "anonymous")
@@ -164,7 +164,7 @@ def list_sessions(req: func.HttpRequest) -> func.HttpResponse:
     sessions = list(sessions_container.query_items(
         query="SELECT * FROM c WHERE c.userId = @userId ORDER BY c.updatedAt DESC",
         parameters=[{"name": "@userId", "value": user_id}],
-        enable_cross_partition_query=False,
+        enable_cross_partition_query=True,
     ))
 
     # Strip Cosmos metadata
@@ -233,7 +233,7 @@ def get_session(req: func.HttpRequest) -> func.HttpResponse:
     messages = list(messages_container.query_items(
         query="SELECT * FROM c WHERE c.sessionId = @sessionId ORDER BY c.createdAt ASC",
         parameters=[{"name": "@sessionId", "value": session_id}],
-        enable_cross_partition_query=False,
+        enable_cross_partition_query=True,
     ))
 
     cleaned_messages = [
@@ -273,7 +273,7 @@ def delete_session(req: func.HttpRequest) -> func.HttpResponse:
     messages = list(messages_container.query_items(
         query="SELECT c.id FROM c WHERE c.sessionId = @sessionId",
         parameters=[{"name": "@sessionId", "value": session_id}],
-        enable_cross_partition_query=False,
+        enable_cross_partition_query=True,
     ))
     for msg in messages:
         try:

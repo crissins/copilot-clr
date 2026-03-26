@@ -129,7 +129,7 @@ class ApiClient {
     formData.append("file", file);
     const headers: Record<string, string> = {};
     if (token) headers["Authorization"] = `Bearer ${token}`;
-    const res = await fetch(`${API_BASE}/api/upload`, {
+    const res = await fetch(`${API_BASE}/api/content/upload`, {
       method: "POST",
       headers,
       body: formData,
@@ -138,11 +138,11 @@ class ApiClient {
     return res.json();
   }
 
-  async textToSpeech(text: string, token: string | null): Promise<Blob> {
+  async textToSpeech(text: string, token: string | null, lang?: string): Promise<Blob> {
     const res = await fetch(`${API_BASE}/api/speech/synthesize`, {
       method: "POST",
       headers: this.getHeaders(token),
-      body: JSON.stringify({ text }),
+      body: JSON.stringify({ text, lang }),
     });
     if (!res.ok) throw new Error(`TTS failed: ${res.status}`);
     return res.blob();
@@ -178,11 +178,12 @@ class ApiClient {
     token: string | null,
     voice?: string,
     rate?: string,
+    lang?: string,
   ): Promise<Blob> {
     const res = await fetch(`${API_BASE}/api/speech/synthesize`, {
       method: "POST",
       headers: this.getHeaders(token),
-      body: JSON.stringify({ text, voice, rate }),
+      body: JSON.stringify({ text, voice, rate, lang }),
     });
     if (!res.ok) throw new Error(`Speech synthesis failed: ${res.status}`);
     return res.blob();
@@ -221,6 +222,91 @@ class ApiClient {
       body: JSON.stringify({ messageId, sessionId, reason }),
     });
     if (!res.ok) throw new Error(`Report failed: ${res.status}`);
+  }
+
+  // ── Task Decomposer ─────────────────────────────────────────────────────
+
+  async decomposeTask(
+    goal: string,
+    readingLevel: string,
+    token: string | null
+  ): Promise<DecomposeResponse> {
+    const res = await fetch(`${API_BASE}/api/tasks/decompose`, {
+      method: "POST",
+      headers: this.getHeaders(token),
+      body: JSON.stringify({ goal, readingLevel }),
+    });
+    if (!res.ok) throw new Error(`Decompose failed: ${res.status}`);
+    return res.json();
+  }
+
+  async listTaskPlans(token: string | null): Promise<TaskPlan[]> {
+    const res = await fetch(`${API_BASE}/api/tasks/plans`, {
+      headers: this.getHeaders(token),
+    });
+    if (!res.ok) throw new Error(`List tasks failed: ${res.status}`);
+    const data = await res.json();
+    return data.tasks;
+  }
+
+  async getTaskPlan(
+    taskId: string,
+    token: string | null
+  ): Promise<TaskPlan> {
+    const res = await fetch(`${API_BASE}/api/tasks/plans/${encodeURIComponent(taskId)}`, {
+      headers: this.getHeaders(token),
+    });
+    if (!res.ok) throw new Error(`Get task failed: ${res.status}`);
+    const data = await res.json();
+    return data.task;
+  }
+
+  async toggleStep(
+    taskId: string,
+    stepId: string,
+    completed: boolean,
+    token: string | null
+  ): Promise<TaskPlan> {
+    const res = await fetch(
+      `${API_BASE}/api/tasks/plans/${encodeURIComponent(taskId)}/steps/${encodeURIComponent(stepId)}`,
+      {
+        method: "PATCH",
+        headers: this.getHeaders(token),
+        body: JSON.stringify({ completed }),
+      }
+    );
+    if (!res.ok) throw new Error(`Toggle step failed: ${res.status}`);
+    const data = await res.json();
+    return data.task;
+  }
+
+  async deleteTaskPlan(
+    taskId: string,
+    token: string | null
+  ): Promise<void> {
+    const res = await fetch(`${API_BASE}/api/tasks/plans/${encodeURIComponent(taskId)}`, {
+      method: "DELETE",
+      headers: this.getHeaders(token),
+    });
+    if (!res.ok) throw new Error(`Delete task failed: ${res.status}`);
+  }
+
+  async sendReminder(
+    taskId: string,
+    stepId: string,
+    email: string,
+    token: string | null
+  ): Promise<{ status: string; message: string }> {
+    const res = await fetch(
+      `${API_BASE}/api/tasks/plans/${encodeURIComponent(taskId)}/remind`,
+      {
+        method: "POST",
+        headers: this.getHeaders(token),
+        body: JSON.stringify({ stepId, email }),
+      }
+    );
+    if (!res.ok) throw new Error(`Reminder failed: ${res.status}`);
+    return res.json();
   }
 
   async getSettings(token: string | null, signal?: AbortSignal): Promise<NeurodiverseSettings> {
@@ -299,6 +385,49 @@ class ApiClient {
     if (!res.ok) throw new Error(`Onboarding TTS failed: ${res.status}`);
     return res.blob();
   }
+
+  // ── Content Library ────────────────────────────────────────────────────
+
+  async listContent(token: string | null): Promise<ContentItem[]> {
+    const res = await fetch(`${API_BASE}/api/content`, {
+      headers: this.getHeaders(token),
+    });
+    if (!res.ok) throw new Error(`List content failed: ${res.status}`);
+    const data = await res.json();
+    return data.content;
+  }
+
+  async getContent(contentId: string, token: string | null): Promise<ContentDetail> {
+    const res = await fetch(`${API_BASE}/api/content/${encodeURIComponent(contentId)}`, {
+      headers: this.getHeaders(token),
+    });
+    if (!res.ok) throw new Error(`Get content failed: ${res.status}`);
+    return res.json();
+  }
+
+  // ── Feedback ────────────────────────────────────────────────────────
+
+  async submitFeedback(
+    feedback: { comment: string; rating: number; category: string },
+    token: string | null,
+  ): Promise<FeedbackItem> {
+    const res = await fetch(`${API_BASE}/api/feedback`, {
+      method: "POST",
+      headers: this.getHeaders(token),
+      body: JSON.stringify(feedback),
+    });
+    if (!res.ok) throw new Error(`Submit feedback failed: ${res.status}`);
+    return res.json();
+  }
+
+  async listFeedback(token: string | null): Promise<FeedbackItem[]> {
+    const res = await fetch(`${API_BASE}/api/feedback`, {
+      headers: this.getHeaders(token),
+    });
+    if (!res.ok) throw new Error(`List feedback failed: ${res.status}`);
+    const data = await res.json();
+    return data.feedback;
+  }
 }
 
 interface UserPreferences {
@@ -314,11 +443,12 @@ interface UserPreferences {
 }
 
 interface UploadResult {
-  documentId: string;
+  contentId: string;
   filename: string;
+  fileType: string;
   chunks: number;
-  totalChars: number;
-  message: string;
+  processingMs: number;
+  status: string;
 }
 
 interface NeurodiverseSettings {
@@ -360,5 +490,75 @@ interface Task {
   updatedAt: string;
 }
 
+interface TaskStep {
+  id: string;
+  title: string;
+  estimatedMinutes: number;
+  priority: "high" | "medium" | "low";
+  focusTip: string;
+  completed: boolean;
+  completedAt: string | null;
+}
+
+interface TaskPlan {
+  id: string;
+  userId: string;
+  goal: string;
+  steps: TaskStep[];
+  explanation: string;
+  readingLevel: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+interface DecomposeResponse {
+  task: TaskPlan;
+  meta: { latencyMs: number };
+}
+
+interface ContentItem {
+  id: string;
+  filename: string;
+  fileType: string;
+  status: string;
+  chunkCount: number;
+  createdAt: string;
+}
+
+interface ContentDetail {
+  content: ContentItem & { extractedText?: string; blobUrl?: string; extraction?: Record<string, unknown> };
+  adaptations: Array<{
+    id: string;
+    profile: string;
+    summary: string;
+    adaptedText: string;
+    createdAt: string;
+  }>;
+}
+
+interface FeedbackItem {
+  id: string;
+  userId: string;
+  comment: string;
+  rating: number;
+  category: string;
+  createdAt: string;
+}
+
 export const apiClient = new ApiClient();
-export type { ChatResponse, Session, Message, SessionDetail, UserPreferences, UploadResult, NeurodiverseSettings, Task };
+export type {
+  ChatResponse,
+  Session,
+  Message,
+  SessionDetail,
+  UserPreferences,
+  UploadResult,
+  NeurodiverseSettings,
+  Task,
+  TaskStep,
+  TaskPlan,
+  DecomposeResponse,
+  ContentItem,
+  ContentDetail,
+  FeedbackItem,
+};

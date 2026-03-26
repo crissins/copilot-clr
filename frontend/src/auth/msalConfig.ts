@@ -12,7 +12,9 @@ export const msalConfig: Configuration = {
   auth: {
     clientId: import.meta.env.VITE_ENTRA_CLIENT_ID || "YOUR_CLIENT_ID",
     // "common" supports both organizational and personal (@outlook.com) accounts
-    authority: "https://login.microsoftonline.com/common",
+    authority: `https://login.microsoftonline.com/${
+      import.meta.env.VITE_ENTRA_TENANT_ID || "common"
+    }/v2.0`,
     knownAuthorities: ["login.microsoftonline.com"],
     redirectUri: window.location.origin,
     postLogoutRedirectUri: window.location.origin,
@@ -33,5 +35,5 @@ export const loginRequest = {
 };
 
 export const apiRequest = {
-  scopes: [`api://${import.meta.env.VITE_ENTRA_CLIENT_ID || "YOUR_CLIENT_ID"}/access_as_user`],
+  scopes: [`api://${import.meta.env.VITE_ENTRA_BACKEND_CLIENT_ID || "YOUR_CLIENT_ID"}/access_as_user`],
 };
