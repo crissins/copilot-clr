@@ -139,13 +139,65 @@ class ApiClient {
   }
 
   async textToSpeech(text: string, token: string | null): Promise<Blob> {
-    const res = await fetch(`${API_BASE}/api/tts`, {
+    const res = await fetch(`${API_BASE}/api/speech/synthesize`, {
       method: "POST",
       headers: this.getHeaders(token),
       body: JSON.stringify({ text }),
     });
     if (!res.ok) throw new Error(`TTS failed: ${res.status}`);
     return res.blob();
+  }
+
+  async getSpeechToken(
+    token: string | null
+  ): Promise<{ authToken: string; region: string }> {
+    const res = await fetch(`${API_BASE}/api/speech/token`, {
+      method: "POST",
+      headers: this.getHeaders(token),
+    });
+    if (!res.ok) throw new Error(`Speech token failed: ${res.status}`);
+    return res.json();
+  }
+
+  async speechChat(
+    message: string,
+    sessionId: string | null,
+    token: string | null
+  ): Promise<{ sessionId: string; message: { role: string; content: string }; audio_base64: string }> {
+    const res = await fetch(`${API_BASE}/api/speech/chat`, {
+      method: "POST",
+      headers: this.getHeaders(token),
+      body: JSON.stringify({ message, sessionId }),
+    });
+    if (!res.ok) throw new Error(`Speech chat failed: ${res.status}`);
+    return res.json();
+  }
+
+  async speechSynthesize(
+    text: string,
+    token: string | null,
+    voice?: string,
+    rate?: string,
+  ): Promise<Blob> {
+    const res = await fetch(`${API_BASE}/api/speech/synthesize`, {
+      method: "POST",
+      headers: this.getHeaders(token),
+      body: JSON.stringify({ text, voice, rate }),
+    });
+    if (!res.ok) throw new Error(`Speech synthesis failed: ${res.status}`);
+    return res.blob();
+  }
+
+  /** Get a Web PubSub WebSocket URL for real-time voice sessions. */
+  async negotiateVoice(
+    token: string | null
+  ): Promise<{ url: string }> {
+    const res = await fetch(`${API_BASE}/api/voice/negotiate`, {
+      method: "POST",
+      headers: this.getHeaders(token),
+    });
+    if (!res.ok) throw new Error(`Voice negotiate failed: ${res.status}`);
+    return res.json();
   }
 
   async getIRToken(token: string | null): Promise<{ token: string; subdomain: string }> {
@@ -169,6 +221,83 @@ class ApiClient {
       body: JSON.stringify({ messageId, sessionId, reason }),
     });
     if (!res.ok) throw new Error(`Report failed: ${res.status}`);
+  }
+
+  async getSettings(token: string | null, signal?: AbortSignal): Promise<NeurodiverseSettings> {
+    const res = await fetch(`${API_BASE}/api/settings`, {
+      headers: this.getHeaders(token),
+      signal,
+    });
+    if (!res.ok) throw new Error(`Get settings failed: ${res.status}`);
+    return res.json();
+  }
+
+  async updateSettings(
+    settings: Partial<NeurodiverseSettings>,
+    token: string | null
+  ): Promise<NeurodiverseSettings> {
+    const res = await fetch(`${API_BASE}/api/settings`, {
+      method: "PUT",
+      headers: this.getHeaders(token),
+      body: JSON.stringify(settings),
+    });
+    if (!res.ok) throw new Error(`Update settings failed: ${res.status}`);
+    return res.json();
+  }
+
+  // ── Tasks API ──
+
+  async getTasks(token: string | null): Promise<{ tasks: Task[] }> {
+    const res = await fetch(`${API_BASE}/api/tasks`, {
+      headers: this.getHeaders(token),
+    });
+    if (!res.ok) throw new Error(`Get tasks failed: ${res.status}`);
+    return res.json();
+  }
+
+  async createTask(
+    task: { title: string; description?: string; priority?: string; dueDate?: string },
+    token: string | null
+  ): Promise<Task> {
+    const res = await fetch(`${API_BASE}/api/tasks`, {
+      method: "POST",
+      headers: this.getHeaders(token),
+      body: JSON.stringify(task),
+    });
+    if (!res.ok) throw new Error(`Create task failed: ${res.status}`);
+    return res.json();
+  }
+
+  async updateTask(
+    taskId: string,
+    updates: Partial<Task>,
+    token: string | null
+  ): Promise<Task> {
+    const res = await fetch(`${API_BASE}/api/tasks/${taskId}`, {
+      method: "PUT",
+      headers: this.getHeaders(token),
+      body: JSON.stringify(updates),
+    });
+    if (!res.ok) throw new Error(`Update task failed: ${res.status}`);
+    return res.json();
+  }
+
+  async deleteTask(taskId: string, token: string | null): Promise<void> {
+    const res = await fetch(`${API_BASE}/api/tasks/${taskId}`, {
+      method: "DELETE",
+      headers: this.getHeaders(token),
+    });
+    if (!res.ok) throw new Error(`Delete task failed: ${res.status}`);
+  }
+
+  async synthesizeOnboardingSsml(ssml: string, token: string | null): Promise<Blob> {
+    const res = await fetch(`${API_BASE}/api/speech/onboarding`, {
+      method: "POST",
+      headers: this.getHeaders(token),
+      body: JSON.stringify({ ssml }),
+    });
+    if (!res.ok) throw new Error(`Onboarding TTS failed: ${res.status}`);
+    return res.blob();
   }
 
   // ── Task Decomposer ─────────────────────────────────────────────────────
@@ -303,6 +432,45 @@ interface UploadResult {
   message: string;
 }
 
+interface NeurodiverseSettings {
+  id: string;
+  userId: string;
+  displayName: string;
+  email: string;
+  readingLevel: string;
+  preferredFormat: string;
+  voiceSpeed: string;
+  fontSize: string;
+  highContrast: boolean;
+  theme: string;
+  language: string;
+  fontFamily: string;
+  lineSpacing: string;
+  reducedMotion: boolean;
+  focusTimerMinutes: number;
+  breakReminderMinutes: number;
+  notificationStyle: string;
+  responseLengthPreference: string;
+  dyslexiaFont: boolean;
+  colorOverlay: string;
+  autoReadResponses: boolean;
+  preferredVoice: string;
+  textAlignment: string;
+  updatedAt?: string;
+}
+
+interface Task {
+  id: string;
+  userId: string;
+  title: string;
+  description: string;
+  priority: string;
+  status: string;
+  dueDate: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
 export const apiClient = new ApiClient();
 export type {
   ChatResponse,
@@ -311,6 +479,8 @@ export type {
   SessionDetail,
   UserPreferences,
   UploadResult,
+  NeurodiverseSettings,
+  Task,
   TaskStep,
   TaskPlan,
   DecomposeResponse,

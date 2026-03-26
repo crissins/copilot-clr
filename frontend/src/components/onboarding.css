@@ -1,0 +1,311 @@
+/* ============================================================================
+   Onboarding Flow — Animations & Layout
+   ============================================================================ */
+
+/* ── Fade-in / fade-out transitions ──────────────────────────────────────── */
+
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(18px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes fadeOut {
+  from { opacity: 1; transform: translateY(0); }
+  to   { opacity: 0; transform: translateY(-18px); }
+}
+
+@keyframes fadeInScale {
+  from { opacity: 0; transform: scale(0.92); }
+  to   { opacity: 1; transform: scale(1); }
+}
+
+@keyframes pulseGlow {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(0, 120, 212, 0.25); }
+  50%      { box-shadow: 0 0 20px 4px rgba(0, 120, 212, 0.15); }
+}
+
+/* ── Language selector — cycling hello text ──────────────────────────────── */
+
+.lang-selector {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  height: 100vh;
+  gap: 40px;
+  padding: 32px;
+  text-align: center;
+  overflow: hidden;
+  color: inherit;
+}
+
+.lang-hello {
+  font-size: clamp(3rem, 8vw, 6rem);
+  font-weight: 700;
+  min-height: 1.4em;
+  line-height: 1.2;
+  transition: opacity 0.8s ease, transform 0.8s ease;
+}
+
+.lang-hello.visible {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+.lang-hello.hidden {
+  opacity: 0;
+  transform: translateY(12px);
+}
+
+.lang-subtitle {
+  font-size: clamp(1rem, 2.5vw, 1.5rem);
+  opacity: 0.7;
+  min-height: 1.4em;
+  transition: opacity 0.8s ease;
+}
+
+.lang-subtitle.visible { opacity: 0.7; }
+.lang-subtitle.hidden  { opacity: 0; }
+
+.lang-grid {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 12px;
+  max-width: 600px;
+  animation: fadeIn 1s ease 1.5s both;
+}
+
+.lang-btn {
+  padding: 12px 24px;
+  border-radius: 12px;
+  border: 2px solid var(--border, #e0e0e0);
+  background: transparent;
+  color: var(--colorNeutralForeground1, inherit);
+  font-size: 1.05rem;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  min-width: 120px;
+}
+
+.lang-btn:hover,
+.lang-btn:focus-visible {
+  border-color: var(--accent, #0078d4);
+  background: rgba(0, 120, 212, 0.08);
+  transform: translateY(-2px);
+}
+
+.lang-btn.selected {
+  border-color: var(--accent, #0078d4);
+  background: var(--accent, #0078d4);
+  color: white;
+}
+
+/* ── Onboarding wizard ──────────────────────────────────────────────────── */
+
+.onboarding {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  height: 100vh;
+  padding: 32px;
+  overflow-y: auto;
+  color: inherit;
+}
+
+.onboarding-card {
+  max-width: 640px;
+  width: 100%;
+  text-align: center;
+  padding: 40px 32px;
+}
+
+/* Step transitions */
+.onboarding-step {
+  animation: fadeIn 0.6s ease both;
+}
+
+.onboarding-step.exiting {
+  animation: fadeOut 0.4s ease both;
+}
+
+/* Narrator text — the spoken prompt */
+.narrator-text {
+  font-size: 1.2rem;
+  line-height: 1.7;
+  margin-bottom: 32px;
+  opacity: 0;
+  animation: fadeIn 0.8s ease 0.2s both;
+}
+
+/* Progress bar */
+.onboarding-progress {
+  width: 100%;
+  max-width: 400px;
+  height: 6px;
+  border-radius: 3px;
+  background: var(--border, #e0e0e0);
+  margin-bottom: 32px;
+  overflow: hidden;
+}
+
+.onboarding-progress-fill {
+  height: 100%;
+  border-radius: 3px;
+  background: var(--accent, #0078d4);
+  transition: width 0.5s ease;
+}
+
+/* Option chips / buttons */
+.option-grid {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 12px;
+  margin-bottom: 32px;
+}
+
+.option-chip {
+  padding: 14px 24px;
+  border-radius: 14px;
+  border: 2px solid var(--border, #e0e0e0);
+  background: transparent;
+  color: var(--colorNeutralForeground1, inherit);
+  font-size: 1rem;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  min-width: 100px;
+  opacity: 0;
+  animation: fadeInScale 0.4s ease both;
+}
+
+.option-chip:nth-child(1) { animation-delay: 0.3s; }
+.option-chip:nth-child(2) { animation-delay: 0.4s; }
+.option-chip:nth-child(3) { animation-delay: 0.5s; }
+.option-chip:nth-child(4) { animation-delay: 0.6s; }
+.option-chip:nth-child(5) { animation-delay: 0.7s; }
+.option-chip:nth-child(6) { animation-delay: 0.8s; }
+
+.option-chip:hover,
+.option-chip:focus-visible {
+  border-color: var(--accent, #0078d4);
+  background: rgba(0, 120, 212, 0.08);
+  transform: translateY(-2px);
+}
+
+.option-chip.selected {
+  border-color: var(--accent, #0078d4);
+  background: var(--accent, #0078d4);
+  color: white;
+  opacity: 1;
+  box-shadow: 0 0 12px 2px rgba(0, 120, 212, 0.2);
+}
+
+/* Toggle row */
+.toggle-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  max-width: 400px;
+  margin: 0 auto 16px;
+  padding: 12px 16px;
+  border-radius: 12px;
+  border: 1px solid var(--border, #e0e0e0);
+  opacity: 0;
+  animation: fadeIn 0.5s ease both;
+  min-height: 48px;
+}
+
+.toggle-row:nth-child(1) { animation-delay: 0.3s; }
+.toggle-row:nth-child(2) { animation-delay: 0.4s; }
+.toggle-row:nth-child(3) { animation-delay: 0.5s; }
+
+.toggle-label {
+  font-size: 0.95rem;
+  text-align: left;
+  flex: 1;
+  line-height: 1.3;
+}
+
+.toggle-row .fui-Switch {
+  flex-shrink: 0;
+  padding: 0;
+  margin: 0;
+  min-height: auto;
+}
+
+/* Slider section */
+.slider-section {
+  max-width: 400px;
+  margin: 0 auto 24px;
+  text-align: left;
+  opacity: 0;
+  animation: fadeIn 0.5s ease 0.3s both;
+}
+
+.slider-section label {
+  display: block;
+  font-size: 0.95rem;
+  margin-bottom: 8px;
+}
+
+.slider-section input[type="range"] {
+  width: 100%;
+  accent-color: var(--accent, #0078d4);
+}
+
+.slider-value {
+  text-align: center;
+  font-weight: 600;
+  font-size: 1.1rem;
+  color: var(--accent, #0078d4);
+}
+
+/* Step navigation */
+.step-nav {
+  display: flex;
+  justify-content: center;
+  gap: 12px;
+  margin-top: 24px;
+  opacity: 0;
+  animation: fadeIn 0.5s ease 0.6s both;
+}
+
+/* Final done card */
+.done-card {
+  animation: fadeInScale 0.8s ease both;
+}
+
+.done-emoji {
+  font-size: 4rem;
+  margin-bottom: 16px;
+}
+
+/* ── Speaking indicator ──────────────────────────────────────────────────── */
+
+@keyframes speakingPulse {
+  0%, 100% { opacity: 0.5; }
+  50%      { opacity: 1; }
+}
+
+.speaking-indicator {
+  display: inline-flex;
+  gap: 4px;
+  align-items: flex-end;
+  height: 20px;
+  margin-left: 8px;
+}
+
+.speaking-indicator span {
+  width: 4px;
+  border-radius: 2px;
+  background: var(--accent, #0078d4);
+  animation: speakingPulse 0.6s ease infinite;
+}
+
+.speaking-indicator span:nth-child(1) { height: 8px;  animation-delay: 0s; }
+.speaking-indicator span:nth-child(2) { height: 14px; animation-delay: 0.15s; }
+.speaking-indicator span:nth-child(3) { height: 10px; animation-delay: 0.3s; }
+.speaking-indicator span:nth-child(4) { height: 16px; animation-delay: 0.1s; }

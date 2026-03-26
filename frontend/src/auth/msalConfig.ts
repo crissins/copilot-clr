@@ -5,15 +5,17 @@ import { Configuration, LogLevel } from "@azure/msal-browser";
  *
  * After creating an App Registration in Azure Portal:
  * 1. Set VITE_ENTRA_CLIENT_ID in .env
- * 2. Set VITE_ENTRA_TENANT_ID in .env (or use "common" for multi-tenant)
+ * 2. Ensure "Supported account types" includes personal Microsoft accounts
  * 3. Add redirect URI: http://localhost:5173 (dev) and your SWA URL (prod)
  */
 export const msalConfig: Configuration = {
   auth: {
     clientId: import.meta.env.VITE_ENTRA_CLIENT_ID || "YOUR_CLIENT_ID",
+    // "common" supports both organizational and personal (@outlook.com) accounts
     authority: `https://login.microsoftonline.com/${
       import.meta.env.VITE_ENTRA_TENANT_ID || "common"
     }/v2.0`,
+    knownAuthorities: ["login.microsoftonline.com"],
     redirectUri: window.location.origin,
     postLogoutRedirectUri: window.location.origin,
   },

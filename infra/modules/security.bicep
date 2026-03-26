@@ -50,12 +50,14 @@ param speechName string = ''
 @description('Azure Immersive Reader name')
 param irName string = ''
 
+@description('Azure Web PubSub name')
+param webPubSubName string = ''
+
 // ============================================================================
 // Built-in Role Definition IDs
 // https://learn.microsoft.com/en-us/azure/role-based-access-control/built-in-roles
 // ============================================================================
 var roles = {
-  cosmosDbDataContributor: 'b24988ac-6180-42a0-ab88-20f7382dd24c' // Contributor (for serverless, data plane RBAC not yet GA)
   storageBlobDataContributor: 'ba92f5b4-2d11-453d-a403-e96b0029c9fe'
   keyVaultSecretsUser: '4633458b-17de-408a-b874-0445c86b69e6'
   azureAIDeveloper: '64702f94-c441-49e6-a78b-ef80e0188fee' // Needed for Project to connect to OpenAI
@@ -66,6 +68,7 @@ var roles = {
   serviceBusDataOwner: '090c5cfd-751d-490a-894a-3ce6f1109419'
   azureMLDataScientist: 'f6c7c914-8db3-469d-8ca1-694a8f32e121'
   acrPull: '7f951dda-4ed3-4680-a7ca-43fe172d538d' // AcrPull — Container App image pull via MI
+  webPubSubServiceOwner: '12cf5a90-567b-43ae-8102-96cf46c7d9b4'
 }
 
 // ============================================================================
@@ -115,6 +118,10 @@ resource immersiveReader 'Microsoft.CognitiveServices/accounts@2024-04-01-previe
   name: irName
 }
 
+resource webPubSub 'Microsoft.SignalRService/webPubSub@2024-03-01' existing = if (!empty(webPubSubName)) {
+  name: webPubSubName
+}
+
 // ============================================================================
 // Container App → Container Registry (AcrPull — image pull via managed identity)
 // ============================================================================
@@ -129,15 +136,19 @@ resource appAcrPullRole 'Microsoft.Authorization/roleAssignments@2022-04-01' = i
 }
 
 // ============================================================================
-// Container App → Cosmos DB (Data Contributor)
+// Container App → Cosmos DB (Data-plane: Built-in Data Contributor)
+// The ARM "Contributor" role only grants control-plane access.
+// Data-plane reads/writes (read_item, upsert_item, query_items) require a
+// Cosmos DB SQL role assignment with the built-in Data Contributor role.
+// Built-in role IDs: Reader = …0001, Contributor = …0002
 // ============================================================================
-resource funcCosmosRole 'Microsoft.Authorization/roleAssignments@2022-04-01' = if (!localDevMode) {
-  name: guid(cosmosDb.id, containerAppPrincipalId, roles.cosmosDbDataContributor)
-  scope: cosmosDb
+resource funcCosmosDataPlaneRole 'Microsoft.DocumentDB/databaseAccounts/sqlRoleAssignments@2024-02-15-preview' = if (!localDevMode) {
+  parent: cosmosDb
+  name: guid(cosmosDb.id, containerAppPrincipalId, 'cosmos-data-contributor')
   properties: {
     principalId: containerAppPrincipalId
-    roleDefinitionId: subscriptionResourceId('Microsoft.Authorization/roleDefinitions', roles.cosmosDbDataContributor)
-    principalType: 'ServicePrincipal'
+    roleDefinitionId: '${cosmosDb.id}/sqlRoleDefinitions/00000000-0000-0000-0000-000000000002'
+    scope: cosmosDb.id
   }
 }
 
@@ -239,6 +250,19 @@ resource funcAiProjectRole 'Microsoft.Authorization/roleAssignments@2022-04-01' 
   properties: {
     principalId: containerAppPrincipalId
     roleDefinitionId: subscriptionResourceId('Microsoft.Authorization/roleDefinitions', roles.azureMLDataScientist)
+    principalType: 'ServicePrincipal'
+  }
+}
+
+// ============================================================================
+// Container App → Web PubSub (Service Owner — generate tokens + send messages)
+// ============================================================================
+resource funcWebPubSubRole 'Microsoft.Authorization/roleAssignments@2022-04-01' = if (!localDevMode && !empty(webPubSubName)) {
+  name: guid(webPubSub.id, containerAppPrincipalId, roles.webPubSubServiceOwner)
+  scope: webPubSub
+  properties: {
+    principalId: containerAppPrincipalId
+    roleDefinitionId: subscriptionResourceId('Microsoft.Authorization/roleDefinitions', roles.webPubSubServiceOwner)
     principalType: 'ServicePrincipal'
   }
 }

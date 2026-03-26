@@ -7,9 +7,15 @@ websockets
 # Azure Runtime
 azure-identity
 
-# Azure AI Agent Framework
-azure-ai-projects==1.0.0
+# Azure AI
+openai
+azure-ai-projects>=2.0.0b3
 azure-ai-inference
+
+# Microsoft Agent Framework SDK (sequential workflow)
+# agent-framework --pre
+agent-framework-azure-ai==1.0.0rc3
+agent-framework-core==1.0.0rc3
 
 # Azure Data Services
 azure-cosmos
@@ -20,6 +26,13 @@ azure-servicebus
 azure-ai-contentsafety
 azure-search-documents
 azure-cognitiveservices-speech
+
+# Azure Voice Live SDK (real-time voice with Foundry Agent Service)
+azure-ai-voicelive>=1.2.0b4
+# pyaudio — only needed for local dev microphone testing, not in container
+
+# Azure Web PubSub (real-time transport for SWA-compatible voice sessions)
+azure-messaging-webpubsubservice
 
 # Azure Document Intelligence + Computer Vision
 azure-ai-documentintelligence
@@ -38,6 +51,9 @@ opentelemetry-instrumentation-fastapi
 
 # Text analysis
 textstat
+
+# Env loading (used by create_speech_agent.py)
+python-dotenv
 
 # Auth
 PyJWT

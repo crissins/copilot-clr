@@ -54,9 +54,9 @@ def validate_token(token: str, client_id: str) -> dict:
         AuthError: If token is invalid
     """
     try:
-        # Decode without verification first to get the tenant ID
+        # Pre-decode without verification to extract tenant ID for issuer validation
         unverified_claims = jwt.decode(token, options={"verify_signature": False})
-        tenant_id = unverified_claims.get("tid", "")
+        tenant_id = unverified_claims.get("tid", "common")
 
         jwk_client = _get_jwk_client()
         signing_key = jwk_client.get_signing_key_from_jwt(token)
@@ -69,13 +69,10 @@ def validate_token(token: str, client_id: str) -> dict:
             f"https://login.microsoftonline.com/{tenant_id}/v2.0",
         ]
 
-        # Accept audience in either format:
-        # - Just the client ID: "xxxxxxxx-xxxx-xxxx-xxxxxxxxxxxxxxxxx"
-        # - API URI format: "api://xxxxxxxx-xxxx-xxxx-xxxxxxxxxxxxxxxxx"
-        valid_audiences = [
-            client_id,
-            f"api://{client_id}",
-        ]
+        # v2.0 tokens issued for a custom API scope (api://{clientId}/access_as_user)
+        # have aud=api://{clientId}, while tokens for the app itself have aud={clientId}.
+        # Accept both so the backend works regardless of which scope the frontend used.
+        valid_audiences = [client_id, f"api://{client_id}"]
 
         claims = jwt.decode(
             token,

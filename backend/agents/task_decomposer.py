@@ -55,7 +55,7 @@ You MUST respond with valid JSON in this exact format (no markdown, no extra tex
 }
 """
 
-DECOMPOSER_AGENT_NAME = "Copilot CLR Task Decomposer"
+DECOMPOSER_AGENT_NAME = "Copilot-CLR-Task-Decomposer"
 DECOMPOSER_MODEL = "gpt-4.1-mini"
 
 
@@ -124,53 +124,82 @@ def _local_decompose(goal: str) -> dict:
 # AI Foundry Agent calls (synchronous — always run via asyncio.to_thread)
 # ============================================================================
 
-_decomposer_agent_id: str | None = None
+_decomposer_agent_id: tuple[str, str] | None = None
 
 
-def _ensure_decomposer_agent_sync(client) -> str:
-    """Create or retrieve the Task Decomposer agent. Returns agent ID."""
+def _ensure_decomposer_agent_sync(client) -> tuple[str, str]:
+    """Create or retrieve the Task Decomposer agent. Returns (agent_name, agent_version)."""
     global _decomposer_agent_id
     if _decomposer_agent_id:
+        # Return stored (name, version) tuple from when it was created
         return _decomposer_agent_id
 
-    agents = client.agents.list_agents()
-    for agent in agents:
-        if agent.name == DECOMPOSER_AGENT_NAME:
-            _decomposer_agent_id = agent.id
-            logger.info("Found existing decomposer agent: %s", _decomposer_agent_id)
-            return _decomposer_agent_id
+    # Try to get existing agent by name
+    try:
+        from azure.core.exceptions import ResourceNotFoundError  # noqa: PLC0415
+        agent = client.agents.get(agent_name=DECOMPOSER_AGENT_NAME)
+        # Return (agent_name, latest_version)
+        agent_version = agent.versions.latest.version
+        _decomposer_agent_id = (DECOMPOSER_AGENT_NAME, agent_version)
+        logger.info(
+            "Found existing decomposer agent: %s (version: %s)",
+            DECOMPOSER_AGENT_NAME,
+            agent_version,
+        )
+        return _decomposer_agent_id
+    except ResourceNotFoundError:
+        pass
 
-    agent = client.agents.create_agent(
-        model=DECOMPOSER_MODEL,
-        name=DECOMPOSER_AGENT_NAME,
-        instructions=DECOMPOSER_INSTRUCTIONS,
+    # Create new agent with version
+    from azure.ai.projects.models import PromptAgentDefinition  # noqa: PLC0415
+    agent = client.agents.create_version(
+        agent_name=DECOMPOSER_AGENT_NAME,
+        definition=PromptAgentDefinition(
+            model=DECOMPOSER_MODEL,
+            instructions=DECOMPOSER_INSTRUCTIONS,
+        ),
     )
-    _decomposer_agent_id = agent.id
-    logger.info("Created new decomposer agent: %s", _decomposer_agent_id)
+    _decomposer_agent_id = (DECOMPOSER_AGENT_NAME, agent.version)
+    logger.info(
+        "Created new decomposer agent: %s (version: %s)",
+        DECOMPOSER_AGENT_NAME,
+        agent.version,
+    )
     return _decomposer_agent_id
 
 
-def _run_decomposition_sync(client, agent_id: str, goal: str, reading_level: str) -> dict:
+def _run_decomposition_sync(
+    project_client, openai_client, agent_name: str, agent_version: str, goal: str, reading_level: str
+) -> dict:
     """Send goal to decomposer agent, parse structured JSON response."""
-    thread = client.agents.threads.create()
+    # Create a conversation
+    conversation = openai_client.conversations.create(
+        items=[],
+    )
 
+    # Build the prompt
     prompt = f"Break down this goal into time-boxed steps: {goal}"
     if reading_level:
         prompt += f"\n\nWrite the steps at reading level: grade {reading_level}."
 
-    client.agents.messages.create(
-        thread_id=thread.id,
-        role="user",
-        content=prompt,
+    # Add user message to conversation
+    openai_client.conversations.items.create(
+        conversation_id=conversation.id,
+        items=[{"type": "message", "role": "user", "content": prompt}],
     )
 
-    run = client.agents.runs.create_and_process(
-        thread_id=thread.id,
-        agent_id=agent_id,
+    # Create response with agent reference
+    response = openai_client.responses.create(
+        conversation=conversation.id,
+        extra_body={"agent_reference": {"name": agent_name, "type": "agent_reference"}},
     )
 
-    if run.status == "failed":
-        logger.error("Decomposer agent run failed: %s", run.last_error)
+    # Clean up conversation
+    openai_client.conversations.delete(conversation_id=conversation.id)
+
+    # Check response status and extract output
+    if hasattr(response, "status") and response.status == "failed":
+        logger.error("Decomposer agent response failed")
         return {
             "steps": [],
             "explanation": (
@@ -179,13 +208,9 @@ def _run_decomposition_sync(client, agent_id: str, goal: str, reading_level: str
             ),
         }
 
-    messages = client.agents.messages.list(thread_id=thread.id)
-    for msg in messages:
-        if msg.role in ("assistant", "agent"):
-            for block in msg.content:
-                if hasattr(block, "text"):
-                    raw_text = block.text.value
-                    return _parse_decomposition(raw_text)
+    # Parse response output_text
+    if hasattr(response, "output_text"):
+        return _parse_decomposition(response.output_text)
 
     return {
         "steps": [],
@@ -259,14 +284,24 @@ async def decompose_task(
     from azure.identity import DefaultAzureCredential  # noqa: PLC0415
     from azure.ai.projects import AIProjectClient  # noqa: PLC0415
 
-    client = await asyncio.to_thread(
+    project_client = await asyncio.to_thread(
         lambda: AIProjectClient(
             endpoint=os.environ["AI_FOUNDRY_ENDPOINT"],
             credential=DefaultAzureCredential(),
         )
     )
-    agent_id = await asyncio.to_thread(_ensure_decomposer_agent_sync, client)
+
+    agent_info = await asyncio.to_thread(_ensure_decomposer_agent_sync, project_client)
+    agent_name, agent_version = agent_info
+
+    # Get OpenAI client for conversations API
+    openai_client = project_client.get_openai_client()
+
     result = await asyncio.to_thread(
-        _run_decomposition_sync, client, agent_id, goal, reading_level
+        _run_decomposition_sync, project_client, openai_client, agent_name, agent_version, goal, reading_level
     )
+
+    # Clean up client
+    project_client.close()
+
     return result

@@ -15,14 +15,16 @@ import {
   VideoClip24Regular,
   CalendarClock24Regular,
   PersonVoice24Regular,
+  Record24Regular,
   ChevronLeft24Regular,
   ChevronRight24Regular,
+  Settings24Regular,
 } from "@fluentui/react-icons";
 
 export interface NavItem {
   id: string;
   label: string;
-  icon: ReactNode;
+  icon: JSX.Element;
 }
 
 const NAV_ITEMS: NavItem[] = [
@@ -33,6 +35,11 @@ const NAV_ITEMS: NavItem[] = [
   { id: "feature4", label: "Media Processing",  icon: <VideoClip24Regular /> },
   { id: "feature5", label: "Task Decomposer",   icon: <CalendarClock24Regular /> },
   { id: "feature6", label: "Accessibility Hub", icon: <PersonVoice24Regular /> },
+  { id: "feature7", label: "Speech Assistant", icon: <Record24Regular /> },
+];
+
+const BOTTOM_ITEMS: NavItem[] = [
+  { id: "settings", label: "Settings", icon: <Settings24Regular /> },
 ];
 
 interface SidebarProps {
@@ -95,6 +102,13 @@ const useStyles = makeStyles({
     minWidth: "36px",
     width: "36px",
     ...shorthands.padding("0"),
+  },
+  bottomSection: {
+    ...shorthands.borderTop("1px", "solid", tokens.colorNeutralStroke1),
+    ...shorthands.padding("8px"),
+    display: "flex",
+    flexDirection: "column",
+    gap: "2px",
   },
   label: {
     overflow: "hidden",
@@ -162,6 +176,37 @@ export function Sidebar({ activeView, onNavigate, collapsed = false, onToggle }:
           );
         })}
       </ul>
+
+      {/* Settings at the bottom */}
+      <div className={styles.bottomSection}>
+        {BOTTOM_ITEMS.map((item) => {
+          const isActive = activeView === item.id;
+          const btn = (
+            <Button
+              className={mergeClasses(
+                styles.navBtn,
+                isActive && styles.navBtnActive,
+                collapsed && styles.navBtnCollapsed,
+              )}
+              appearance="subtle"
+              icon={item.icon}
+              onClick={() => onNavigate(item.id)}
+              aria-current={isActive ? "page" : undefined}
+              aria-label={collapsed ? item.label : undefined}
+            >
+              {!collapsed && <span className={styles.label}>{item.label}</span>}
+            </Button>
+          );
+
+          return collapsed ? (
+            <Tooltip key={item.id} content={item.label} relationship="label" positioning="after">
+              {btn}
+            </Tooltip>
+          ) : (
+            <div key={item.id}>{btn}</div>
+          );
+        })}
+      </div>
     </nav>
   );
 }

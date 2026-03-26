@@ -1,7 +1,5 @@
 import { useEffect, useRef } from "react";
 import {
-  Card,
-  CardHeader,
   Badge,
   Spinner,
   Text,

@@ -204,7 +204,7 @@ resource auditContainer 'Microsoft.DocumentDB/databaseAccounts/sqlDatabases/cont
   }
 }
 
-// Task decomposition plans container
+// User tasks container (managed by AI agent workflow)
 resource tasksContainer 'Microsoft.DocumentDB/databaseAccounts/sqlDatabases/containers@2024-02-15-preview' = {
   parent: database
   name: 'tasks'
@@ -221,7 +221,113 @@ resource tasksContainer 'Microsoft.DocumentDB/databaseAccounts/sqlDatabases/cont
         includedPaths: [
           { path: '/taskId/?' }
           { path: '/userId/?' }
+          { path: '/status/?' }
           { path: '/createdAt/?' }
+        ]
+        excludedPaths: [
+          { path: '/*' }
+        ]
+      }
+    }
+  }
+}
+
+// Content uploads container
+resource contentContainer 'Microsoft.DocumentDB/databaseAccounts/sqlDatabases/containers@2024-02-15-preview' = {
+  parent: database
+  name: 'content'
+  properties: {
+    resource: {
+      id: 'content'
+      partitionKey: {
+        paths: ['/userId']
+        kind: 'Hash'
+        version: 2
+      }
+      indexingPolicy: {
+        indexingMode: 'consistent'
+        includedPaths: [
+          { path: '/userId/?' }
+          { path: '/createdAt/?' }
+        ]
+        excludedPaths: [
+          { path: '/*' }
+        ]
+      }
+    }
+  }
+}
+
+// Adapted content container
+resource adaptedContainer 'Microsoft.DocumentDB/databaseAccounts/sqlDatabases/containers@2024-02-15-preview' = {
+  parent: database
+  name: 'adapted'
+  properties: {
+    resource: {
+      id: 'adapted'
+      partitionKey: {
+        paths: ['/userId']
+        kind: 'Hash'
+        version: 2
+      }
+      indexingPolicy: {
+        indexingMode: 'consistent'
+        includedPaths: [
+          { path: '/userId/?' }
+          { path: '/createdAt/?' }
+        ]
+        excludedPaths: [
+          { path: '/*' }
+        ]
+      }
+    }
+  }
+}
+
+// TTS audio snippets container
+resource audioContainer 'Microsoft.DocumentDB/databaseAccounts/sqlDatabases/containers@2024-02-15-preview' = {
+  parent: database
+  name: 'audio'
+  properties: {
+    resource: {
+      id: 'audio'
+      partitionKey: {
+        paths: ['/userId']
+        kind: 'Hash'
+        version: 2
+      }
+      indexingPolicy: {
+        indexingMode: 'consistent'
+        includedPaths: [
+          { path: '/userId/?' }
+          { path: '/createdAt/?' }
+        ]
+        excludedPaths: [
+          { path: '/*' }
+        ]
+      }
+    }
+  }
+}
+
+// Reminders container
+resource remindersContainer 'Microsoft.DocumentDB/databaseAccounts/sqlDatabases/containers@2024-02-15-preview' = {
+  parent: database
+  name: 'reminders'
+  properties: {
+    resource: {
+      id: 'reminders'
+      partitionKey: {
+        paths: ['/userId']
+        kind: 'Hash'
+        version: 2
+      }
+      indexingPolicy: {
+        indexingMode: 'consistent'
+        includedPaths: [
+          { path: '/userId/?' }
+          { path: '/scheduledTime/?' }
+          { path: '/status/?' }
         ]
         excludedPaths: [
           { path: '/*' }

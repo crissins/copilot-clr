@@ -13,6 +13,10 @@ param resourceToken string
 @description('Tags to apply')
 param tags object = {}
 
+@description('SWA SKU name. Standard required for linked backend (API proxying).')
+@allowed(['Free', 'Standard'])
+param skuName string = 'Free'
+
 var staticWebAppName = 'swa-${resourceToken}'
 
 resource staticWebApp 'Microsoft.Web/staticSites@2023-12-01' = {
@@ -20,8 +24,8 @@ resource staticWebApp 'Microsoft.Web/staticSites@2023-12-01' = {
   location: location
   tags: union(tags, { 'azd-service-name': 'frontend' })
   sku: {
-    name: 'Free'
-    tier: 'Free'
+    name: skuName
+    tier: skuName
   }
   properties: {
     buildProperties: {

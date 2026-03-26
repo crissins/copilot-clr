@@ -37,7 +37,7 @@ param environmentName string = 'dev'
 @description('Project name used for resource naming')
 param projectName string = 'chatapp'
 
-@description('Entra ID Client ID for user authentication (set after app registration)')
+@description('Entra ID Client ID for user authentication. Leave empty to auto-create via deployment script.')
 param entraClientId string = ''
 
 // ============================================================================
@@ -65,6 +65,10 @@ param logRetentionDays int = 30
 
 @description('Local development mode — skip compute/hosting resources (Container Apps, ACR, App Service, Service Bus). Backend and frontend run locally. Use with main.dev.bicepparam.')
 param localDevMode bool = false
+
+@description('Static Web App SKU. Standard enables linked backend (API proxying to Container Apps). Free requires VITE_API_BASE for direct CORS calls.')
+@allowed(['Free', 'Standard'])
+param swaSkuName string = 'Standard'
 
 // FIX BCP334: resourceToken expanded to 5 chars — Container Registry requires
 // a minimum name length of 5. Longer token also reduces naming collision risk.
@@ -191,11 +195,29 @@ module containerRegistry 'modules/container-registry.bicep' = if (!localDevMode)
 module staticWebApp 'modules/staticwebapp.bicep' = if (!localDevMode) {
   name: 'staticwebapp-deployment'
   params: {
-    location: 'eastus2' // Static Web Apps Free tier requires specific regions
+    location: 'eastus2'
     resourceToken: resourceToken
     tags: tags
+    skuName: swaSkuName
   }
 }
+
+// Entra ID App Registration — auto-creates if entraClientId is not provided.
+// Sets signInAudience to AzureADandPersonalMicrosoftAccount (org + @outlook.com).
+module entraApp 'modules/entra-app-registration.bicep' = if (empty(entraClientId) && !localDevMode) {
+  name: 'entra-app-registration-deployment'
+  params: {
+    location: location
+    tags: tags
+    appDisplayName: 'Copilot CLR'
+    #disable-next-line BCP318
+    swaHostname: localDevMode ? '' : staticWebApp.outputs.staticWebAppHostname
+  }
+}
+
+// Resolve client ID: use param if provided, otherwise use auto-created value
+#disable-next-line BCP318
+var resolvedEntraClientId = !empty(entraClientId) ? entraClientId : (localDevMode ? '' : entraApp.outputs.clientId)
 
 // ============================================================================
 // Phase 2: AI Layer (depends on storage, keyvault, monitoring)
@@ -210,6 +232,7 @@ module openAi 'modules/openai.bicep' = {
     chatModelCapacity: openAiChatCapacity
     embeddingModelCapacity: openAiEmbeddingCapacity
     deployRealtimeModel: deployVoice
+    deployCustomRaiPolicy: true
   }
 }
 
@@ -271,13 +294,45 @@ module containerApps 'modules/container-apps.bicep' = if (!localDevMode) {
     aiFoundryEndpoint: aiFoundryProject.outputs.projectDiscoveryUrl
     #disable-next-line BCP318
     staticWebAppHostname: staticWebApp.outputs.staticWebAppHostname
-    entraClientId: entraClientId
+    entraClientId: resolvedEntraClientId
     containerCpu: containerCpu
     containerMemory: containerMemory
     speechEndpoint: speech.outputs.speechEndpoint
+    speechResourceId: speech.outputs.speechId
     speechRegion: speech.outputs.speechRegion
+    storageAccountName: storage.outputs.storageAccountName
     irEndpoint: immersiveReader.outputs.irEndpoint
     docIntelEndpoint: documentIntelligence.outputs.docIntelEndpoint
+    // Construct Web PubSub endpoint from naming convention to avoid circular dependency
+    // (Web PubSub module needs Container App hostname; Container App needs PubSub endpoint)
+    webPubSubEndpoint: 'https://webpubsub-${resourceToken}.webpubsub.azure.com'
+  }
+}
+
+// Link SWA → Container Apps backend for transparent /api/* proxying.
+// Requires SWA Standard tier. Conditional on both SWA and Container Apps existing.
+module swaLinkedBackend 'modules/swa-linked-backend.bicep' = if (!localDevMode && swaSkuName == 'Standard') {
+  name: 'swa-linked-backend-deployment'
+  params: {
+    #disable-next-line BCP318
+    staticWebAppName: staticWebApp.outputs.staticWebAppName
+    #disable-next-line BCP318
+    containerAppResourceId: containerApps.outputs.containerAppId
+    location: location
+  }
+}
+
+// Azure Web PubSub — real-time voice transport (SWA can't proxy WebSockets).
+// Clients connect to Web PubSub directly; event handler calls Container App backend.
+module webPubSub 'modules/webpubsub.bicep' = if (!localDevMode) {
+  name: 'webpubsub-deployment'
+  params: {
+    location: location
+    resourceToken: resourceToken
+    tags: tags
+    skuName: 'Free_F1'
+    #disable-next-line BCP318
+    backendHostname: containerApps.outputs.containerAppHostname
   }
 }
 
@@ -306,6 +361,8 @@ module security 'modules/security.bicep' = {
     #disable-next-line BCP318
     serviceBusName: localDevMode ? '' : serviceBus.outputs.serviceBusName
     aiProjectName: aiFoundryProject.outputs.projectName
+    #disable-next-line BCP318
+    webPubSubName: localDevMode ? '' : webPubSub.outputs.webPubSubName
   }
 }
 
@@ -349,3 +406,10 @@ output DOC_INTELLIGENCE_ENDPOINT string = documentIntelligence.outputs.docIntelE
 
 // Storage
 output STORAGE_ACCOUNT_NAME string = storage.outputs.storageAccountName
+
+// Web PubSub (real-time voice transport)
+#disable-next-line BCP318
+output WEBPUBSUB_ENDPOINT string = localDevMode ? '' : webPubSub.outputs.webPubSubEndpoint
+
+// Entra ID App Registration
+output ENTRA_CLIENT_ID string = resolvedEntraClientId

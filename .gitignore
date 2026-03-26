@@ -1,20 +1,40 @@
-# OS  
-.DS_Store  
-Thumbs.db  
-Desktop.ini  
-  
-# IDEs  
-.vscode/  
-.idea/  
-*.swp  
-*.swo  
-*~  
-  
-# Environment variables  
-.env  
-.env.local  
-.env.*.local  
-  
-# Secrets  
-*.pem  
+# Dependencies
+node_modules/
+.python_packages/
+__pycache__/
+*.pyc
+.venv/
+
+# Build outputs
+dist/
+.vite/
+
+# Environment files
+.env
+.env.local
+.env.*.local
+
+# Azure Functions
+local.settings.json
+bin/
+obj/
+
+# IDEs
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+Desktop.ini
+
+# Secrets
+*.pem
 *.key
+
+# My files
+tmp/
+*backend/routes
+*backend/services
