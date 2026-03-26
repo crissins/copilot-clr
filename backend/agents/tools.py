@@ -80,10 +80,14 @@ def search_knowledge_base(query: str, reading_level: str = "") -> str:
         odata_filter = None
         if reading_level:
             try:
-                level = int(reading_level)
-                # Match chunks within ±1 grade of the requested level
-                odata_filter = f"readingLevel ge {max(1, level - 1)} and readingLevel le {level + 1}"
-            except ValueError:
+                # Accept both bare numbers ("5") and prefixed strings ("Grade 5")
+                import re
+                m = re.search(r"(\d+)", str(reading_level))
+                if m:
+                    level = int(m.group(1))
+                    # Match chunks within ±1 grade of the requested level
+                    odata_filter = f"readingLevel ge {max(1, level - 1)} and readingLevel le {level + 1}"
+            except (ValueError, TypeError):
                 pass
 
         # Hybrid search: keyword (BM25) + vector semantic (if semantic ranker enabled)

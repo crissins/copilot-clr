@@ -252,6 +252,37 @@ async def adapt_content_endpoint(content_id: str, req: Request) -> JSONResponse:
     }, status_code=201)
 
 
+@router.post("/content/{content_id}/analyze-video")
+async def analyze_video_endpoint(content_id: str, req: Request) -> JSONResponse:
+    """Run Video Indexer analysis on an uploaded video."""
+    from auth.entra import AuthError
+    try:
+        user_id = _get_user_id(req.headers.get("Authorization"))
+    except AuthError as e:
+        return JSONResponse({"error": str(e)}, status_code=401)
+
+    try:
+        content_doc = _content_container.read_item(item=content_id, partition_key=user_id)
+    except Exception:
+        return JSONResponse({"error": "Content not found."}, status_code=404)
+
+    if content_doc.get("fileType") != "video":
+        return JSONResponse({"error": "Content is not a video."}, status_code=400)
+
+    blob_url = content_doc.get("blobUrl", "")
+    if not blob_url:
+        return JSONResponse({"error": "No blob URL for this video."}, status_code=400)
+
+    try:
+        from services.video_processor import analyze_video
+        result = await analyze_video(blob_url, content_doc.get("filename", "video"))
+    except Exception:
+        logger.exception("Video analysis failed for content_id=%s", content_id)
+        return JSONResponse({"error": "Video analysis failed."}, status_code=500)
+
+    return JSONResponse(result)
+
+
 @router.get("/content")
 def list_content(req: Request) -> JSONResponse:
     """List all uploaded content for the authenticated user."""

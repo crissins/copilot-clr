@@ -500,6 +500,46 @@ class ApiClient {
     if (!res.ok) throw new Error(`Get insights failed: ${res.status}`);
     return res.json();
   }
+
+  // ── Avatar ──────────────────────────────────────────────────────────
+
+  async createAvatarSession(token: string | null): Promise<AvatarSessionResult> {
+    const res = await fetch(`${API_BASE}/api/avatar/session`, {
+      method: "POST",
+      headers: this.getHeaders(token),
+    });
+    if (!res.ok) throw new Error(`Avatar session failed: ${res.status}`);
+    return res.json();
+  }
+
+  async avatarSpeak(
+    text: string,
+    token: string | null,
+    voice?: string,
+    style?: string,
+  ): Promise<AvatarSpeakResult> {
+    const res = await fetch(`${API_BASE}/api/avatar/speak`, {
+      method: "POST",
+      headers: this.getHeaders(token),
+      body: JSON.stringify({ text, voice, style }),
+    });
+    if (!res.ok) throw new Error(`Avatar speak failed: ${res.status}`);
+    return res.json();
+  }
+
+  // ── Video Indexer ───────────────────────────────────────────────────
+
+  async analyzeVideo(
+    contentId: string,
+    token: string | null,
+  ): Promise<VideoAnalysisResult> {
+    const res = await fetch(`${API_BASE}/api/content/${encodeURIComponent(contentId)}/analyze-video`, {
+      method: "POST",
+      headers: this.getHeaders(token),
+    });
+    if (!res.ok) throw new Error(`Video analysis failed: ${res.status}`);
+    return res.json();
+  }
 }
 
 interface UserPreferences {
@@ -652,6 +692,38 @@ interface UserInsights {
   suggestions: string[];
 }
 
+interface AvatarSessionResult {
+  status: string;
+  message?: string;
+  authToken?: string;
+  region?: string;
+  endpoint?: string;
+  avatarConfig?: {
+    character: string;
+    style: string;
+    isPhotoAvatar: boolean;
+    voice: string;
+    transparentBackground: boolean;
+    videoFormat: { width: number; height: number };
+  };
+  supported_regions?: string[];
+}
+
+interface AvatarSpeakResult {
+  ssml: string;
+  voice: string;
+  text_length: number;
+  estimated_duration_s: number;
+}
+
+interface VideoAnalysisResult {
+  transcript: string;
+  topics: string[];
+  scenes: Array<{ start: string; end: string }>;
+  keywords: string[];
+  source: string;
+}
+
 export const apiClient = new ApiClient();
 export type {
   ChatResponse,
@@ -671,4 +743,7 @@ export type {
   AdaptationResult,
   Reminder,
   UserInsights,
+  AvatarSessionResult,
+  AvatarSpeakResult,
+  VideoAnalysisResult,
 };

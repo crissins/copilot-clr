@@ -11,7 +11,6 @@ import {
   shorthands,
 } from "@fluentui/react-components";
 import {
-  Settings24Regular,
   SignOut24Regular,
   WeatherMoon24Regular,
   WeatherSunny24Regular,
@@ -23,8 +22,9 @@ import {
 
 import { Chat } from "./components/Chat";
 import { LandingPage } from "./components/LandingPage";
-import { PreferencesPanel } from "./components/PreferencesPanel";
+
 import { Sidebar } from "./components/Sidebar";
+import { HistorySidebar } from "./components/HistorySidebar";
 import { SettingsPage } from "./components/SettingsPage";
 import { LanguageSelector } from "./components/LanguageSelector";
 import { OnboardingWizard } from "./components/OnboardingWizard";
@@ -40,6 +40,8 @@ import { Feature4Page } from "./features/feature4/Feature4Page";
 import { Feature5Page } from "./features/feature5/Feature5Page";
 import { Feature6Page } from "./features/feature6/Feature6Page";
 import { Feature7Page } from "./features/feature7/Feature7Page";
+import { AvatarPage } from "./features/avatar/AvatarPage";
+import { VoiceLivePage } from "./features/voicelive/VoiceLivePage";
 import { FeedbackPage } from "./components/FeedbackPage";
 
 const LOCAL_DEV = import.meta.env.VITE_LOCAL_DEV === "true";
@@ -96,9 +98,14 @@ const useStyles = makeStyles({
 
 // ── View router ──────────────────────────────────────────────────────────────
 
-function ViewContent({ activeView, onStartOnboarding }: { activeView: string; onStartOnboarding?: () => void }) {
+function ViewContent({ activeView, onStartOnboarding, loadSessionId, onSessionLoaded }: {
+  activeView: string;
+  onStartOnboarding?: () => void;
+  loadSessionId?: string | null;
+  onSessionLoaded?: () => void;
+}) {
   switch (activeView) {
-    case "chat":     return <Chat />;
+    case "chat":     return <Chat loadSessionId={loadSessionId} onSessionLoaded={onSessionLoaded} />;
     case "feature1": return <Feature1Page />;
     case "feature2": return <Feature2Page />;
     case "feature3": return <Feature3Page />;
@@ -106,9 +113,11 @@ function ViewContent({ activeView, onStartOnboarding }: { activeView: string; on
     case "feature5": return <Feature5Page />;
     case "feature6": return <Feature6Page />;
     case "feature7": return <Feature7Page />;
+    case "avatar":   return <AvatarPage />;
+    case "voicelive": return <VoiceLivePage />;
     case "feedback": return <FeedbackPage />;
     case "settings": return <SettingsPage onStartOnboarding={onStartOnboarding} />;
-    default:         return <Chat />;
+    default:         return <Chat loadSessionId={loadSessionId} onSessionLoaded={onSessionLoaded} />;
   }
 }
 
@@ -193,9 +202,19 @@ function AppShell() {
   const styles = useStyles();
   const { user, logout } = useAuth();
   const { settings, loading: settingsLoading, updateSettings, reload: reloadSettings } = useSharedSettings();
-  const [showPrefs, setShowPrefs] = useState(false);
   const [activeView, setActiveView] = useState("chat");
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  const [historySidebarCollapsed, setHistorySidebarCollapsed] = useState(false);
+
+  // Session loading from history sidebar
+  const [pendingSessionId, setPendingSessionId] = useState<string | null>(null);
+  const [activeSessionId, setActiveSessionId] = useState<string | null>(null);
+
+  const handleLoadSession = useCallback((sessionId: string) => {
+    setActiveView("chat");
+    setPendingSessionId(sessionId);
+    setActiveSessionId(sessionId);
+  }, []);
 
   // Apply all visual settings (font, spacing, overlay, etc.) to DOM
   useApplyVisualSettings();
@@ -277,15 +296,6 @@ function AppShell() {
                 style={{ color: tokens.colorNeutralForegroundOnBrand }}
               />
 
-              {/* Preferences */}
-              <Button
-                appearance="subtle"
-                icon={<Settings24Regular />}
-                onClick={() => setShowPrefs(true)}
-                aria-label={i18nValue.t.accessibilityPrefs}
-                style={{ color: tokens.colorNeutralForegroundOnBrand }}
-              />
-
               {/* User avatar */}
               {user && (
                 <Avatar
@@ -343,8 +353,20 @@ function AppShell() {
                   collapsed={sidebarCollapsed}
                   onToggle={() => setSidebarCollapsed(!sidebarCollapsed)}
                 />
+                <HistorySidebar
+                  collapsed={historySidebarCollapsed}
+                  onToggle={() => setHistorySidebarCollapsed(!historySidebarCollapsed)}
+                  onLoadSession={handleLoadSession}
+                  onNavigate={setActiveView}
+                  activeSessionId={activeSessionId}
+                />
                 <main className={styles.main} role="main">
-                  <ViewContent activeView={activeView} onStartOnboarding={startOnboarding} />
+                  <ViewContent
+                    activeView={activeView}
+                    onStartOnboarding={startOnboarding}
+                    loadSessionId={pendingSessionId}
+                    onSessionLoaded={() => setPendingSessionId(null)}
+                  />
                 </main>
               </>
             )
@@ -381,8 +403,20 @@ function AppShell() {
                       collapsed={sidebarCollapsed}
                       onToggle={() => setSidebarCollapsed(!sidebarCollapsed)}
                     />
+                    <HistorySidebar
+                      collapsed={historySidebarCollapsed}
+                      onToggle={() => setHistorySidebarCollapsed(!historySidebarCollapsed)}
+                      onLoadSession={handleLoadSession}
+                      onNavigate={setActiveView}
+                      activeSessionId={activeSessionId}
+                    />
                     <main className={styles.main} role="main">
-                      <ViewContent activeView={activeView} onStartOnboarding={startOnboarding} />
+                      <ViewContent
+                        activeView={activeView}
+                        onStartOnboarding={startOnboarding}
+                        loadSessionId={pendingSessionId}
+                        onSessionLoaded={() => setPendingSessionId(null)}
+                      />
                     </main>
                   </>
                 )}
@@ -395,10 +429,6 @@ function AppShell() {
           )}
         </div>
 
-        {/* ── Preferences drawer ─────────────────────────────────────── */}
-        {showPrefs && (
-          <PreferencesPanel isOpen={showPrefs} onClose={() => setShowPrefs(false)} />
-        )}
       </div>
       </I18nProvider>
     </FluentProvider>

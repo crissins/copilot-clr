@@ -21,6 +21,8 @@ export interface AppI18n {
     taskDecomposer: string;
     accessibilityHub: string;
     speechAssistant: string;
+    avatar: string;
+    voiceLive: string;
     feedback: string;
     settings: string;
     collapseNav: string;
@@ -104,6 +106,8 @@ const en: AppI18n = {
     taskDecomposer: "Task Decomposer",
     accessibilityHub: "Accessibility Hub",
     speechAssistant: "Speech Assistant",
+    avatar: "Talking Avatar",
+    voiceLive: "Voice Live",
     feedback: "Feedback",
     settings: "Settings",
     collapseNav: "Collapse navigation",
@@ -178,6 +182,8 @@ const es: AppI18n = {
     taskDecomposer: "Descomponer tareas",
     accessibilityHub: "Centro de accesibilidad",
     speechAssistant: "Asistente de voz",
+    avatar: "Avatar parlante",
+    voiceLive: "Voz en vivo",
     feedback: "Comentarios",
     settings: "Configuración",
     collapseNav: "Contraer navegación",
@@ -252,6 +258,8 @@ const it: AppI18n = {
     taskDecomposer: "Scomponi attività",
     accessibilityHub: "Centro accessibilità",
     speechAssistant: "Assistente vocale",
+    avatar: "Avatar parlante",
+    voiceLive: "Voce dal vivo",
     feedback: "Feedback",
     settings: "Impostazioni",
     collapseNav: "Comprimi navigazione",
@@ -326,6 +334,8 @@ const pt: AppI18n = {
     taskDecomposer: "Decompor tarefas",
     accessibilityHub: "Centro de acessibilidade",
     speechAssistant: "Assistente de voz",
+    avatar: "Avatar falante",
+    voiceLive: "Voz ao vivo",
     feedback: "Feedback",
     settings: "Configurações",
     collapseNav: "Recolher navegação",
@@ -400,6 +410,8 @@ const de: AppI18n = {
     taskDecomposer: "Aufgaben aufteilen",
     accessibilityHub: "Barrierefreiheits-Center",
     speechAssistant: "Sprachassistent",
+    avatar: "Sprechender Avatar",
+    voiceLive: "Stimme live",
     feedback: "Feedback",
     settings: "Einstellungen",
     collapseNav: "Navigation einklappen",
@@ -474,6 +486,8 @@ const ja: AppI18n = {
     taskDecomposer: "タスク分割",
     accessibilityHub: "アクセシビリティ ハブ",
     speechAssistant: "音声アシスタント",
+    avatar: "トーキングアバター",
+    voiceLive: "ボイスライブ",
     feedback: "フィードバック",
     settings: "設定",
     collapseNav: "ナビゲーションを折りたたむ",

@@ -8,18 +8,20 @@ import {
   mergeClasses,
 } from "@fluentui/react-components";
 import {
-  Chat24Regular,
-  DocumentBulletList24Regular,
-  TextGrammarSettings24Regular,
-  CalendarClock24Regular,
-  VideoClip24Regular,
-  TaskListSquareLtr24Regular,
-  PersonVoice24Regular,
-  Record24Regular,
+  Chat28Regular,
+  Document28Regular,
+  TextBulletListSquare28Regular,
+  Clock28Regular,
+  VideoClip28Regular,
+  TasksApp28Regular,
+  Accessibility28Regular,
+  Record28Regular,
+  Person28Regular,
+  Headset28Regular,
   ChevronLeft24Regular,
   ChevronRight24Regular,
-  Settings24Regular,
-  ChatBubblesQuestion24Regular,
+  Settings28Regular,
+  ChatBubblesQuestion28Regular,
 } from "@fluentui/react-icons";
 import { useI18n } from "../I18nContext";
 
@@ -30,15 +32,17 @@ export interface NavItem {
 }
 
 const NAV_ITEM_ICONS: Record<string, JSX.Element> = {
-  chat: <Chat24Regular />,
-  feature1: <DocumentBulletList24Regular />,
-  feature2: <TextGrammarSettings24Regular />,
-  feature3: <CalendarClock24Regular />,  // Reminders & Focus
-  feature4: <VideoClip24Regular />,
-  feature5: <TaskListSquareLtr24Regular />,  // Task Decomposer
-  feature6: <PersonVoice24Regular />,
-  feature7: <Record24Regular />,
-  feedback: <ChatBubblesQuestion24Regular />,
+  chat: <Chat28Regular />,
+  feature1: <Document28Regular />,
+  feature2: <TextBulletListSquare28Regular />,
+  feature3: <Clock28Regular />,  // Reminders & Focus
+  feature4: <VideoClip28Regular />,
+  feature5: <TasksApp28Regular />,  // Task Decomposer
+  feature6: <Accessibility28Regular />,
+  feature7: <Record28Regular />,
+  avatar: <Person28Regular />,
+  voicelive: <Headset28Regular />,
+  feedback: <ChatBubblesQuestion28Regular />,
 };
 
 interface SidebarProps {
@@ -77,7 +81,7 @@ const useStyles = makeStyles({
   navBtn: {
     justifyContent: "flex-start",
     width: "100%",
-    height: "40px",
+    height: "44px",
     ...shorthands.borderRadius(tokens.borderRadiusMedium),
     fontWeight: tokens.fontWeightRegular,
     color: tokens.colorNeutralForeground2,
@@ -98,8 +102,8 @@ const useStyles = makeStyles({
   },
   navBtnCollapsed: {
     justifyContent: "center",
-    minWidth: "36px",
-    width: "36px",
+    minWidth: "40px",
+    width: "40px",
     ...shorthands.padding("0"),
   },
   bottomSection: {
@@ -129,11 +133,13 @@ export function Sidebar({ activeView, onNavigate, collapsed = false, onToggle }:
     { id: "feature5", label: t.nav.taskDecomposer,    icon: NAV_ITEM_ICONS.feature5 },
     { id: "feature6", label: t.nav.accessibilityHub,  icon: NAV_ITEM_ICONS.feature6 },
     { id: "feature7", label: t.nav.speechAssistant,   icon: NAV_ITEM_ICONS.feature7 },
+    { id: "avatar",   label: t.nav.avatar,             icon: NAV_ITEM_ICONS.avatar },
+    { id: "voicelive", label: t.nav.voiceLive,          icon: NAV_ITEM_ICONS.voicelive },
     { id: "feedback",  label: t.nav.feedback,           icon: NAV_ITEM_ICONS.feedback },
   ];
 
   const BOTTOM_ITEMS: NavItem[] = [
-    { id: "settings", label: t.nav.settings, icon: <Settings24Regular /> },
+    { id: "settings", label: t.nav.settings, icon: <Settings28Regular /> },
   ];
 
   return (
