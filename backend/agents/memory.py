@@ -17,6 +17,7 @@ from agent_framework import (
     BaseHistoryProvider,
     Message,
     SessionContext,
+    AgentSession
 )
 
 from agents.agent_tools import get_messages_container

@@ -42,7 +42,7 @@ messages_container = database.get_container_client("messages")
 
 def get_user_id(req: func.HttpRequest) -> str:
     """Extract and validate user ID from Entra ID token."""
-    client_id = os.environ.get("ENTRA_CLIENT_ID", "")
+    client_id = os.environ.get("AZURE_CLIENT_ID", "")
     if not client_id:
         # Dev mode: allow anonymous with a default user
         return req.headers.get("X-User-Id", "anonymous")

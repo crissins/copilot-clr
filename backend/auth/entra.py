@@ -54,6 +54,10 @@ def validate_token(token: str, client_id: str) -> dict:
         AuthError: If token is invalid
     """
     try:
+        # Pre-decode without verification to extract tenant ID for issuer validation
+        unverified_claims = jwt.decode(token, options={"verify_signature": False})
+        tenant_id = unverified_claims.get("tid", "common")
+
         jwk_client = _get_jwk_client()
         signing_key = jwk_client.get_signing_key_from_jwt(token)
 

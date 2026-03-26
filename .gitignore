@@ -19,7 +19,7 @@ local.settings.json
 bin/
 obj/
 
-# IDE
+# IDEs
 .vscode/
 .idea/
 *.swp
@@ -28,6 +28,7 @@ obj/
 # OS
 .DS_Store
 Thumbs.db
+Desktop.ini
 
 # Secrets
 *.pem
