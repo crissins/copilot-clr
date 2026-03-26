@@ -142,6 +142,7 @@ if _LOCAL_DEV or not os.environ.get("COSMOS_DB_ENDPOINT"):
     _reminders_container: _InMemoryContainer | ContainerProxy = _InMemoryContainer()
     _tasks_container: _InMemoryContainer | ContainerProxy = _InMemoryContainer()
     _feedback_container: _InMemoryContainer | ContainerProxy = _InMemoryContainer()
+    _reports_container: _InMemoryContainer | ContainerProxy = _InMemoryContainer()
 else:
     _credential = DefaultAzureCredential()
     _cosmos_client = CosmosClient(
@@ -158,6 +159,7 @@ else:
     _reminders_container = _database.get_container_client("reminders")
     _tasks_container = _database.get_container_client("tasks")
     _feedback_container = _database.get_container_client("feedback")
+    _reports_container = _database.get_container_client("reports")
 
 
 # ---------------------------------------------------------------------------
@@ -876,6 +878,66 @@ def get_prefs(req: Request) -> JSONResponse:
 @app.put("/api/prefs")
 async def update_prefs(req: Request) -> JSONResponse:
     return await update_settings(req)
+
+
+# ============================================================================
+# POST /api/report — Flag a message for human review (RAI accountability)
+# ============================================================================
+
+@app.post("/api/report")
+async def report_message(req: Request) -> JSONResponse:
+    """Store a user-reported message in the reports container.
+
+    Requires a valid Entra ID token. Stores messageId, sessionId, and reason
+    with a 90-day TTL for human review.
+    """
+    try:
+        user_id = _get_user_id(req.headers.get("Authorization"))
+    except AuthError as e:
+        return JSONResponse({"error": str(e)}, status_code=401)
+
+    try:
+        body = await req.json()
+    except Exception:
+        return JSONResponse({"error": "Invalid JSON"}, status_code=400)
+
+    message_id = body.get("messageId", "").strip()
+    session_id = body.get("sessionId", "").strip()
+    reason = body.get("reason", "").strip()
+
+    if not message_id or not session_id:
+        return JSONResponse(
+            {"error": "messageId and sessionId are required."}, status_code=400
+        )
+    if not reason:
+        return JSONResponse({"error": "reason is required."}, status_code=400)
+    if len(reason) > 2000:
+        return JSONResponse(
+            {"error": "reason must be under 2000 characters."}, status_code=400
+        )
+
+    report_id = str(uuid.uuid4())
+    report_doc = {
+        "id": report_id,
+        "userId": user_id,
+        "sessionId": session_id,
+        "messageId": message_id,
+        "reason": reason,
+        "timestamp": datetime.now(timezone.utc).isoformat(),
+        "ttl": 90 * 24 * 60 * 60,  # 90-day TTL
+    }
+
+    try:
+        _reports_container.upsert_item(report_doc)
+    except Exception:
+        logger.exception("Failed to store report for user=%s message=%s", user_id, message_id)
+        return JSONResponse({"error": "Failed to store report."}, status_code=502)
+
+    logger.info(
+        "report_created user=%s session=%s message=%s report=%s",
+        user_id, session_id, message_id, report_id,
+    )
+    return JSONResponse({"id": report_id, "status": "created"}, status_code=201)
 
 
 # ============================================================================

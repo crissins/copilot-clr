@@ -49,9 +49,15 @@ export function useAuth() {
       const msg = error instanceof Error ? error.message : String(error);
       if (msg.includes("AADSTS70011") || msg.includes("invalid_scope")) {
         console.warn(
-          "Custom API scope not configured yet (AADSTS70011). " +
-          "Auth will be skipped until the deployment script finishes. " +
-          "Run 'azd up' or redeploy to fix."
+          "[Auth] Custom API scope not configured yet (AADSTS70011).\n" +
+          "This causes GET /api/settings to return 401 because no valid token can be acquired.\n" +
+          "To fix:\n" +
+          "  1. Open Azure Portal → App Registrations → your app → 'Expose an API'\n" +
+          "  2. Set an Application ID URI (e.g. api://<client-id>)\n" +
+          "  3. Add a scope (e.g. 'access_as_user') and grant Admin Consent\n" +
+          "  4. Update VITE_API_SCOPE in your .env to match the full scope URI\n" +
+          "  5. Redeploy with 'azd up' or restart the dev server\n" +
+          "Auth will be skipped until scope configuration is complete."
         );
       } else {
         console.error("Failed to acquire token:", error);
