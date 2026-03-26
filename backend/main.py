@@ -176,7 +176,7 @@ def _get_user_id(authorization: str | None) -> str:
     if _LOCAL_DEV:
         return "local-dev-user"
 
-    client_id = os.environ.get("AZURE_CLIENT_ID", "")
+    client_id = os.environ.get("ENTRA_CLIENT_ID", "")
     if not client_id:
         return "anonymous"
 
