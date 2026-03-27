@@ -66,8 +66,10 @@ def _get_service_client_sync():
 
 def get_client_access_url(user_id: str) -> str:
     """Generate a Web PubSub client access URL with userId claim."""
+    logger.info("webpubsub_get_url user=%s", user_id)
     client = _get_service_client_sync()
     token = client.get_client_access_token(user_id=user_id)
+    logger.info("webpubsub_url_ok user=%s", user_id)
     return token["url"]
 
 
@@ -114,13 +116,17 @@ class VoiceSession:
 
     async def start(self) -> None:
         """Start Voice Live session in a background task."""
+        logger.info(
+            "voice_session_start conn=%s user=%s", self.connection_id, self.user_id,
+        )
         self._lifecycle_task = asyncio.create_task(
             self._lifecycle(), name=f"voice-{self.connection_id}"
         )
         try:
             await asyncio.wait_for(self._ready.wait(), timeout=30.0)
+            logger.info("voice_session_ready conn=%s", self.connection_id)
         except asyncio.TimeoutError:
-            logger.error("Voice Live timeout conn=%s", self.connection_id)
+            logger.error("voice_session_timeout conn=%s user=%s", self.connection_id, self.user_id)
             await self._send({
                 "type": "error",
                 "error": {"message": "Voice connection timeout"},
@@ -181,6 +187,12 @@ class VoiceSession:
 
         voicelive_endpoint = os.environ.get("VOICELIVE_ENDPOINT", "")
         agent_config = get_voicelive_agent_config()
+
+        logger.info(
+            "voice_lifecycle_start conn=%s VOICELIVE_ENDPOINT=%s",
+            self.connection_id,
+            "set" if voicelive_endpoint else "MISSING",
+        )
 
         try:
             async with voicelive_connect(

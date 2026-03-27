@@ -90,8 +90,21 @@ async def create_avatar_session(user_prefs: dict | None = None) -> dict[str, Any
     """
     speech_region = os.environ.get("SPEECH_REGION", "eastus2")
     speech_endpoint = os.environ.get("SPEECH_ENDPOINT", "")
+    speech_resource_id = os.environ.get("SPEECH_RESOURCE_ID", "")
+
+    logger.info(
+        "avatar_session_request LOCAL_DEV=%s SPEECH_REGION=%s "
+        "SPEECH_ENDPOINT=%s SPEECH_RESOURCE_ID=%s",
+        _LOCAL_DEV, speech_region,
+        "set" if speech_endpoint else "MISSING",
+        "set" if speech_resource_id else "MISSING",
+    )
 
     if _LOCAL_DEV or not speech_endpoint:
+        logger.warning(
+            "avatar_unavailable reason=%s",
+            "LOCAL_DEV" if _LOCAL_DEV else "SPEECH_ENDPOINT not set",
+        )
         return {
             "status": "unavailable",
             "message": "Avatar service requires Speech Service in an avatar-supported region.",
@@ -99,12 +112,17 @@ async def create_avatar_session(user_prefs: dict | None = None) -> dict[str, Any
         }
 
     if speech_region not in AVATAR_REGIONS:
+        logger.warning(
+            "avatar_unsupported_region region=%s supported=%s",
+            speech_region, AVATAR_REGIONS,
+        )
         return {
             "status": "unsupported_region",
             "message": f"Region {speech_region} does not support avatars. Use one of: {AVATAR_REGIONS}",
         }
 
     try:
+        logger.info("avatar_session_auth acquiring token for region=%s", speech_region)
         token = DefaultAzureCredential().get_token("https://cognitiveservices.azure.com/.default")
         speech_resource_id = os.environ.get("SPEECH_RESOURCE_ID", "")
 
@@ -113,6 +131,11 @@ async def create_avatar_session(user_prefs: dict | None = None) -> dict[str, Any
         # Return auth token in Speech SDK format (aad#resource_id#token)
         # Never expose raw Entra tokens directly to the client
         auth_token = f"aad#{speech_resource_id}#{token.token}" if speech_resource_id else token.token
+        logger.info(
+            "avatar_session_ready region=%s character=%s auth_format=%s",
+            speech_region, config.get("character"),
+            "aad#resource_id" if speech_resource_id else "raw_token",
+        )
 
         return {
             "status": "ready",
@@ -123,7 +146,7 @@ async def create_avatar_session(user_prefs: dict | None = None) -> dict[str, Any
         }
 
     except Exception:
-        logger.exception("Failed to create avatar session")
+        logger.exception("avatar_session_failed region=%s", speech_region)
         return {"status": "error", "message": "Failed to initialize avatar session."}
 
 

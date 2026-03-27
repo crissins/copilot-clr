@@ -720,18 +720,32 @@ body.high-contrast {
   color: var(--calm-green);
 }
 
-/* ── Scrollbar ───────────────────────────────────────────────────────────── */
-.message-list::-webkit-scrollbar {
-  width: 6px;
+/* ── Scrollbar — global thin / hidden scrollbars ─────────────────────────── */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: transparent transparent;
 }
 
-.message-list::-webkit-scrollbar-track {
+*:hover {
+  scrollbar-color: var(--border) transparent;
+}
+
+*::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+*::-webkit-scrollbar-track {
   background: transparent;
 }
 
-.message-list::-webkit-scrollbar-thumb {
-  background: var(--border);
+*::-webkit-scrollbar-thumb {
+  background: transparent;
   border-radius: 3px;
+}
+
+*:hover::-webkit-scrollbar-thumb {
+  background: var(--border);
 }
 
 /* ── Accessibility: Focus Indicators ─────────────────────────────────────── */

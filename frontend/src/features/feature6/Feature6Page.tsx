@@ -38,7 +38,6 @@ const useStyles = makeStyles({
     display: "flex",
     flexDirection: "column",
     gap: "20px",
-    maxWidth: "900px",
     marginLeft: "auto",
     marginRight: "auto",
     ...shorthands.padding("24px"),
@@ -49,7 +48,7 @@ const useStyles = makeStyles({
   headerLeft: { display: "flex", alignItems: "center", gap: "12px" },
   statsGrid: {
     display: "grid",
-    gridTemplateColumns: "repeat(auto-fill, minmax(180px, 1fr))",
+    gridTemplateColumns: "repeat(auto-fill, minmax(140px, 1fr))",
     gap: "12px",
   },
   statCard: {

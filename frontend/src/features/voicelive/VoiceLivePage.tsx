@@ -405,12 +405,15 @@ export function VoiceLivePage() {
 
     try {
       const token = await getAccessToken();
+      console.log("[VoiceLive] Negotiating Web PubSub URL...");
       const { url } = await apiClient.negotiateVoice(token);
+      console.log("[VoiceLive] Got PubSub URL, connecting WebSocket...");
 
       const ws = new WebSocket(url, "json.webpubsub.azure.v1");
       wsRef.current = ws;
 
       ws.onopen = () => {
+        console.log("[VoiceLive] WebSocket opened");
         setStatus("WebSocket connected. Waiting for Voice Live...");
       };
 
@@ -425,8 +428,7 @@ export function VoiceLivePage() {
               : wrapper.data;
             handleWsMessage(new MessageEvent("message", { data: JSON.stringify(inner) }));
           } else if (wrapper.type === "system" && wrapper.event === "connected") {
-            // System "connected" event from Web PubSub
-            // Voice Live session start is handled server-side
+            console.log("[VoiceLive] PubSub system connected event, connectionId:", wrapper.connectionId);
           } else {
             // Try as direct message
             handleWsMessage(event);
@@ -436,12 +438,14 @@ export function VoiceLivePage() {
         }
       };
 
-      ws.onerror = () => {
+      ws.onerror = (ev) => {
+        console.error("[VoiceLive] WebSocket error:", ev);
         setConnectionState("error");
         setStatus("Connection error. Please try again.");
       };
 
-      ws.onclose = () => {
+      ws.onclose = (ev) => {
+        console.warn("[VoiceLive] WebSocket closed — code:", ev.code, "reason:", ev.reason, "wasClean:", ev.wasClean);
         setConnectionState("disconnected");
         setStatus("Disconnected. Press Connect to start again.");
         stopMicStream();
@@ -450,6 +454,8 @@ export function VoiceLivePage() {
       // Start microphone capture
       await startMicStream(ws);
     } catch (err: any) {
+      console.error("[VoiceLive] Connection failed:", err);
+      console.error("[VoiceLive] Error name:", err.name, "message:", err.message, "status:", err.status);
       setConnectionState("error");
       const msg = err.message || "Failed to connect";
       if (msg.includes("503") || msg.includes("not configured") || msg.includes("Web PubSub")) {

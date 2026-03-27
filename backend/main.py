@@ -53,7 +53,38 @@ logger = logging.getLogger(__name__)
 # and the realtime WebSocket endpoint stubs out the OpenAI connection.
 _LOCAL_DEV = os.environ.get("LOCAL_DEV", "").lower() in ("1", "true", "yes")
 
+# ---------------------------------------------------------------------------
+# Observability — Azure Monitor / Application Insights + OpenTelemetry
+# ---------------------------------------------------------------------------
+_APPINSIGHTS_CONN = os.environ.get("APPLICATIONINSIGHTS_CONNECTION_STRING", "")
+if _APPINSIGHTS_CONN and not _LOCAL_DEV:
+    try:
+        from azure.monitor.opentelemetry import configure_azure_monitor
+
+        configure_azure_monitor(
+            connection_string=_APPINSIGHTS_CONN,
+            enable_live_metrics=True,
+        )
+        logger.info("Azure Monitor OpenTelemetry configured (App Insights enabled)")
+    except Exception:
+        logger.warning("Failed to configure Azure Monitor — continuing without telemetry")
+else:
+    if _LOCAL_DEV:
+        logger.info("LOCAL_DEV mode — App Insights telemetry disabled")
+    else:
+        logger.info("APPLICATIONINSIGHTS_CONNECTION_STRING not set — telemetry disabled")
+
 app = FastAPI(title="Copilot CLR API", version="1.0.0")
+
+# Instrument FastAPI with OpenTelemetry (auto-traces all requests)
+if _APPINSIGHTS_CONN and not _LOCAL_DEV:
+    try:
+        from opentelemetry.instrumentation.fastapi import FastAPIInstrumentor
+
+        FastAPIInstrumentor.instrument_app(app)
+        logger.info("FastAPI OpenTelemetry instrumentation active")
+    except Exception:
+        logger.warning("Failed to instrument FastAPI with OpenTelemetry")
 
 # ---------------------------------------------------------------------------
 # CORS
@@ -1938,7 +1969,19 @@ async def voice_negotiate(req: Request) -> JSONResponse:
 
     pubsub_endpoint = os.environ.get("WEBPUBSUB_ENDPOINT", "")
     pubsub_conn_str = os.environ.get("WEBPUBSUB_CONNECTION_STRING", "")
+    voicelive_endpoint = os.environ.get("VOICELIVE_ENDPOINT", "")
+
+    logger.info(
+        "voice_negotiate user=%s WEBPUBSUB_ENDPOINT=%s "
+        "WEBPUBSUB_CONNECTION_STRING=%s VOICELIVE_ENDPOINT=%s",
+        user_id,
+        "set" if pubsub_endpoint else "MISSING",
+        "set" if pubsub_conn_str else "MISSING",
+        "set" if voicelive_endpoint else "MISSING",
+    )
+
     if not pubsub_endpoint and not pubsub_conn_str:
+        logger.warning("voice_negotiate_failed reason=Web PubSub not configured")
         return JSONResponse(
             {"error": "Web PubSub not configured"},
             status_code=503,
@@ -1947,9 +1990,10 @@ async def voice_negotiate(req: Request) -> JSONResponse:
     try:
         from services.webpubsub import get_client_access_url  # noqa: PLC0415
         url = await asyncio.to_thread(get_client_access_url, user_id)
+        logger.info("voice_negotiate_ok user=%s url_length=%d", user_id, len(url))
         return JSONResponse({"url": url})
     except Exception:
-        logger.exception("Failed to generate Web PubSub URL")
+        logger.exception("voice_negotiate_failed user=%s", user_id)
         return JSONResponse(
             {"error": "Voice service unavailable"}, status_code=502,
         )

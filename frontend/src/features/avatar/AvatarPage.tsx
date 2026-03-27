@@ -174,11 +174,15 @@ export function AvatarPage() {
     setStatus("Requesting avatar session...");
     try {
       const token = await getAccessToken();
+      console.log("[Avatar] Requesting session from backend...");
       const result = await apiClient.createAvatarSession(token);
+      console.log("[Avatar] Session response:", JSON.stringify(result, null, 2));
       setSessionData(result);
 
       if (result.status !== "ready") {
-        setError(result.message || "Avatar session not available.");
+        const detail = result.message || "Avatar session not available.";
+        console.warn("[Avatar] Session not ready:", result.status, detail, result.supported_regions || "");
+        setError(detail);
         setStatus("Avatar session unavailable");
         setConnecting(false);
         return;
@@ -186,6 +190,7 @@ export function AvatarPage() {
 
       // Set up WebRTC peer connection
       setStatus("Setting up WebRTC connection...");
+      console.log("[Avatar] Got auth token, region:", result.region);
       const speechConfig = speechSdk.SpeechConfig.fromAuthorizationToken(
         result.authToken!,
         result.region!,
@@ -198,6 +203,7 @@ export function AvatarPage() {
         videoFormat,
       );
       avatarConfig.customized = result.avatarConfig?.isPhotoAvatar || false;
+      console.log("[Avatar] Avatar config:", result.avatarConfig?.character, result.avatarConfig?.style);
 
       const synthesizer = new speechSdk.AvatarSynthesizer(speechConfig, avatarConfig);
       synthesizerRef.current = synthesizer;
@@ -208,23 +214,42 @@ export function AvatarPage() {
       peerConnectionRef.current = pc;
 
       pc.ontrack = (event) => {
+        console.log("[Avatar] ontrack — got media stream, kind:", event.track.kind);
         if (videoRef.current && event.streams[0]) {
           videoRef.current.srcObject = event.streams[0];
         }
       };
 
       pc.oniceconnectionstatechange = () => {
+        console.log("[Avatar] ICE state:", pc.iceConnectionState);
         if (pc.iceConnectionState === "disconnected" || pc.iceConnectionState === "failed") {
           setConnected(false);
+          setError(`WebRTC connection ${pc.iceConnectionState}. Try reconnecting.`);
           setStatus("Connection lost. Try reconnecting.");
+        } else if (pc.iceConnectionState === "connected") {
+          console.log("[Avatar] ICE connected successfully");
         }
       };
 
+      pc.onicegatheringstatechange = () => {
+        console.log("[Avatar] ICE gathering state:", pc.iceGatheringState);
+      };
+
+      pc.onconnectionstatechange = () => {
+        console.log("[Avatar] Connection state:", pc.connectionState);
+        if (pc.connectionState === "failed") {
+          setError("WebRTC peer connection failed. Check network/firewall settings.");
+        }
+      };
+
+      console.log("[Avatar] Starting avatar async (WebRTC)...");
       await synthesizer.startAvatarAsync(pc);
+      console.log("[Avatar] Avatar connected successfully!");
       setConnected(true);
       setStatus("Avatar connected! Type something to make the avatar speak.");
     } catch (err: any) {
-      console.error("Avatar connection failed:", err);
+      console.error("[Avatar] Connection failed:", err);
+      console.error("[Avatar] Error name:", err.name, "message:", err.message);
       const msg = err.message || "Failed to connect avatar";
       if (msg.includes("Avatar session not available") || msg.includes("unavailable") || msg.includes("unsupported_region")) {
         setError("Avatar requires Azure Speech Service in a supported region (e.g., westus2, westeurope). Check your deployment configuration.");
