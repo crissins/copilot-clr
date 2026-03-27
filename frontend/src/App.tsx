@@ -117,7 +117,7 @@ function ViewContent({ activeView, onStartOnboarding, loadSessionId, onSessionLo
     case "voicelive": return <VoiceLivePage />;
     case "feedback": return <FeedbackPage />;
     case "settings": return <SettingsPage onStartOnboarding={onStartOnboarding} />;
-    default:         return <Chat loadSessionId={loadSessionId} onSessionLoaded={onSessionLoaded} />;
+    default:         return <Feature7Page />;
   }
 }
 

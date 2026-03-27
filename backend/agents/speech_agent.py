@@ -38,6 +38,7 @@ from agents.agent_tools import (
     update_task,
     delete_task,
     get_chat_history,
+    decompose_goal,
     set_tool_context,
 )
 
@@ -300,6 +301,7 @@ async def _run_agent_chat_async(
         update_task,
         delete_task,
         get_chat_history,
+        decompose_goal,
     ]
 
     # Providers:

@@ -55,6 +55,7 @@ import { FocusTimer } from "./FocusTimer";
 import { TaskBreakdown, type TaskStep } from "./TaskBreakdown";
 import { VoiceVisualizer } from "./VoiceVisualizer";
 import { CalmNotification } from "./CalmNotification";
+import { ReportButton } from "../../components/ReportButton";
 
 // ── Types ──────────────────────────────────────────────────────────────────
 
@@ -896,6 +897,7 @@ export function Feature7Page() {
                                   aria-label="Open in Immersive Reader"
                                 />
                               </Tooltip>
+                              <ReportButton messageId={turn.id} sessionId={sessionId ?? ""} />
                             </div>
                           </>
                         )}

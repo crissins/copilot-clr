@@ -332,3 +332,37 @@ def get_chat_history(limit: int = 10) -> str:
             "messages": [],
             "message": "Could not retrieve chat history.",
         })
+
+
+# ============================================================================
+# Tool: decompose_goal  (Task Decomposer agent)
+# ============================================================================
+
+def decompose_goal(goal: str, reading_level: str = "") -> str:
+    """Break down a complex goal into clear, numbered, time-boxed sub-tasks.
+
+    Use this when the user asks to break down, decompose, plan, or split a
+    complex task, project, or goal into smaller steps. Returns structured
+    steps with estimated duration, priority, and focus tips designed for
+    neurodiverse users.
+    """
+    import asyncio as _asyncio  # noqa: PLC0415
+    from agents.task_decomposer import decompose_task  # noqa: PLC0415
+
+    user_id = _user_id_var.get()
+
+    try:
+        result = _asyncio.get_event_loop().run_until_complete(
+            decompose_task(goal=goal, user_id=user_id, reading_level=reading_level)
+        )
+    except RuntimeError:
+        # If there's already a running loop, use asyncio.run in a thread
+        import concurrent.futures  # noqa: PLC0415
+
+        with concurrent.futures.ThreadPoolExecutor() as pool:
+            result = pool.submit(
+                _asyncio.run,
+                decompose_task(goal=goal, user_id=user_id, reading_level=reading_level),
+            ).result()
+
+    return json.dumps(result)
