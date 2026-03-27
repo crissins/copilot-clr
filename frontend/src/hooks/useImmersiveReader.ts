@@ -170,12 +170,14 @@ export function useImmersiveReader() {
           },
           onExit: () => {
             setIsOpen(false);
+            window.dispatchEvent(new Event("immersive-reader-closed"));
           },
         };
 
         // Pause any active TTS playback before opening Immersive Reader
         window.dispatchEvent(new Event("pause-all-tts"));
         setIsOpen(true);
+        window.dispatchEvent(new Event("immersive-reader-opened"));
         await launchAsync(irToken, subdomain, content, options);
       } catch (err: unknown) {
         setIsOpen(false);
@@ -190,6 +192,7 @@ export function useImmersiveReader() {
   const close = useCallback(() => {
     irClose();
     setIsOpen(false);
+    window.dispatchEvent(new Event("immersive-reader-closed"));
   }, []);
 
   return {

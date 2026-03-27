@@ -43,6 +43,7 @@ import { Feature7Page } from "./features/feature7/Feature7Page";
 import { AvatarPage } from "./features/avatar/AvatarPage";
 import { VoiceLivePage } from "./features/voicelive/VoiceLivePage";
 import { FeedbackPage } from "./components/FeedbackPage";
+import { FloatingChat } from "./components/FloatingChat";
 
 const LOCAL_DEV = import.meta.env.VITE_LOCAL_DEV === "true";
 
@@ -372,6 +373,7 @@ function AppShell() {
                     onSessionLoaded={() => setPendingSessionId(null)}
                   />
                 </main>
+                <FloatingChat />
               </>
             )
           ) : (
@@ -422,6 +424,7 @@ function AppShell() {
                         onSessionLoaded={() => setPendingSessionId(null)}
                       />
                     </main>
+                    <FloatingChat />
                   </>
                 )}
               </AuthenticatedTemplate>
