@@ -98,6 +98,10 @@
 }
 
 .lang-btn {
+  appearance: none;
+  -webkit-appearance: none;
+  box-sizing: border-box;
+  font: inherit;
   padding: 12px 24px;
   border-radius: 12px;
   border: 2px solid var(--border, #e0e0e0);
@@ -107,6 +111,10 @@
   cursor: pointer;
   transition: all 0.3s ease;
   min-width: 120px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  line-height: 1.2;
 }
 
 .lang-btn:hover,
@@ -188,6 +196,10 @@
 }
 
 .option-chip {
+  appearance: none;
+  -webkit-appearance: none;
+  box-sizing: border-box;
+  font: inherit;
   padding: 14px 24px;
   border-radius: 14px;
   border: 2px solid var(--border, #e0e0e0);
@@ -197,6 +209,10 @@
   cursor: pointer;
   transition: all 0.3s ease;
   min-width: 100px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  line-height: 1.25;
   opacity: 0;
   animation: fadeInScale 0.4s ease both;
 }
@@ -229,11 +245,13 @@
   align-items: center;
   justify-content: space-between;
   gap: 12px;
-  max-width: 400px;
+  width: 100%;
+  max-width: 460px;
   margin: 0 auto 16px;
   padding: 12px 16px;
   border-radius: 12px;
   border: 1px solid var(--border, #e0e0e0);
+  background: var(--colorNeutralBackground1, rgba(255, 255, 255, 0.72));
   opacity: 0;
   animation: fadeIn 0.5s ease both;
   min-height: 48px;

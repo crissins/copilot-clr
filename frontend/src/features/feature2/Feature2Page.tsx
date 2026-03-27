@@ -284,6 +284,10 @@ export function Feature2Page() {
           <Text size={500} weight="semibold">Adapted Versions</Text>
           {contentDetail.adaptations.map((adaptation) => {
             const profileInfo = PROFILES.find(p => p.value === adaptation.profile);
+            const originalWordCount = adaptation.originalWordCount ?? contentDetail.content.extractedText?.split(/\s+/).length ?? 0;
+            const adaptedWordCount = adaptation.adaptedWordCount ?? adaptation.adaptedText.split(/\s+/).length;
+            const reductionPercent = adaptation.reductionPercent ?? Math.round((1 - adaptedWordCount / Math.max(1, originalWordCount)) * 100);
+            const fallbackChangeSummary = `Original: ${originalWordCount} words -> Adapted: ${adaptedWordCount} words (${reductionPercent}% reduction). Content rewritten for ${profileInfo?.description || adaptation.profile} readers - vocabulary simplified, sentences shortened, and structure improved for clarity.`;
             return (
               <Card key={adaptation.id} style={{ padding: "16px" }}>
                 <CardHeader
@@ -326,11 +330,7 @@ export function Feature2Page() {
                   <div className={styles.explanationBar} style={{ marginTop: 12 }}>
                     <Text size={200}>
                       <strong>What changed:</strong>{" "}
-                      Original: {contentDetail.content.extractedText.split(/\s+/).length} words →
-                      Adapted: {adaptation.adaptedText.split(/\s+/).length} words
-                      ({Math.round((1 - adaptation.adaptedText.split(/\s+/).length / Math.max(1, contentDetail.content.extractedText.split(/\s+/).length)) * 100)}% reduction).
-                      Content rewritten for {profileInfo?.description || adaptation.profile} readers —
-                      vocabulary simplified, sentences shortened, and structure improved for clarity.
+                      {adaptation.changeSummary || fallbackChangeSummary}
                     </Text>
                   </div>
                 )}

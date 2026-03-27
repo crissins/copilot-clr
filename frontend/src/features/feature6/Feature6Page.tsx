@@ -147,6 +147,10 @@ export function Feature6Page() {
                 <Text size={200}>Messages</Text>
               </Card>
               <Card className={styles.statCard}>
+                <span className={styles.statValue}>{insights.totalTokensUsed.toLocaleString()}</span>
+                <Text size={200}>Tokens Used</Text>
+              </Card>
+              <Card className={styles.statCard}>
                 <span className={styles.statValue}>{insights.totalTaskPlans}</span>
                 <Text size={200}>Task Plans</Text>
               </Card>
@@ -155,12 +159,20 @@ export function Feature6Page() {
                 <Text size={200}>Steps Completed</Text>
               </Card>
               <Card className={styles.statCard}>
-                <span className={styles.statValue}>{Math.round(insights.completionRate * 100)}%</span>
+                <span className={styles.statValue}>{Math.round(insights.completionRate)}%</span>
                 <Text size={200}>Completion Rate</Text>
               </Card>
               <Card className={styles.statCard}>
                 <span className={styles.statValue}>{insights.totalUploads}</span>
                 <Text size={200}>Documents</Text>
+              </Card>
+              <Card className={styles.statCard}>
+                <span className={styles.statValue}>{insights.totalAdaptations}</span>
+                <Text size={200}>Adaptations</Text>
+              </Card>
+              <Card className={styles.statCard}>
+                <span className={styles.statValue}>{insights.wordsSaved.toLocaleString()}</span>
+                <Text size={200}>Words Saved</Text>
               </Card>
             </div>
           </div>

@@ -34,10 +34,9 @@ import {
   Clock24Regular,
   Info24Regular,
 } from "@fluentui/react-icons";
-import { useMsal } from "@azure/msal-react";
 import { apiClient } from "../../services/api";
 import type { TaskPlan, TaskStep } from "../../services/api";
-import { apiRequest } from "../../auth/msalConfig";
+import { useAuth } from "../../hooks/useAuth";
 
 const useStyles = makeStyles({
   container: {
@@ -151,7 +150,7 @@ const PRIORITY_COLOR: Record<string, "important" | "informative" | "subtle"> = {
 
 export function Feature5Page() {
   const styles = useStyles();
-  const { instance, accounts } = useMsal();
+  const { getAccessToken } = useAuth();
 
   const [goal, setGoal] = useState("");
   const [readingLevel, setReadingLevel] = useState("");
@@ -161,18 +160,7 @@ export function Feature5Page() {
   const [history, setHistory] = useState<TaskPlan[]>([]);
   const [showHistory, setShowHistory] = useState(false);
 
-  const getToken = useCallback(async (): Promise<string | null> => {
-    if (!accounts.length) return null;
-    try {
-      const response = await instance.acquireTokenSilent({
-        ...apiRequest,
-        account: accounts[0],
-      });
-      return response.accessToken;
-    } catch {
-      return null;
-    }
-  }, [instance, accounts]);
+  const getToken = useCallback(async (): Promise<string | null> => getAccessToken(), [getAccessToken]);
 
   // Load history on mount
   useEffect(() => {

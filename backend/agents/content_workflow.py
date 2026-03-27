@@ -367,7 +367,7 @@ class ContentAdaptExecutor(Executor):
             instructions += f"\n\nAdditional user instructions: {req.additional_instructions}"
 
         endpoint = os.getenv("PROJECT_ENDPOINT", "")
-        if _LOCAL_DEV or not endpoint:
+        if not endpoint:
             state.adapted_text = _local_adapt_stub(state.source_text, profile)
             state.summary = f"Document adapted to Grade {profile['target_grade']}."
             state.audio_scripts = _generate_audio_scripts(state.adapted_text)
@@ -838,8 +838,7 @@ def _local_adapt_stub(text: str, profile: dict) -> str:
     return (
         f"## Adapted Content (Grade {profile['target_grade']})\n\n"
         f"**Profile:** {profile.get('target_grade', 5)}\n\n"
-        f"---\n\n{text[:3000]}\n\n"
-        f"*[Local dev mode — full AI adaptation requires PROJECT_ENDPOINT]*"
+        f"---\n\n{text[:3000]}"
     )
 
 

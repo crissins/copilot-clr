@@ -215,14 +215,32 @@ async def adapt_content_endpoint(content_id: str, req: Request) -> JSONResponse:
     if not source_text:
         return JSONResponse({"error": "No extracted text available."}, status_code=400)
 
+    user_prefs = None
+    try:
+        from agents.agent_tools import get_preferences_container
+
+        prefs_container = get_preferences_container()
+        if prefs_container is not None:
+            user_prefs = prefs_container.read_item(item=user_id, partition_key=user_id)
+    except Exception:
+        logger.debug("No user preferences found for content adaptation user=%s", user_id)
+
     start = time.monotonic()
-    from services.content_adapter import adapt_content
+    from services.content_adapter import adapt_content, build_change_metrics
     result = await adapt_content(
         source_text=source_text,
         profile=profile,
+        user_prefs=user_prefs,
         content_id=content_id,
     )
     adapt_ms = int((time.monotonic() - start) * 1000)
+    profile_description = result.get("profile_description", "") or profile
+    change_metrics = build_change_metrics(
+        source_text=source_text,
+        adapted_text=result.get("adapted_text", ""),
+        profile=profile,
+        profile_description=profile_description,
+    )
 
     # Store adapted version
     adapted_id = str(uuid.uuid4())
@@ -233,6 +251,10 @@ async def adapt_content_endpoint(content_id: str, req: Request) -> JSONResponse:
         "profile": profile,
         "adaptedText": result.get("adapted_text", ""),
         "summary": result.get("summary", ""),
+        "changeSummary": result.get("change_summary", change_metrics["changeSummary"]),
+        "originalWordCount": change_metrics["originalWordCount"],
+        "adaptedWordCount": change_metrics["adaptedWordCount"],
+        "reductionPercent": change_metrics["reductionPercent"],
         "audioScripts": result.get("audio_scripts", []),
         "tasks": result.get("tasks", []),
         "sourceAnalysis": result.get("source_analysis", {}),
@@ -341,6 +363,10 @@ def get_content(content_id: str, req: Request) -> JSONResponse:
                 "id": a["id"],
                 "profile": a.get("profile", ""),
                 "summary": a.get("summary", ""),
+                "changeSummary": a.get("changeSummary", ""),
+                "originalWordCount": a.get("originalWordCount", 0),
+                "adaptedWordCount": a.get("adaptedWordCount", 0),
+                "reductionPercent": a.get("reductionPercent", 0),
                 "adaptedText": a.get("adaptedText", ""),
                 "audioScripts": a.get("audioScripts", []),
                 "tasks": a.get("tasks", []),

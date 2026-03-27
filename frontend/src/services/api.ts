@@ -643,6 +643,10 @@ interface ContentDetail {
     id: string;
     profile: string;
     summary: string;
+    changeSummary?: string;
+    originalWordCount?: number;
+    adaptedWordCount?: number;
+    reductionPercent?: number;
     adaptedText: string;
     createdAt: string;
   }>;
@@ -683,11 +687,14 @@ interface Reminder {
 interface UserInsights {
   totalSessions: number;
   totalMessages: number;
+  totalTokensUsed: number;
   totalTaskPlans: number;
   totalSteps: number;
   completedSteps: number;
   completionRate: number;
   totalUploads: number;
+  totalAdaptations: number;
+  wordsSaved: number;
   preferredReadingLevel: string;
   readingLevelsUsed: Record<string, number>;
   suggestions: string[];

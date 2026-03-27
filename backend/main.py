@@ -944,63 +944,6 @@ async def report_message(req: Request) -> JSONResponse:
 # POST /api/task-plans/decompose — Break a complex goal into time-boxed steps
 # ============================================================================
 
-@app.post("/api/task-plans/decompose")
-async def decompose_goal(req: Request) -> JSONResponse:
-    """Decompose a complex goal into numbered, time-boxed sub-tasks."""
-    try:
-        user_id = _get_user_id(req.headers.get("Authorization"))
-    except AuthError as e:
-        return JSONResponse({"error": str(e)}, status_code=401)
-
-    try:
-        body = await req.json()
-    except Exception:
-        return JSONResponse({"error": "Invalid JSON"}, status_code=400)
-
-    goal = body.get("goal", "").strip()
-    reading_level = body.get("readingLevel", "")
-
-    if not goal:
-        return JSONResponse({"error": "Goal is required"}, status_code=400)
-
-    start = time.monotonic()
-    try:
-        result = await decompose_task(
-            goal=goal,
-            user_id=user_id,
-            reading_level=reading_level,
-        )
-    except Exception:
-        logger.exception("Task decomposition error for user=%s", user_id)
-        return JSONResponse(
-            {"error": "Something went wrong while breaking down your goal. Please try again."},
-            status_code=500,
-        )
-
-    duration_ms = int((time.monotonic() - start) * 1000)
-    logger.info("task_decompose_duration_ms=%d user=%s", duration_ms, user_id)
-
-    now = datetime.now(timezone.utc).isoformat()
-    task_id = str(uuid.uuid4())
-    task_doc = {
-        "id": task_id,
-        "taskId": task_id,
-        "userId": user_id,
-        "goal": goal,
-        "steps": result.get("steps", []),
-        "explanation": result.get("explanation", ""),
-        "readingLevel": reading_level,
-        "createdAt": now,
-        "updatedAt": now,
-    }
-    _tasks_container.upsert_item(task_doc)
-
-    return JSONResponse({
-        "task": {k: v for k, v in task_doc.items() if not k.startswith("_")},
-        "meta": {"latencyMs": duration_ms},
-    }, status_code=201)
-
-
 # ============================================================================
 # GET /api/task-plans — List all task plans for the authenticated user
 # ============================================================================
@@ -1677,6 +1620,30 @@ def get_user_insights(req: Request) -> JSONResponse:
     ))
     total_messages = messages[0] if messages else 0
 
+    # Estimate token usage from message content when explicit usage is unavailable.
+    message_rows = list(_messages_container.query_items(
+        query="SELECT c.content, c.meta, c.tokenUsage FROM c WHERE c.userId = @uid",
+        parameters=[{"name": "@uid", "value": user_id}],
+        enable_cross_partition_query=True,
+    ))
+    total_tokens_used = 0
+    for msg in message_rows:
+        token_usage = msg.get("tokenUsage") or {}
+        explicit_total = token_usage.get("totalTokens")
+        if explicit_total is None:
+            meta = msg.get("meta") or {}
+            explicit_total = meta.get("totalTokens")
+        if explicit_total is not None:
+            try:
+                total_tokens_used += int(explicit_total)
+                continue
+            except (TypeError, ValueError):
+                pass
+
+        content = (msg.get("content") or "").strip()
+        word_count = len(content.split()) if content else 0
+        total_tokens_used += int(word_count * 1.3)
+
     # Task plans and completion
     tasks = list(_tasks_container.query_items(
         query="SELECT c.steps, c.readingLevel FROM c WHERE c.userId = @uid",
@@ -1705,6 +1672,32 @@ def get_user_insights(req: Request) -> JSONResponse:
     ))
     total_uploads = content_items[0] if content_items else 0
 
+    # Adaptation savings metrics
+    source_rows = list(_content_container.query_items(
+        query="SELECT c.id, c.extractedText FROM c WHERE c.userId = @uid",
+        parameters=[{"name": "@uid", "value": user_id}],
+        partition_key=user_id,
+    ))
+    source_words_by_id = {
+        row.get("id", ""): len((row.get("extractedText") or "").split())
+        for row in source_rows
+        if row.get("id")
+    }
+
+    adapted_rows = list(_adapted_container.query_items(
+        query="SELECT c.sourceContentId, c.adaptedText FROM c WHERE c.userId = @uid",
+        parameters=[{"name": "@uid", "value": user_id}],
+        partition_key=user_id,
+    ))
+    total_adaptations = len(adapted_rows)
+    words_saved = 0
+    for row in adapted_rows:
+        source_id = row.get("sourceContentId", "")
+        source_words = source_words_by_id.get(source_id, 0)
+        adapted_words = len((row.get("adaptedText") or "").split())
+        if source_words > adapted_words:
+            words_saved += source_words - adapted_words
+
     # Preferred reading level (most frequently used)
     preferred_reading_level = ""
     if reading_levels_used:
@@ -1728,11 +1721,14 @@ def get_user_insights(req: Request) -> JSONResponse:
     return JSONResponse({
         "totalSessions": total_sessions,
         "totalMessages": total_messages,
+        "totalTokensUsed": total_tokens_used,
         "totalTaskPlans": total_task_plans,
         "totalSteps": total_steps,
         "completedSteps": completed_steps,
         "completionRate": completion_rate,
         "totalUploads": total_uploads,
+        "totalAdaptations": total_adaptations,
+        "wordsSaved": words_saved,
         "preferredReadingLevel": preferred_reading_level,
         "readingLevelsUsed": reading_levels_used,
         "suggestions": suggestions,

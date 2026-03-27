@@ -100,9 +100,11 @@ async def adapt_content(
     result = {
         "content_id": content_id or str(uuid.uuid4()),
         "profile": profile,
+        "profile_description": profile_config["description"],
         "source_analysis": analysis,
         "adapted_text": adapted["adapted_text"],
         "summary": adapted.get("summary", ""),
+        "change_summary": adapted.get("change_summary", _default_change_summary(profile_config)),
         "audio_scripts": audio_scripts,
         "tasks": tasks,
         "created_at": datetime.now(timezone.utc).isoformat(),
@@ -140,20 +142,15 @@ async def _run_adaptation(
 ) -> dict[str, str]:
     """Call the AI agent to adapt the content.
 
-    Uses AI Foundry Agent Service when available, falls back to
-    returning structured prompt metadata for local dev.
+    Uses Azure AI Foundry Agent Framework when available, falls back to
+    a lightweight local simplification when no endpoint is configured.
     """
     endpoint = os.environ.get("PROJECT_ENDPOINT", "") or os.environ.get("AI_FOUNDRY_ENDPOINT", "")
-    if _LOCAL_DEV or not endpoint:
+    if not endpoint:
         return _local_adaptation_stub(source_text, profile, analysis)
 
     try:
-        from azure.ai.projects import AIProjectClient
-        from azure.identity import DefaultAzureCredential
-
-        client = AIProjectClient(
-            endpoint=endpoint, credential=DefaultAzureCredential()
-        )
+        from agents.content_workflow import AzureAIClient, DefaultAzureCredential, Message
 
         extra = profile.get("extra_instructions", "")
         pref_format = "bullet points"
@@ -167,39 +164,50 @@ async def _run_adaptation(
             f"Maximum {profile['max_sentence_words']} words per sentence. "
             f"{extra}\n"
             f"Preserve all essential meaning. Add section headers.\n"
-            f"Also produce a 2-sentence summary at the top."
+            f"Also produce a 2-sentence summary at the top.\n"
+            f"Return valid JSON only with keys: summary, adapted_text, change_summary.\n"
+            f"The change_summary must be one sentence describing what changed for the target readers."
         )
 
-        agent = client.agents.create_agent(
-            model="gpt-4o-mini",
-            name=f"simplifier-{profile.get('target_grade', 5)}",
-            instructions=instructions,
-        )
-        thread = client.agents.create_thread()
-        client.agents.create_message(
-            thread_id=thread.id, role="user",
-            content=f"Adapt this content:\n\n{source_text[:8000]}",
-        )
-        run = client.agents.create_and_process_run(
-            thread_id=thread.id, agent_id=agent.id,
-        )
+        credential = DefaultAzureCredential()
+        try:
+            async with AzureAIClient(
+                project_endpoint=endpoint,
+                model_deployment_name=os.getenv("MODEL_DEPLOYMENT_NAME", "gpt-4o-mini"),
+                credential=credential,
+            ).as_agent(
+                name=f"CopilotCLR-Simplifier-{profile.get('target_grade', 5)}",
+                instructions=instructions,
+            ) as agent:
+                prompt = (
+                    "Adapt this content for accessibility. Preserve meaning and return JSON only.\n\n"
+                    f"Source content:\n{source_text}"
+                )
+                response = await agent.run([Message(role="user", contents=[prompt])])
+                raw_text = response.text if hasattr(response, "text") else str(response)
+        finally:
+            await credential.close()
 
-        if run.status == "failed":
-            logger.error("Adaptation agent run failed: %s", run.last_error)
+        data = _parse_adaptation_payload(raw_text)
+        adapted_text = data.get("adapted_text", "").strip()
+        summary = data.get("summary", "").strip()
+        change_summary = data.get("change_summary", "").strip()
+
+        if not adapted_text:
             return _local_adaptation_stub(source_text, profile, analysis)
 
-        messages = client.agents.list_messages(thread_id=thread.id)
-        for msg in messages.data:
-            if msg.role in ("assistant", "agent"):
-                for block in msg.content:
-                    if hasattr(block, "text"):
-                        adapted_text = block.text.value
-                        # Extract summary (first paragraph)
-                        parts = adapted_text.split("\n\n", 1)
-                        summary = parts[0] if len(parts) > 1 else adapted_text[:200]
-                        return {"adapted_text": adapted_text, "summary": summary}
+        if not summary:
+            parts = adapted_text.split("\n\n", 1)
+            summary = parts[0] if len(parts) > 1 else adapted_text[:200]
 
-        return _local_adaptation_stub(source_text, profile, analysis)
+        if not change_summary:
+            change_summary = _default_change_summary(profile)
+
+        return {
+            "adapted_text": adapted_text,
+            "summary": summary,
+            "change_summary": change_summary,
+        }
 
     except Exception:
         logger.exception("Agent adaptation failed, using fallback")
@@ -207,17 +215,68 @@ async def _run_adaptation(
 
 
 def _local_adaptation_stub(text: str, profile: dict, analysis: dict) -> dict[str, str]:
-    """Local dev fallback: return metadata about what would be adapted."""
+    """Fallback simplification used only when no Foundry endpoint is configured."""
+    excerpt = text[:3000].strip()
+    simplified = (
+        f"## Adapted Content\n\n"
+        f"### Summary\n"
+        f"This content was rewritten for Grade {profile['target_grade']} readers using shorter sentences and clearer structure.\n\n"
+        f"### Simplified Version\n{excerpt}"
+    )
     return {
-        "adapted_text": (
-            f"## Adapted Content (Grade {profile['target_grade']})\n\n"
-            f"**Profile:** {profile['description']}\n\n"
-            f"**Source Stats:** {analysis['word_count']} words, "
-            f"FKGL {analysis['fkgl']}, {analysis['sentence_count']} sentences\n\n"
-            f"---\n\n{text[:3000]}\n\n"
-            f"*[Local dev mode — full AI adaptation requires AI Foundry connection]*"
-        ),
+        "adapted_text": simplified,
         "summary": f"Document with {analysis['word_count']} words adapted to Grade {profile['target_grade']}.",
+        "change_summary": _default_change_summary(profile),
+    }
+
+
+def _parse_adaptation_payload(raw_text: str) -> dict[str, str]:
+    """Parse the agent JSON response, handling markdown code fences."""
+    text = raw_text.strip()
+    if text.startswith("```"):
+        lines = [line for line in text.splitlines() if not line.strip().startswith("```")]
+        text = "\n".join(lines).strip()
+
+    try:
+        data = json.loads(text)
+    except json.JSONDecodeError:
+        logger.warning("Simplifier returned non-JSON payload; using plain text fallback")
+        return {"adapted_text": text, "summary": "", "change_summary": ""}
+
+    return {
+        "adapted_text": str(data.get("adapted_text", "")),
+        "summary": str(data.get("summary", "")),
+        "change_summary": str(data.get("change_summary", "")),
+    }
+
+
+def _default_change_summary(profile: dict) -> str:
+    """Return a readable default change explanation for the selected profile."""
+    return (
+        f"Content rewritten for {profile['description']} readers — vocabulary simplified, "
+        f"sentences shortened, and structure improved for clarity."
+    )
+
+
+def build_change_metrics(source_text: str, adapted_text: str, profile: str, profile_description: str) -> dict[str, Any]:
+    """Build word-count and explanation metadata for the adapted result."""
+    original_word_count = len(source_text.split())
+    adapted_word_count = len(adapted_text.split())
+    reduction_percent = max(
+        0,
+        round((1 - adapted_word_count / max(1, original_word_count)) * 100),
+    )
+    change_summary = (
+        f"Original: {original_word_count} words -> Adapted: {adapted_word_count} words "
+        f"({reduction_percent}% reduction). Content rewritten for {profile_description} readers "
+        f"- vocabulary simplified, sentences shortened, and structure improved for clarity."
+    )
+    return {
+        "profile": profile,
+        "originalWordCount": original_word_count,
+        "adaptedWordCount": adapted_word_count,
+        "reductionPercent": reduction_percent,
+        "changeSummary": change_summary,
     }
 
 

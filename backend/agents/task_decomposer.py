@@ -126,14 +126,24 @@ def _ensure_decomposer_agent_sync(client) -> str:
     if _decomposer_agent_id:
         return _decomposer_agent_id
 
-    agents = client.agents.list_agents()
+    list_fn = getattr(client.agents, "list_agents", None) or getattr(client.agents, "list", None)
+    if list_fn is None:
+        raise RuntimeError("AIProjectClient agents API does not support list/list_agents")
+
+    agents = list_fn()
     for agent in agents:
-        if agent.name == DECOMPOSER_AGENT_NAME:
-            _decomposer_agent_id = agent.id
+        agent_name = getattr(agent, "name", "")
+        agent_id = getattr(agent, "id", "")
+        if agent_name == DECOMPOSER_AGENT_NAME and agent_id:
+            _decomposer_agent_id = agent_id
             logger.info("Found existing decomposer agent: %s", _decomposer_agent_id)
             return _decomposer_agent_id
 
-    agent = client.agents.create_agent(
+    create_fn = getattr(client.agents, "create_agent", None) or getattr(client.agents, "create", None)
+    if create_fn is None:
+        raise RuntimeError("AIProjectClient agents API does not support create/create_agent")
+
+    agent = create_fn(
         model=DECOMPOSER_MODEL,
         name=DECOMPOSER_AGENT_NAME,
         instructions=DECOMPOSER_INSTRUCTIONS,
@@ -246,7 +256,12 @@ async def decompose_task(
     Returns:
         Dict with 'steps' list and 'explanation' string.
     """
-    if not os.environ.get("AI_FOUNDRY_ENDPOINT"):
+    local_dev = os.environ.get("LOCAL_DEV", "").lower() in ("1", "true", "yes")
+    if local_dev:
+        return _local_decompose(goal)
+
+    endpoint = os.environ.get("AI_FOUNDRY_ENDPOINT") or os.environ.get("PROJECT_ENDPOINT")
+    if not endpoint:
         return _local_decompose(goal)
 
     from azure.identity import DefaultAzureCredential  # noqa: PLC0415
@@ -254,7 +269,7 @@ async def decompose_task(
 
     client = await asyncio.to_thread(
         lambda: AIProjectClient(
-            endpoint=os.environ["AI_FOUNDRY_ENDPOINT"],
+            endpoint=endpoint,
             credential=DefaultAzureCredential(),
         )
     )
