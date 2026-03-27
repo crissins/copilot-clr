@@ -151,6 +151,7 @@ export function AvatarPage() {
   const [style, setStyle] = useState("calm");
   const [error, setError] = useState<string | null>(null);
   const [status, setStatus] = useState("Click Connect to start an avatar session");
+  const [mediaStream, setMediaStream] = useState<MediaStream | null>(null);
 
   const videoRef = useRef<HTMLVideoElement>(null);
   const peerConnectionRef = useRef<RTCPeerConnection | null>(null);
@@ -165,8 +166,23 @@ export function AvatarPage() {
       if (peerConnectionRef.current) {
         peerConnectionRef.current.close();
       }
+      if (mediaStream) {
+        mediaStream.getTracks().forEach(track => track.stop());
+      }
     };
-  }, []);
+  }, [mediaStream]);
+
+  // Synchronize media stream with video element
+  useEffect(() => {
+    if (connected && videoRef.current && mediaStream) {
+      console.log("[Avatar] Attaching media stream to video element");
+      videoRef.current.srcObject = mediaStream;
+      // Ensure it plays
+      videoRef.current.play().catch(err => {
+        console.warn("[Avatar] Failed to auto-play video:", err);
+      });
+    }
+  }, [mediaStream, connected]);
 
   const connectAvatar = useCallback(async () => {
     setConnecting(true);
@@ -215,8 +231,8 @@ export function AvatarPage() {
 
       pc.ontrack = (event) => {
         console.log("[Avatar] ontrack — got media stream, kind:", event.track.kind);
-        if (videoRef.current && event.streams[0]) {
-          videoRef.current.srcObject = event.streams[0];
+        if (event.streams[0]) {
+          setMediaStream(event.streams[0]);
         }
       };
 
@@ -274,6 +290,7 @@ export function AvatarPage() {
     if (videoRef.current) {
       videoRef.current.srcObject = null;
     }
+    setMediaStream(null);
     setConnected(false);
     setSessionData(null);
     setStatus("Disconnected. Click Connect to start again.");
