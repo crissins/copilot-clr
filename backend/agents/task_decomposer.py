@@ -1,21 +1,24 @@
 """
 Task Decomposer — AI Foundry Agent for breaking complex goals into steps.
 
-Uses the Azure AI Foundry Agent Framework to decompose a complex goal
-into numbered, time-boxed sub-tasks with priority, duration, and focus tips.
+Uses Microsoft Agent Framework SDK (agent-framework-azure-ai) with
+AzureAIClient to decompose a complex goal into numbered, time-boxed
+sub-tasks with priority, duration, and focus tips.
 
-All sync SDK calls are wrapped in asyncio.to_thread() to avoid blocking
-FastAPI's event loop (consistent with chat_agent.py pattern).
+Consistent with workflow.py and speech_agent.py patterns — uses
+AzureAIClient.as_agent() with async DefaultAzureCredential.
 
 RAI: Instructions enforce calm, supportive language — no urgency words.
 """
 
-import asyncio
 import json
 import logging
 import os
 import uuid
-from datetime import datetime, timezone
+
+from agent_framework import Message
+from agent_framework.azure import AzureAIClient
+from azure.identity.aio import DefaultAzureCredential
 
 logger = logging.getLogger(__name__)
 
@@ -56,7 +59,7 @@ You MUST respond with valid JSON in this exact format (no markdown, no extra tex
 """
 
 DECOMPOSER_AGENT_NAME = "Copilot CLR Task Decomposer"
-DECOMPOSER_MODEL = "gpt-4.1-mini"
+DECOMPOSER_MODEL = os.environ.get("MODEL_DEPLOYMENT_NAME", "gpt-4o-mini")
 
 
 # ============================================================================
@@ -115,83 +118,14 @@ def _local_decompose(goal: str) -> dict:
         ],
         "explanation": (
             "[Local dev mode] This is a sample decomposition. "
-            "Set AI_FOUNDRY_ENDPOINT to connect to Azure for real decomposition."
+            "Set PROJECT_ENDPOINT to connect to Azure for real decomposition."
         ),
     }
 
 
 # ============================================================================
-# AI Foundry Agent calls (synchronous — always run via asyncio.to_thread)
+# JSON response parser
 # ============================================================================
-
-_decomposer_agent_id: str | None = None
-
-
-def _ensure_decomposer_agent_sync(client) -> str:
-    """Create or retrieve the Task Decomposer agent. Returns agent ID."""
-    global _decomposer_agent_id
-    if _decomposer_agent_id:
-        return _decomposer_agent_id
-
-    agents = client.agents.list_agents()
-    for agent in agents:
-        if agent.name == DECOMPOSER_AGENT_NAME:
-            _decomposer_agent_id = agent.id
-            logger.info("Found existing decomposer agent: %s", _decomposer_agent_id)
-            return _decomposer_agent_id
-
-    agent = client.agents.create_agent(
-        model=DECOMPOSER_MODEL,
-        name=DECOMPOSER_AGENT_NAME,
-        instructions=DECOMPOSER_INSTRUCTIONS,
-    )
-    _decomposer_agent_id = agent.id
-    logger.info("Created new decomposer agent: %s", _decomposer_agent_id)
-    return _decomposer_agent_id
-
-
-def _run_decomposition_sync(client, agent_id: str, goal: str, reading_level: str) -> dict:
-    """Send goal to decomposer agent, parse structured JSON response."""
-    thread = client.agents.threads.create()
-
-    prompt = f"Break down this goal into time-boxed steps: {goal}"
-    if reading_level:
-        prompt += f"\n\nWrite the steps at reading level: grade {reading_level}."
-
-    client.agents.messages.create(
-        thread_id=thread.id,
-        role="user",
-        content=prompt,
-    )
-
-    run = client.agents.runs.create_and_process(
-        thread_id=thread.id,
-        agent_id=agent_id,
-    )
-
-    if run.status == "failed":
-        logger.error("Decomposer agent run failed: %s", run.last_error)
-        return {
-            "steps": [],
-            "explanation": (
-                "I had a little trouble breaking that down. "
-                "Could you try rephrasing your goal?"
-            ),
-        }
-
-    messages = client.agents.messages.list(thread_id=thread.id)
-    for msg in messages:
-        if msg.role in ("assistant", "agent"):
-            for block in msg.content:
-                if hasattr(block, "text"):
-                    raw_text = block.text.value
-                    return _parse_decomposition(raw_text)
-
-    return {
-        "steps": [],
-        "explanation": "I was not able to generate steps. Please try again.",
-    }
-
 
 def _parse_decomposition(raw_text: str) -> dict:
     """Parse the agent's JSON response, handling markdown code fences."""
@@ -245,6 +179,9 @@ async def decompose_task(
 ) -> dict:
     """Decompose a complex goal into time-boxed steps.
 
+    Uses Agent Framework SDK (AzureAIClient.as_agent()) with async
+    DefaultAzureCredential — same pattern as workflow.py and speech_agent.py.
+
     Args:
         goal:          The user's complex goal text.
         user_id:       Authenticated user ID.
@@ -253,20 +190,24 @@ async def decompose_task(
     Returns:
         Dict with 'steps' list and 'explanation' string.
     """
-    if not os.environ.get("AI_FOUNDRY_ENDPOINT"):
+    if not os.environ.get("PROJECT_ENDPOINT"):
         return _local_decompose(goal)
 
-    from azure.identity import DefaultAzureCredential  # noqa: PLC0415
-    from azure.ai.projects import AIProjectClient  # noqa: PLC0415
+    prompt = f"Break down this goal into time-boxed steps: {goal}"
+    if reading_level:
+        prompt += f"\n\nWrite the steps at reading level: grade {reading_level}."
 
-    client = await asyncio.to_thread(
-        lambda: AIProjectClient(
-            endpoint=os.environ["AI_FOUNDRY_ENDPOINT"],
-            credential=DefaultAzureCredential(),
-        )
-    )
-    agent_id = await asyncio.to_thread(_ensure_decomposer_agent_sync, client)
-    result = await asyncio.to_thread(
-        _run_decomposition_sync, client, agent_id, goal, reading_level
-    )
-    return result
+    credential = DefaultAzureCredential()
+
+    async with AzureAIClient(
+        project_endpoint=os.environ["PROJECT_ENDPOINT"],
+        model_deployment_name=DECOMPOSER_MODEL,
+        credential=credential,
+    ).as_agent(
+        name=DECOMPOSER_AGENT_NAME,
+        instructions=DECOMPOSER_INSTRUCTIONS,
+    ) as agent:
+        response = await agent.run([Message(role="user", contents=[prompt])])
+        raw_text = response.text if hasattr(response, "text") else str(response)
+
+    return _parse_decomposition(raw_text)

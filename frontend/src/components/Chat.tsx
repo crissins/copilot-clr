@@ -5,6 +5,7 @@ import {
   Spinner,
   Toolbar,
   ToolbarButton,
+  Tooltip,
   makeStyles,
   tokens,
   shorthands,
@@ -14,6 +15,7 @@ import {
   Add24Regular,
   Mic24Regular,
   MicOff24Regular,
+  Globe24Regular,
 } from "@fluentui/react-icons";
 import * as speechSdk from "microsoft-cognitiveservices-speech-sdk";
 import { apiClient, type Message } from "../services/api";
@@ -103,6 +105,7 @@ export function Chat({ loadSessionId, onSessionLoaded }: {
   const [isLoading, setIsLoading] = useState(false);
   const [sessionId, setSessionId] = useState<string | null>(null);
   const [isRecording, setIsRecording] = useState(false);
+  const [groundWithBing, setGroundWithBing] = useState(false);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const lastMsgCountRef = useRef(0);
   const recognizerRef = useRef<speechSdk.SpeechRecognizer | null>(null);
@@ -253,7 +256,9 @@ export function Chat({ loadSessionId, onSessionLoaded }: {
 
     try {
       const token = await getAccessToken();
-      const response = await apiClient.sendMessage(text, sessionId, token);
+      const response = await apiClient.sendMessage(text, sessionId, token, {
+        groundWithBing,
+      });
 
       if (!sessionId) setSessionId(response.sessionId);
 
@@ -283,7 +288,7 @@ export function Chat({ loadSessionId, onSessionLoaded }: {
       setIsLoading(false);
       textareaRef.current?.focus();
     }
-  }, [input, isLoading, sessionId, getAccessToken, t.chat.errorGeneric]);
+  }, [input, isLoading, sessionId, getAccessToken, groundWithBing, t.chat.errorGeneric]);
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
     if (e.key === "Enter" && !e.shiftKey) {
@@ -342,6 +347,18 @@ export function Chat({ loadSessionId, onSessionLoaded }: {
           shape="circular"
           style={{ flexShrink: 0, minWidth: "44px", height: "44px" }}
         />
+        <Tooltip content="Ground with Bing — use real-time web data" relationship="label">
+          <Button
+            appearance={groundWithBing ? "primary" : "subtle"}
+            icon={<Globe24Regular />}
+            onClick={() => setGroundWithBing((prev) => !prev)}
+            disabled={isLoading}
+            aria-label={groundWithBing ? "Disable Bing grounding" : "Enable Bing grounding"}
+            aria-pressed={groundWithBing}
+            shape="circular"
+            style={{ flexShrink: 0, minWidth: "44px", height: "44px" }}
+          />
+        </Tooltip>
         <Textarea
           ref={textareaRef}
           className={styles.textarea}

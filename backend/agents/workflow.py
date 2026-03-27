@@ -139,6 +139,7 @@ async def _run_agent(
     user_id: str,
     session_id: str,
     preferences: dict,
+    ground_with_bing: bool = False,
 ) -> str:
     """Run the Copilot CLR agent with file search, web search, and task tools."""
     set_tool_context(user_id, session_id)
@@ -146,7 +147,7 @@ async def _run_agent(
     instructions = _build_instructions(preferences)
     credential = DefaultAzureCredential()
 
-    tools = [
+    tools: list = [
         search_documents,
         search_web,
         create_task,
@@ -155,6 +156,44 @@ async def _run_agent(
         delete_task,
         get_chat_history,
     ]
+
+    # Add Bing Grounding tool for real-time web data when requested
+    if ground_with_bing:
+        bing_conn_name = os.getenv("BING_GROUNDING_CONNECTION_NAME", "")
+        if bing_conn_name:
+            from azure.ai.projects import AIProjectClient  # noqa: PLC0415
+            from azure.ai.projects.models import (  # noqa: PLC0415
+                BingGroundingTool,
+                BingGroundingSearchToolParameters,
+                BingGroundingSearchConfiguration,
+            )
+            from azure.identity import (  # noqa: PLC0415
+                DefaultAzureCredential as SyncDefaultAzureCredential,
+            )
+
+            project = AIProjectClient(
+                endpoint=os.getenv("PROJECT_ENDPOINT", ""),
+                credential=SyncDefaultAzureCredential(),
+            )
+            bing_connection = project.connections.get(bing_conn_name)
+            tools.append(
+                BingGroundingTool(
+                    bing_grounding=BingGroundingSearchToolParameters(
+                        search_configurations=[
+                            BingGroundingSearchConfiguration(
+                                project_connection_id=bing_connection.id
+                            )
+                        ]
+                    )
+                )
+            )
+            instructions += (
+                "\n\nBing Grounding is enabled for this request. "
+                "Use it to find current, real-time information from the web. "
+                "Always cite your sources with URLs when using web results."
+            )
+        else:
+            logger.warning("ground_with_bing requested but BING_GROUNDING_CONNECTION_NAME not set")
 
     async with AzureAIClient(
         project_endpoint=os.getenv("PROJECT_ENDPOINT", ""),
@@ -178,18 +217,23 @@ async def run_workflow(
     message: str,
     session_id: str,
     user_id: str,
+    ground_with_bing: bool = False,
 ) -> str:
     """Execute the sequential Copilot CLR workflow.
 
     Args:
-        message:    The user's message text.
-        session_id: Chat session ID (for chat history lookups).
-        user_id:    Authenticated Entra ID OID.
+        message:          The user's message text.
+        session_id:       Chat session ID (for chat history lookups).
+        user_id:          Authenticated Entra ID OID.
+        ground_with_bing: If True, enable Bing Grounding for real-time web data.
 
     Returns:
         The agent's text response.
     """
     preferences = await _load_preferences(user_id)
     input_messages = [Message(role="user", contents=[message])]
-    result = await _run_agent(input_messages, user_id, session_id, preferences)
+    result = await _run_agent(
+        input_messages, user_id, session_id, preferences,
+        ground_with_bing=ground_with_bing,
+    )
     return result or "I wasn't able to generate a response. Please try again."

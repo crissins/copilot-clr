@@ -192,6 +192,15 @@ module communication 'modules/communication.bicep' = if (!localDevMode) {
   }
 }
 
+module bingGrounding 'modules/bing-grounding.bicep' = if (!localDevMode) {
+  name: 'bing-grounding-deployment'
+  params: {
+    location: location
+    resourceToken: resourceToken
+    tags: tags
+  }
+}
+
 module videoIndexer 'modules/video-indexer.bicep' = if (!localDevMode) {
   name: 'video-indexer-deployment'
   params: {
@@ -341,6 +350,7 @@ module containerApps 'modules/container-apps.bicep' = if (!localDevMode) {
     // (Web PubSub module needs Container App hostname; Container App needs PubSub endpoint)
     webPubSubEndpoint: 'https://webpubsub-${resourceToken}.webpubsub.azure.com'
     voiceLiveEndpoint: aiFoundryProject.outputs.projectDiscoveryUrl
+    bingGroundingConnectionName: localDevMode ? '' : 'bing-grounding-${resourceToken}'
   }
 }
 

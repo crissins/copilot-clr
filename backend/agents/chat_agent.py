@@ -228,6 +228,7 @@ async def get_agent_response(
     message: str,
     session_id: str,
     user_id: str,
+    ground_with_bing: bool = False,
 ) -> str:
     """Send a user message to the agent and return the response.
 
@@ -237,9 +238,10 @@ async def get_agent_response(
         3. Neither                    → Local-dev stub
 
     Args:
-        message:    The user's message text.
-        session_id: Chat session ID.
-        user_id:    Authenticated Entra ID OID.
+        message:          The user's message text.
+        session_id:       Chat session ID.
+        user_id:          Authenticated Entra ID OID.
+        ground_with_bing: If True, enable Bing Grounding for real-time web data.
 
     Returns:
         The agent's text response.
@@ -248,7 +250,7 @@ async def get_agent_response(
     if os.environ.get("PROJECT_ENDPOINT"):
         from agents.workflow import run_workflow  # noqa: PLC0415
 
-        return await run_workflow(message, session_id, user_id)
+        return await run_workflow(message, session_id, user_id, ground_with_bing=ground_with_bing)
 
     # ── Path 2: Legacy OpenAI Assistants ──
     if os.environ.get("AZURE_OPENAI_ENDPOINT"):
