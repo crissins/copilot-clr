@@ -1,11 +1,15 @@
 """
 Task Decomposer — AI Foundry Agent for breaking complex goals into steps.
+
 Uses the Azure AI Foundry Agent Framework to decompose a complex goal
 into numbered, time-boxed sub-tasks with priority, duration, and focus tips.
+
 All sync SDK calls are wrapped in asyncio.to_thread() to avoid blocking
 FastAPI's event loop (consistent with chat_agent.py pattern).
+
 RAI: Instructions enforce calm, supportive language — no urgency words.
 """
+
 import asyncio
 import json
 import logging
@@ -18,6 +22,7 @@ logger = logging.getLogger(__name__)
 # ============================================================================
 # Agent instructions — calm, supportive persona (RAI requirement)
 # ============================================================================
+
 DECOMPOSER_INSTRUCTIONS = """You are the Task Decomposer for Copilot CLR — a calm, supportive AI assistant
 designed for neurodiverse users including people with ADHD, autism, and dyslexia.
 
@@ -51,12 +56,13 @@ You MUST respond with valid JSON in this exact format (no markdown, no extra tex
 """
 
 DECOMPOSER_AGENT_NAME = "Copilot CLR Task Decomposer"
-DECOMPOSER_MODEL = "gpt-4o-mini"
+DECOMPOSER_MODEL = "gpt-4.1-mini"
 
 
 # ============================================================================
 # Local dev stub
 # ============================================================================
+
 def _local_decompose(goal: str) -> dict:
     """Return sample decomposition for LOCAL_DEV mode."""
     return {
@@ -117,6 +123,7 @@ def _local_decompose(goal: str) -> dict:
 # ============================================================================
 # AI Foundry Agent calls (synchronous — always run via asyncio.to_thread)
 # ============================================================================
+
 _decomposer_agent_id: str | None = None
 
 
@@ -126,24 +133,14 @@ def _ensure_decomposer_agent_sync(client) -> str:
     if _decomposer_agent_id:
         return _decomposer_agent_id
 
-    list_fn = getattr(client.agents, "list_agents", None) or getattr(client.agents, "list", None)
-    if list_fn is None:
-        raise RuntimeError("AIProjectClient agents API does not support list/list_agents")
-
-    agents = list_fn()
+    agents = client.agents.list_agents()
     for agent in agents:
-        agent_name = getattr(agent, "name", "")
-        agent_id = getattr(agent, "id", "")
-        if agent_name == DECOMPOSER_AGENT_NAME and agent_id:
-            _decomposer_agent_id = agent_id
+        if agent.name == DECOMPOSER_AGENT_NAME:
+            _decomposer_agent_id = agent.id
             logger.info("Found existing decomposer agent: %s", _decomposer_agent_id)
             return _decomposer_agent_id
 
-    create_fn = getattr(client.agents, "create_agent", None) or getattr(client.agents, "create", None)
-    if create_fn is None:
-        raise RuntimeError("AIProjectClient agents API does not support create/create_agent")
-
-    agent = create_fn(
+    agent = client.agents.create_agent(
         model=DECOMPOSER_MODEL,
         name=DECOMPOSER_AGENT_NAME,
         instructions=DECOMPOSER_INSTRUCTIONS,
@@ -199,7 +196,6 @@ def _run_decomposition_sync(client, agent_id: str, goal: str, reading_level: str
 def _parse_decomposition(raw_text: str) -> dict:
     """Parse the agent's JSON response, handling markdown code fences."""
     text = raw_text.strip()
-
     # Strip markdown code fences if present
     if text.startswith("```"):
         lines = text.split("\n")
@@ -241,6 +237,7 @@ def _parse_decomposition(raw_text: str) -> dict:
 # ============================================================================
 # Public API — called from main.py
 # ============================================================================
+
 async def decompose_task(
     goal: str,
     user_id: str,
@@ -256,12 +253,7 @@ async def decompose_task(
     Returns:
         Dict with 'steps' list and 'explanation' string.
     """
-    local_dev = os.environ.get("LOCAL_DEV", "").lower() in ("1", "true", "yes")
-    if local_dev:
-        return _local_decompose(goal)
-
-    endpoint = os.environ.get("AI_FOUNDRY_ENDPOINT") or os.environ.get("PROJECT_ENDPOINT")
-    if not endpoint:
+    if not os.environ.get("AI_FOUNDRY_ENDPOINT"):
         return _local_decompose(goal)
 
     from azure.identity import DefaultAzureCredential  # noqa: PLC0415
@@ -269,15 +261,12 @@ async def decompose_task(
 
     client = await asyncio.to_thread(
         lambda: AIProjectClient(
-            endpoint=endpoint,
+            endpoint=os.environ["AI_FOUNDRY_ENDPOINT"],
             credential=DefaultAzureCredential(),
         )
     )
-
     agent_id = await asyncio.to_thread(_ensure_decomposer_agent_sync, client)
-
     result = await asyncio.to_thread(
         _run_decomposition_sync, client, agent_id, goal, reading_level
     )
-
     return result
