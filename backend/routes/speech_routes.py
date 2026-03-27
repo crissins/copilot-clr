@@ -279,6 +279,10 @@ async def speech_synthesize(req: Request) -> Response:
     rate = body.get("rate", "slow")
     lang = body.get("lang") or None
 
+    # Strip markdown syntax so TTS reads clean prose
+    from services.speech import strip_markdown_for_speech
+    text = strip_markdown_for_speech(text)
+
     ssml = build_calm_ssml(text, voice=voice, style=style, rate=rate, lang=lang)
 
     speech_endpoint = os.environ.get("SPEECH_ENDPOINT", "")

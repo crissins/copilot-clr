@@ -173,6 +173,8 @@ export function useImmersiveReader() {
           },
         };
 
+        // Pause any active TTS playback before opening Immersive Reader
+        window.dispatchEvent(new Event("pause-all-tts"));
         setIsOpen(true);
         await launchAsync(irToken, subdomain, content, options);
       } catch (err: unknown) {

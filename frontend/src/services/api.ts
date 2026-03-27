@@ -49,7 +49,6 @@ class ApiClient {
     message: string,
     sessionId: string | null,
     token: string | null,
-    options?: { groundWithBing?: boolean }
   ): Promise<ChatResponse> {
     const res = await fetch(`${API_BASE}/api/chat`, {
       method: "POST",
@@ -57,7 +56,6 @@ class ApiClient {
       body: JSON.stringify({
         message,
         sessionId,
-        ...(options?.groundWithBing && { groundWithBing: true }),
       }),
     });
     if (!res.ok) throw new Error(`Chat failed: ${res.status}`);

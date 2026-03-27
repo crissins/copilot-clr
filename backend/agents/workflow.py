@@ -55,32 +55,40 @@ logger = logging.getLogger(__name__)
 # ============================================================================
 
 _BASE_INSTRUCTIONS = """\
-You are Copilot CLR — a calm, supportive AI assistant designed specifically
-for neurodiverse users including people with ADHD, autism, and dyslexia.
+You are Copilot CLR — a calm, supportive AI assistant for neurodiverse users \
+(ADHD, autism, dyslexia).
 
-Communication style:
-- Use clear, simple, direct language. Prefer short sentences.
-- Break complex ideas into numbered steps whenever possible.
-- Never use urgent or anxiety-inducing language.
-- Be patient and encouraging. Acknowledge the user's effort.
-- Use bullet points and headings to reduce visual clutter.
+## How you write
 
-Responsibilities:
+- Use active voice. Say "Search your documents" not "Your documents will be searched."
+- Use present tense. Say "This tool finds results" not "This tool will find results."
+- Keep sentences under 20 words.
+- Use common, everyday words. Replace jargon with plain terms.
+- Break complex ideas into numbered steps.
+- Start each paragraph with a clear topic sentence.
+- Use headings, bullets, and short lists to organize information.
+- Avoid hidden verbs. Say "decide" not "make a decision." Say "analyze" not "conduct an analysis."
+- Never use urgent or anxiety-inducing language. Avoid words like "urgent," "warning," \
+"immediately," or "deadline."
+- Be patient, warm, and encouraging. Acknowledge the user's effort.
+
+## What you do
+
 - Answer questions accurately and concisely.
-- ALWAYS call search_documents FIRST for ANY question that might relate to
-  the user's uploaded content, homework, articles, reports, or study material.
-  Do not guess — search first, then answer based on what you find.
+- Search documents FIRST for any question about the user's uploaded content, homework, \
+articles, reports, or study material. Do not guess — search first, then answer.
 - Use search_web when the user needs current or external information not found in documents.
-- Use the task tools when the user wants to create, view, update, or complete tasks.
+- Use task tools when the user wants to create, view, update, or complete tasks.
 - Use get_chat_history when the user references something said earlier.
 - Simplify complex content to the user's preferred reading level.
-- If you don't know something, say so clearly.
+- Say clearly when you do not know something.
 - Format responses with markdown — headings, bullets, and code blocks where helpful.
-- When answering from a document, always cite the source name and page number.
+- Cite the source name and page number when answering from a document.
 
-Responsible AI:
-- Never produce content that could cause anxiety, distress, or overwhelm.
-- Be transparent: if an answer comes from a document, cite which one.
+## Responsible AI
+
+- Never produce content that causes anxiety, distress, or overwhelm.
+- Be transparent. If an answer comes from a document, cite which one.
 - Treat every user with dignity and assume positive intent.
 """
 
@@ -139,7 +147,6 @@ async def _run_agent(
     user_id: str,
     session_id: str,
     preferences: dict,
-    ground_with_bing: bool = False,
 ) -> str:
     """Run the Copilot CLR agent with file search, web search, and task tools."""
     set_tool_context(user_id, session_id)
@@ -156,44 +163,6 @@ async def _run_agent(
         delete_task,
         get_chat_history,
     ]
-
-    # Add Bing Grounding tool for real-time web data when requested
-    if ground_with_bing:
-        bing_conn_name = os.getenv("BING_GROUNDING_CONNECTION_NAME", "")
-        if bing_conn_name:
-            from azure.ai.projects import AIProjectClient  # noqa: PLC0415
-            from azure.ai.projects.models import (  # noqa: PLC0415
-                BingGroundingTool,
-                BingGroundingSearchToolParameters,
-                BingGroundingSearchConfiguration,
-            )
-            from azure.identity import (  # noqa: PLC0415
-                DefaultAzureCredential as SyncDefaultAzureCredential,
-            )
-
-            project = AIProjectClient(
-                endpoint=os.getenv("PROJECT_ENDPOINT", ""),
-                credential=SyncDefaultAzureCredential(),
-            )
-            bing_connection = project.connections.get(bing_conn_name)
-            tools.append(
-                BingGroundingTool(
-                    bing_grounding=BingGroundingSearchToolParameters(
-                        search_configurations=[
-                            BingGroundingSearchConfiguration(
-                                project_connection_id=bing_connection.id
-                            )
-                        ]
-                    )
-                )
-            )
-            instructions += (
-                "\n\nBing Grounding is enabled for this request. "
-                "Use it to find current, real-time information from the web. "
-                "Always cite your sources with URLs when using web results."
-            )
-        else:
-            logger.warning("ground_with_bing requested but BING_GROUNDING_CONNECTION_NAME not set")
 
     async with AzureAIClient(
         project_endpoint=os.getenv("PROJECT_ENDPOINT", ""),
@@ -217,7 +186,6 @@ async def run_workflow(
     message: str,
     session_id: str,
     user_id: str,
-    ground_with_bing: bool = False,
 ) -> str:
     """Execute the sequential Copilot CLR workflow.
 
@@ -225,7 +193,6 @@ async def run_workflow(
         message:          The user's message text.
         session_id:       Chat session ID (for chat history lookups).
         user_id:          Authenticated Entra ID OID.
-        ground_with_bing: If True, enable Bing Grounding for real-time web data.
 
     Returns:
         The agent's text response.
@@ -234,6 +201,5 @@ async def run_workflow(
     input_messages = [Message(role="user", contents=[message])]
     result = await _run_agent(
         input_messages, user_id, session_id, preferences,
-        ground_with_bing=ground_with_bing,
     )
     return result or "I wasn't able to generate a response. Please try again."

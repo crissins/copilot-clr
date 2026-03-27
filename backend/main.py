@@ -552,7 +552,6 @@ async def chat(req: Request) -> JSONResponse:
 
     message = body.get("message", "").strip()
     session_id = body.get("sessionId", "")
-    ground_with_bing = bool(body.get("groundWithBing", False))
 
     if not message:
         return JSONResponse({"error": "Message is required"}, status_code=400)
@@ -600,7 +599,6 @@ async def chat(req: Request) -> JSONResponse:
             message=message,
             session_id=session_id,
             user_id=user_id,
-            ground_with_bing=ground_with_bing,
         )
     except Exception:
         logger.exception("Agent error for session=%s", session_id)

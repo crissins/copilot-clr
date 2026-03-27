@@ -5,7 +5,6 @@ import {
   Spinner,
   Toolbar,
   ToolbarButton,
-  Tooltip,
   makeStyles,
   tokens,
   shorthands,
@@ -15,7 +14,6 @@ import {
   Add24Regular,
   Mic24Regular,
   MicOff24Regular,
-  Globe24Regular,
 } from "@fluentui/react-icons";
 import * as speechSdk from "microsoft-cognitiveservices-speech-sdk";
 import { apiClient, type Message } from "../services/api";
@@ -105,9 +103,7 @@ export function Chat({ loadSessionId, onSessionLoaded }: {
   const [isLoading, setIsLoading] = useState(false);
   const [sessionId, setSessionId] = useState<string | null>(null);
   const [isRecording, setIsRecording] = useState(false);
-  const [groundWithBing, setGroundWithBing] = useState(false);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
-  const lastMsgCountRef = useRef(0);
   const recognizerRef = useRef<speechSdk.SpeechRecognizer | null>(null);
 
   useEffect(() => {
@@ -141,41 +137,6 @@ export function Chat({ loadSessionId, onSessionLoaded }: {
     el.style.height = "auto";
     el.style.height = `${Math.min(el.scrollHeight, 120)}px`;
   }, [input]);
-
-  // Auto-read: speak new assistant messages via TTS when enabled
-  useEffect(() => {
-    if (!settings?.autoReadResponses) {
-      lastMsgCountRef.current = messages.length;
-      return;
-    }
-    if (messages.length <= lastMsgCountRef.current) {
-      lastMsgCountRef.current = messages.length;
-      return;
-    }
-    const newMessages = messages.slice(lastMsgCountRef.current);
-    lastMsgCountRef.current = messages.length;
-    const lastAssistant = [...newMessages].reverse().find((m) => m.role === "assistant");
-    if (!lastAssistant) return;
-
-    (async () => {
-      try {
-        const token = await getAccessToken();
-        const blob = await apiClient.speechSynthesize(
-          lastAssistant.content,
-          token,
-          settings.preferredVoice !== "default" ? settings.preferredVoice : undefined,
-          settings.voiceSpeed !== "1.0" ? settings.voiceSpeed : undefined,
-          settings.language || "en",
-        );
-        const url = URL.createObjectURL(blob);
-        const audio = new Audio(url);
-        audio.onended = () => URL.revokeObjectURL(url);
-        audio.play().catch(() => {});
-      } catch {
-        // TTS is best-effort; don't break chat
-      }
-    })();
-  }, [messages, settings, getAccessToken]);
 
   const toggleMic = useCallback(async () => {
     if (isRecording) {
@@ -256,9 +217,7 @@ export function Chat({ loadSessionId, onSessionLoaded }: {
 
     try {
       const token = await getAccessToken();
-      const response = await apiClient.sendMessage(text, sessionId, token, {
-        groundWithBing,
-      });
+      const response = await apiClient.sendMessage(text, sessionId, token);
 
       if (!sessionId) setSessionId(response.sessionId);
 
@@ -288,7 +247,7 @@ export function Chat({ loadSessionId, onSessionLoaded }: {
       setIsLoading(false);
       textareaRef.current?.focus();
     }
-  }, [input, isLoading, sessionId, getAccessToken, groundWithBing, t.chat.errorGeneric]);
+  }, [input, isLoading, sessionId, getAccessToken, t.chat.errorGeneric]);
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
     if (e.key === "Enter" && !e.shiftKey) {
@@ -347,18 +306,6 @@ export function Chat({ loadSessionId, onSessionLoaded }: {
           shape="circular"
           style={{ flexShrink: 0, minWidth: "44px", height: "44px" }}
         />
-        <Tooltip content="Ground with Bing — use real-time web data" relationship="label">
-          <Button
-            appearance={groundWithBing ? "primary" : "subtle"}
-            icon={<Globe24Regular />}
-            onClick={() => setGroundWithBing((prev) => !prev)}
-            disabled={isLoading}
-            aria-label={groundWithBing ? "Disable Bing grounding" : "Enable Bing grounding"}
-            aria-pressed={groundWithBing}
-            shape="circular"
-            style={{ flexShrink: 0, minWidth: "44px", height: "44px" }}
-          />
-        </Tooltip>
         <Textarea
           ref={textareaRef}
           className={styles.textarea}

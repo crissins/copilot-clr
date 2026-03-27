@@ -3,7 +3,7 @@
  * and Report buttons for any content output.
  */
 
-import { useState, useCallback, useRef } from "react";
+import { useState, useCallback, useRef, useEffect } from "react";
 import {
   Button,
   Tooltip,
@@ -22,7 +22,8 @@ import {
 import {
   ImmersiveReader24Regular,
   Speaker224Regular,
-  Stop24Regular,
+  Pause24Regular,
+  Play24Regular,
   Flag24Regular,
   Checkmark24Regular,
 } from "@fluentui/react-icons";
@@ -75,7 +76,7 @@ export function ContentActionToolbar({
   const { getAccessToken } = useAuth();
   const { language } = useI18n();
 
-  const [isSpeaking, setIsSpeaking] = useState(false);
+  const [ttsState, setTtsState] = useState<"idle" | "playing" | "paused">("idle");
   const [reported, setReported] = useState(false);
   const [reportReason, setReportReason] = useState("");
   const [reportOpen, setReportOpen] = useState(false);
@@ -86,19 +87,33 @@ export function ContentActionToolbar({
     await launch(title, text, mimeType);
   }, [launch, irIsOpen, title, text, mimeType]);
 
+  // Pause TTS when Immersive Reader opens
+  useEffect(() => {
+    if (irIsOpen && ttsState === "playing" && audioRef.current) {
+      audioRef.current.pause();
+      setTtsState("paused");
+    }
+  }, [irIsOpen, ttsState]);
+
   const handleReadAloud = useCallback(async () => {
-    if (isSpeaking) {
-      // Stop current playback
+    if (ttsState === "playing") {
+      // Pause current playback
       if (audioRef.current) {
         audioRef.current.pause();
-        audioRef.current = null;
       }
-      setIsSpeaking(false);
+      setTtsState("paused");
+      return;
+    }
+
+    if (ttsState === "paused" && audioRef.current) {
+      // Resume playback
+      await audioRef.current.play();
+      setTtsState("playing");
       return;
     }
 
     if (!text) return;
-    setIsSpeaking(true);
+    setTtsState("playing");
     try {
       const token = await getAccessToken();
       const blob = await apiClient.speechSynthesize(text.slice(0, 5000), token, undefined, undefined, language || "en");
@@ -107,19 +122,19 @@ export function ContentActionToolbar({
       audioRef.current = audio;
       audio.onended = () => {
         URL.revokeObjectURL(url);
-        setIsSpeaking(false);
+        setTtsState("idle");
         audioRef.current = null;
       };
       audio.onerror = () => {
         URL.revokeObjectURL(url);
-        setIsSpeaking(false);
+        setTtsState("idle");
         audioRef.current = null;
       };
       await audio.play();
     } catch {
-      setIsSpeaking(false);
+      setTtsState("idle");
     }
-  }, [text, isSpeaking, getAccessToken]);
+  }, [text, ttsState, getAccessToken, language]);
 
   const handleReport = useCallback(async () => {
     if (!messageId || !sessionId || !reportReason.trim()) return;
@@ -150,14 +165,14 @@ export function ContentActionToolbar({
         />
       </Tooltip>
 
-      <Tooltip content={isSpeaking ? "Stop reading" : "Read aloud"} relationship="label">
+      <Tooltip content={ttsState === "playing" ? "Pause reading" : ttsState === "paused" ? "Resume reading" : "Read aloud"} relationship="label">
         <Button
           size={btnSize}
           appearance={btnAppearance}
-          icon={isSpeaking ? <Stop24Regular /> : <Speaker224Regular />}
+          icon={ttsState === "playing" ? <Pause24Regular /> : ttsState === "paused" ? <Play24Regular /> : <Speaker224Regular />}
           disabled={!text}
           onClick={handleReadAloud}
-          aria-label={isSpeaking ? "Stop reading" : "Read aloud"}
+          aria-label={ttsState === "playing" ? "Pause reading" : ttsState === "paused" ? "Resume reading" : "Read aloud"}
         />
       </Tooltip>
 
