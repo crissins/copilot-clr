@@ -29,6 +29,7 @@ import {
   Document24Regular,
   ArrowClockwise24Regular,
   Checkmark24Regular,
+  ArrowDownload24Regular,
 } from "@fluentui/react-icons";
 import ReactMarkdown from "react-markdown";
 import { apiClient } from "../../services/api";
@@ -305,15 +306,44 @@ export function Feature2Page() {
                 <div style={{ display: "flex", gap: "4px", marginTop: 8 }}>
                   <TTSButton text={adaptation.adaptedText} />
                   <ImmersiveReaderButton title={`Adapted: ${profileInfo?.label || adaptation.profile}`} text={adaptation.adaptedText} />
+                  <Button
+                    appearance="subtle"
+                    icon={<ArrowDownload24Regular />}
+                    onClick={() => {
+                      const blob = new Blob([adaptation.adaptedText], { type: "text/markdown;charset=utf-8" });
+                      const url = URL.createObjectURL(blob);
+                      const a = document.createElement("a");
+                      a.href = url;
+                      a.download = `adapted-${adaptation.profile}-${new Date(adaptation.createdAt).toISOString().slice(0, 10)}.md`;
+                      a.click();
+                      URL.revokeObjectURL(url);
+                    }}
+                  >
+                    Download
+                  </Button>
                 </div>
-                <div className={styles.explanationBar} style={{ marginTop: 12 }}>
-                  <Text size={200}>
-                    <strong>Why this version:</strong> Rewritten for{" "}
-                    {profileInfo?.description || adaptation.profile} readers. Vocabulary was simplified,
-                    sentences were shortened, and the content was restructured into clear sections
-                    to reduce cognitive load.
-                  </Text>
-                </div>
+                {contentDetail?.content?.extractedText && (
+                  <div className={styles.explanationBar} style={{ marginTop: 12 }}>
+                    <Text size={200}>
+                      <strong>What changed:</strong>{" "}
+                      Original: {contentDetail.content.extractedText.split(/\s+/).length} words →
+                      Adapted: {adaptation.adaptedText.split(/\s+/).length} words
+                      ({Math.round((1 - adaptation.adaptedText.split(/\s+/).length / Math.max(1, contentDetail.content.extractedText.split(/\s+/).length)) * 100)}% reduction).
+                      Content rewritten for {profileInfo?.description || adaptation.profile} readers —
+                      vocabulary simplified, sentences shortened, and structure improved for clarity.
+                    </Text>
+                  </div>
+                )}
+                {!contentDetail?.content?.extractedText && (
+                  <div className={styles.explanationBar} style={{ marginTop: 12 }}>
+                    <Text size={200}>
+                      <strong>Why this version:</strong> Rewritten for{" "}
+                      {profileInfo?.description || adaptation.profile} readers. Vocabulary was simplified,
+                      sentences were shortened, and the content was restructured into clear sections
+                      to reduce cognitive load.
+                    </Text>
+                  </div>
+                )}
               </Card>
             );
           })}

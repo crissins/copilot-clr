@@ -448,7 +448,7 @@ class ApiClient {
   // ── Reminders ───────────────────────────────────────────────────────
 
   async createReminder(
-    reminder: { title: string; description?: string; scheduledTime: string; channel?: string; recurring?: string },
+    reminder: { title: string; description?: string; scheduledTime: string; channel?: string; recurring?: string; intervalMinutes?: number },
     token: string | null,
   ): Promise<Reminder> {
     const res = await fetch(`${API_BASE}/api/reminders`, {
@@ -674,6 +674,7 @@ interface Reminder {
   scheduledTime: string;
   channel: string;
   recurring: string | null;
+  intervalMinutes: number | null;
   status: string;
   createdAt: string;
   updatedAt: string;

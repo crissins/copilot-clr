@@ -225,8 +225,13 @@ export function AvatarPage() {
       setStatus("Avatar connected! Type something to make the avatar speak.");
     } catch (err: any) {
       console.error("Avatar connection failed:", err);
-      setError(err.message || "Failed to connect avatar");
-      setStatus("Connection failed");
+      const msg = err.message || "Failed to connect avatar";
+      if (msg.includes("Avatar session not available") || msg.includes("unavailable") || msg.includes("unsupported_region")) {
+        setError("Avatar requires Azure Speech Service in a supported region (e.g., westus2, westeurope). Check your deployment configuration.");
+      } else {
+        setError(msg);
+      }
+      setStatus("Connection failed — see error above for details");
     } finally {
       setConnecting(false);
     }

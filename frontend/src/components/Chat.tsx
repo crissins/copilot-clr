@@ -162,7 +162,7 @@ export function Chat({ loadSessionId, onSessionLoaded }: {
           token,
           settings.preferredVoice !== "default" ? settings.preferredVoice : undefined,
           settings.voiceSpeed !== "1.0" ? settings.voiceSpeed : undefined,
-          settings.language !== "en" ? settings.language : undefined,
+          settings.language || "en",
         );
         const url = URL.createObjectURL(blob);
         const audio = new Audio(url);
@@ -305,7 +305,6 @@ export function Chat({ loadSessionId, onSessionLoaded }: {
     <div className={styles.root}>
       {/* Toolbar */}
       <Toolbar className={styles.toolbar} aria-label="Chat toolbar">
-        <FileUpload />
         <ToolbarButton
           icon={<Add24Regular />}
           onClick={handleNewChat}
@@ -333,6 +332,7 @@ export function Chat({ loadSessionId, onSessionLoaded }: {
 
       {/* Input row */}
       <div className={styles.inputRow}>
+        <FileUpload />
         <Button
           appearance={isRecording ? "primary" : "subtle"}
           icon={isRecording ? <MicOff24Regular /> : <Mic24Regular />}

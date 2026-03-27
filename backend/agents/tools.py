@@ -50,18 +50,19 @@ def _build_search_client():
     return client, index_name
 
 
-def search_knowledge_base(query: str, reading_level: str = "") -> str:
+def search_knowledge_base(query: str, reading_level: str = "", user_id: str = "") -> str:
     """Search indexed documents for content relevant to the query.
 
     Args:
         query:         Natural language search query from the agent.
         reading_level: Optional reading level filter (e.g. "5" for Grade 5).
                        When provided, prefers chunks tagged at that level.
+        user_id:       Optional user ID to scope results to a specific user.
 
     Returns:
         JSON string with list of matching chunks.
     """
-    logger.info("Knowledge base search: %r (reading_level=%r)", query, reading_level)
+    logger.info("Knowledge base search: %r (reading_level=%r, user_id=%r)", query, reading_level, user_id)
 
     search_client, index_name = _build_search_client()
 
@@ -76,19 +77,21 @@ def search_knowledge_base(query: str, reading_level: str = "") -> str:
         })
 
     try:
-        # Build optional filter for reading level
-        odata_filter = None
+        # Build optional OData filter
+        filters = []
+        if user_id:
+            filters.append(f"userId eq '{user_id}'")
         if reading_level:
             try:
-                # Accept both bare numbers ("5") and prefixed strings ("Grade 5")
                 import re
                 m = re.search(r"(\d+)", str(reading_level))
                 if m:
                     level = int(m.group(1))
-                    # Match chunks within ±1 grade of the requested level
-                    odata_filter = f"readingLevel ge {max(1, level - 1)} and readingLevel le {level + 1}"
+                    filters.append(f"readingLevel ge {max(1, level - 1)} and readingLevel le {level + 1}")
             except (ValueError, TypeError):
                 pass
+
+        odata_filter = " and ".join(filters) if filters else None
 
         # Hybrid search: keyword (BM25) + vector semantic (if semantic ranker enabled)
         search_kwargs: dict = {
@@ -100,6 +103,11 @@ def search_knowledge_base(query: str, reading_level: str = "") -> str:
             search_kwargs["filter"] = odata_filter
 
         results = list(search_client.search(**search_kwargs))
+
+        # If user-scoped search returns nothing, try without user filter
+        if not results and user_id:
+            search_kwargs.pop("filter", None)
+            results = list(search_client.search(**search_kwargs))
 
         if not results:
             return json.dumps({

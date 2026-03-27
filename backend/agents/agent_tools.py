@@ -105,7 +105,8 @@ def search_documents(query: str) -> str:
     """
     from agents.tools import search_knowledge_base  # noqa: PLC0415
 
-    return search_knowledge_base(query)
+    user_id = _user_id_var.get("")
+    return search_knowledge_base(query, user_id=user_id)
 
 
 # ============================================================================

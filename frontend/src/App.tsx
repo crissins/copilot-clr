@@ -98,27 +98,31 @@ const useStyles = makeStyles({
 
 // ── View router ──────────────────────────────────────────────────────────────
 
+const VIEW_STYLE_HIDDEN: React.CSSProperties = { display: "none" };
+const VIEW_STYLE_VISIBLE: React.CSSProperties = { display: "flex", flexDirection: "column", flex: 1, height: "100%", overflow: "hidden" };
+
 function ViewContent({ activeView, onStartOnboarding, loadSessionId, onSessionLoaded }: {
   activeView: string;
   onStartOnboarding?: () => void;
   loadSessionId?: string | null;
   onSessionLoaded?: () => void;
 }) {
-  switch (activeView) {
-    case "chat":     return <Chat loadSessionId={loadSessionId} onSessionLoaded={onSessionLoaded} />;
-    case "feature1": return <Feature1Page />;
-    case "feature2": return <Feature2Page />;
-    case "feature3": return <Feature3Page />;
-    case "feature4": return <Feature4Page />;
-    case "feature5": return <Feature5Page />;
-    case "feature6": return <Feature6Page />;
-    case "feature7": return <Feature7Page />;
-    case "avatar":   return <AvatarPage />;
-    case "voicelive": return <VoiceLivePage />;
-    case "feedback": return <FeedbackPage />;
-    case "settings": return <SettingsPage onStartOnboarding={onStartOnboarding} />;
-    default:         return <Feature7Page />;
-  }
+  return (
+    <>
+      <div style={activeView === "chat" ? VIEW_STYLE_VISIBLE : VIEW_STYLE_HIDDEN}><Chat loadSessionId={loadSessionId} onSessionLoaded={onSessionLoaded} /></div>
+      <div style={activeView === "feature1" ? VIEW_STYLE_VISIBLE : VIEW_STYLE_HIDDEN}><Feature1Page /></div>
+      <div style={activeView === "feature2" ? VIEW_STYLE_VISIBLE : VIEW_STYLE_HIDDEN}><Feature2Page /></div>
+      <div style={activeView === "feature3" ? VIEW_STYLE_VISIBLE : VIEW_STYLE_HIDDEN}><Feature3Page /></div>
+      <div style={activeView === "feature4" ? VIEW_STYLE_VISIBLE : VIEW_STYLE_HIDDEN}><Feature4Page /></div>
+      <div style={activeView === "feature5" ? VIEW_STYLE_VISIBLE : VIEW_STYLE_HIDDEN}><Feature5Page /></div>
+      <div style={activeView === "feature6" ? VIEW_STYLE_VISIBLE : VIEW_STYLE_HIDDEN}><Feature6Page /></div>
+      <div style={activeView === "feature7" ? VIEW_STYLE_VISIBLE : VIEW_STYLE_HIDDEN}><Feature7Page /></div>
+      <div style={activeView === "avatar" ? VIEW_STYLE_VISIBLE : VIEW_STYLE_HIDDEN}><AvatarPage /></div>
+      <div style={activeView === "voicelive" ? VIEW_STYLE_VISIBLE : VIEW_STYLE_HIDDEN}><VoiceLivePage /></div>
+      <div style={activeView === "feedback" ? VIEW_STYLE_VISIBLE : VIEW_STYLE_HIDDEN}><FeedbackPage /></div>
+      <div style={activeView === "settings" ? VIEW_STYLE_VISIBLE : VIEW_STYLE_HIDDEN}><SettingsPage onStartOnboarding={onStartOnboarding} /></div>
+    </>
+  );
 }
 
 // ── Visual settings → CSS variables ─────────────────────────────────────────

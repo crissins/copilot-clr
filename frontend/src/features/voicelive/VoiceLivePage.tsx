@@ -451,7 +451,14 @@ export function VoiceLivePage() {
       await startMicStream(ws);
     } catch (err: any) {
       setConnectionState("error");
-      setStatus(err.message || "Failed to connect");
+      const msg = err.message || "Failed to connect";
+      if (msg.includes("503") || msg.includes("not configured") || msg.includes("Web PubSub")) {
+        setStatus("Voice Live requires Azure Web PubSub to be configured. Check your deployment settings.");
+      } else if (msg.includes("502") || msg.includes("unavailable")) {
+        setStatus("Voice service is temporarily unavailable. Please try again in a moment.");
+      } else {
+        setStatus(msg);
+      }
     }
   }, [getAccessToken, handleWsMessage]);
 

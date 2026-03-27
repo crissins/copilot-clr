@@ -44,7 +44,7 @@ const useStyles = makeStyles({
     display: "flex",
     flexDirection: "column",
     gap: "20px",
-    maxWidth: "900px",
+    maxWidth: "1100px",
     marginLeft: "auto",
     marginRight: "auto",
     ...shorthands.padding("24px"),
@@ -53,6 +53,14 @@ const useStyles = makeStyles({
   },
   header: { display: "flex", alignItems: "center", justifyContent: "space-between" },
   headerLeft: { display: "flex", alignItems: "center", gap: "12px" },
+  topRow: {
+    display: "grid",
+    gridTemplateColumns: "1fr 1fr",
+    gap: "20px",
+    "@media (max-width: 768px)": {
+      gridTemplateColumns: "1fr",
+    },
+  },
   section: {
     display: "flex", flexDirection: "column", gap: "12px",
     ...shorthands.padding("20px"),
@@ -248,97 +256,98 @@ export function Feature3Page() {
         </MessageBar>
       )}
 
-      {/* Focus Timer */}
-      <div className={styles.timerSection}>
-        <Text size={500} weight="semibold">Focus Timer</Text>
-        <Text size={200} style={{ color: tokens.colorNeutralForeground3 }}>
-          Short, timed work sessions can help you stay focused. Pick a duration and press Start.
-        </Text>
-        <div className={styles.timerPresets}>
-          {[5, 10, 15, 25, 45].map((m) => (
-            <Button
-              key={m}
-              appearance={timerPreset === m ? "primary" : "outline"}
-              size="small"
-              onClick={() => setPreset(m)}
-            >
-              {m} min
+      {/* Timer + Reminder form side by side */}
+      <div className={styles.topRow}>
+        {/* Focus Timer */}
+        <div className={styles.timerSection}>
+          <Text size={500} weight="semibold">Focus Timer</Text>
+          <Text size={200} style={{ color: tokens.colorNeutralForeground3 }}>
+            Short, timed work sessions can help you stay focused. Pick a duration and press Start.
+          </Text>
+          <div className={styles.timerPresets}>
+            {[5, 10, 15, 25, 45].map((m) => (
+              <Button
+                key={m}
+                appearance={timerPreset === m ? "primary" : "outline"}
+                size="small"
+                onClick={() => setPreset(m)}
+              >
+                {m} min
+              </Button>
+            ))}
+          </div>
+          <div className={styles.timerDisplay}>{formatTimer(timerSeconds)}</div>
+          <div className={styles.timerControls}>
+            {!timerRunning ? (
+              <Button appearance="primary" icon={<PlayCircle24Regular />} onClick={startTimer}>
+                {timerSeconds === 0 ? "Restart" : "Start"}
+              </Button>
+            ) : (
+              <Button appearance="secondary" icon={<PauseCircle24Regular />} onClick={pauseTimer}>
+                Pause
+              </Button>
+            )}
+            <Button appearance="subtle" icon={<ArrowReset24Regular />} onClick={resetTimer}>
+              Reset
             </Button>
-          ))}
-        </div>
-        <div className={styles.timerDisplay}>{formatTimer(timerSeconds)}</div>
-        <div className={styles.timerControls}>
-          {!timerRunning ? (
-            <Button appearance="primary" icon={<PlayCircle24Regular />} onClick={startTimer}>
-              {timerSeconds === 0 ? "Restart" : "Start"}
-            </Button>
-          ) : (
-            <Button appearance="secondary" icon={<PauseCircle24Regular />} onClick={pauseTimer}>
-              Pause
-            </Button>
+          </div>
+          {timerSeconds === 0 && (
+            <MessageBar intent="success" style={{ maxWidth: 400 }}>
+              <MessageBarBody>Session complete — great work! Take a short break.</MessageBarBody>
+            </MessageBar>
           )}
-          <Button appearance="subtle" icon={<ArrowReset24Regular />} onClick={resetTimer}>
-            Reset
-          </Button>
         </div>
-        {timerSeconds === 0 && (
-          <MessageBar intent="success" style={{ maxWidth: 400 }}>
-            <MessageBarBody>Session complete — great work! Take a short break.</MessageBarBody>
-          </MessageBar>
-        )}
-      </div>
 
-      <Divider />
-
-      {/* Create Reminder */}
-      <div className={styles.section}>
-        <Text size={500} weight="semibold">New Reminder</Text>
-        <div className={styles.formRow}>
-          <Input
-            placeholder="What would you like to be reminded about?"
-            value={title}
-            onChange={(_, d) => setTitle(d.value)}
-            style={{ flex: 1, minWidth: 200 }}
+        {/* Create Reminder */}
+        <div className={styles.section}>
+          <Text size={500} weight="semibold">New Reminder</Text>
+          <div className={styles.formRow}>
+            <Input
+              placeholder="What would you like to be reminded about?"
+              value={title}
+              onChange={(_, d) => setTitle(d.value)}
+              style={{ flex: 1, minWidth: 200 }}
+            />
+            <input
+              type="datetime-local"
+              value={scheduledTime}
+              onChange={(e) => setScheduledTime(e.target.value)}
+              style={{
+                padding: "6px 10px",
+                borderRadius: "6px",
+                border: `1px solid ${tokens.colorNeutralStroke1}`,
+                backgroundColor: tokens.colorNeutralBackground1,
+                color: tokens.colorNeutralForeground1,
+              }}
+            />
+          </div>
+          <Textarea
+            placeholder="Optional: add more details (keep it simple!)"
+            value={description}
+            onChange={(_, d) => setDescription(d.value)}
+            rows={2}
           />
-          <input
-            type="datetime-local"
-            value={scheduledTime}
-            onChange={(e) => setScheduledTime(e.target.value)}
-            style={{
-              padding: "6px 10px",
-              borderRadius: "6px",
-              border: `1px solid ${tokens.colorNeutralStroke1}`,
-              backgroundColor: tokens.colorNeutralBackground1,
-              color: tokens.colorNeutralForeground1,
-            }}
-          />
-        </div>
-        <Textarea
-          placeholder="Optional: add more details (keep it simple!)"
-          value={description}
-          onChange={(_, d) => setDescription(d.value)}
-          rows={2}
-        />
-        <div className={styles.formRow}>
-          <Select value={channel} onChange={(_, d) => setChannel(d.value)} style={{ minWidth: 140 }}>
-            <option value="push">Push notification</option>
-            <option value="email">Email</option>
-            <option value="sms">SMS</option>
-          </Select>
-          <Select value={recurring} onChange={(_, d) => setRecurring(d.value)} style={{ minWidth: 140 }}>
-            <option value="">One-time</option>
-            <option value="daily">Daily</option>
-            <option value="weekly">Weekly</option>
-            <option value="weekdays">Weekdays</option>
-          </Select>
-          <Button
-            appearance="primary"
-            icon={creating ? <Spinner size="tiny" /> : <Add24Regular />}
-            onClick={handleCreate}
-            disabled={creating || !title.trim() || !scheduledTime}
-          >
-            {creating ? "Creating..." : "Add Reminder"}
-          </Button>
+          <div className={styles.formRow}>
+            <Select value={channel} onChange={(_, d) => setChannel(d.value)} style={{ minWidth: 140 }}>
+              <option value="push">Push notification</option>
+              <option value="email">Email</option>
+              <option value="sms">SMS</option>
+            </Select>
+            <Select value={recurring} onChange={(_, d) => setRecurring(d.value)} style={{ minWidth: 140 }}>
+              <option value="">One-time</option>
+              <option value="daily">Daily</option>
+              <option value="weekly">Weekly</option>
+              <option value="weekdays">Weekdays</option>
+            </Select>
+            <Button
+              appearance="primary"
+              icon={creating ? <Spinner size="tiny" /> : <Add24Regular />}
+              onClick={handleCreate}
+              disabled={creating || !title.trim() || !scheduledTime}
+            >
+              {creating ? "Creating..." : "Add Reminder"}
+            </Button>
+          </div>
         </div>
       </div>
 

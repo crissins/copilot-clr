@@ -1851,7 +1851,7 @@ from routes.avatar_routes import router as avatar_router, init_routes as init_av
 from routes.speech_routes import router as speech_router, init_routes as init_speech_routes
 
 init_content(_content_container, _adapted_container, _audio_container, _get_user_id, _check_content_safety)
-init_reminders(_get_user_id, _reminders_container)
+init_reminders(_get_user_id, _reminders_container, _preferences_container)
 init_avatar(_get_user_id, _preferences_container, _adapted_container)
 init_speech_routes(_get_user_id)
 

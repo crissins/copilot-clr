@@ -48,6 +48,7 @@ import ReactMarkdown from "react-markdown";
 import * as speechSdk from "microsoft-cognitiveservices-speech-sdk";
 import { apiClient } from "../../services/api";
 import { useAuth } from "../../hooks/useAuth";
+import { useI18n } from "../../I18nContext";
 import { useImmersiveReader } from "../../hooks/useImmersiveReader";
 import { ImmersiveReaderSettingsPanel } from "../../components/ImmersiveReaderSettingsPanel";
 import { SuggestionChips } from "./SuggestionChips";
@@ -388,6 +389,7 @@ const useStyles = makeStyles({
 export function Feature7Page() {
   const styles = useStyles();
   const { getAccessToken } = useAuth();
+  const { language } = useI18n();
 
   // Conversation state
   const [conversation, setConversation] = useState<ConversationTurn[]>([]);
@@ -641,7 +643,7 @@ export function Feature7Page() {
         if (agentResponse.audio_base64) {
           await playBase64Audio(agentResponse.audio_base64);
         } else {
-          await speakText(assistantText, token, voiceName, speechRate);
+          await speakText(assistantText, token, voiceName, speechRate, language);
         }
 
         setStatus("Ready for your next question. Take your time.");
@@ -660,7 +662,7 @@ export function Feature7Page() {
         setIsProcessing(false);
       }
     },
-    [scrollToBottom, sessionId, inputMode, conversation.length, voiceName, speechRate],
+    [scrollToBottom, sessionId, inputMode, conversation.length, voiceName, speechRate, language],
   );
 
   // Keep the ref in sync so voice callbacks always call the latest version
@@ -701,10 +703,10 @@ export function Feature7Page() {
     }
   }, []);
 
-  const speakText = useCallback(async (text: string, token: string | null, voice?: string, rate?: string) => {
+  const speakText = useCallback(async (text: string, token: string | null, voice?: string, rate?: string, lang?: string) => {
     try {
       setIsSpeaking(true);
-      const audioBlob = await apiClient.speechSynthesize(text, token, voice, rate);
+      const audioBlob = await apiClient.speechSynthesize(text, token, voice, rate, lang);
       const url = URL.createObjectURL(audioBlob);
       const audio = new Audio(url);
       currentAudioRef.current = audio;
@@ -742,10 +744,10 @@ export function Feature7Page() {
       if (isSpeaking || isProcessing) return;
       const token = await getAccessToken();
       setStatus("Reading aloud...");
-      await speakText(text, token, voiceName, speechRate);
+      await speakText(text, token, voiceName, speechRate, language);
       setStatus("Ready for your next question. Take your time.");
     },
-    [isSpeaking, isProcessing, getAccessToken, speakText, voiceName, speechRate],
+    [isSpeaking, isProcessing, getAccessToken, speakText, voiceName, speechRate, language],
   );
 
   const clearConversation = useCallback(() => {
