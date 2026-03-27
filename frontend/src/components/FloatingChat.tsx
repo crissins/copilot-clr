@@ -25,6 +25,7 @@ import {
 } from "@fluentui/react-icons";
 import { apiClient, type Message } from "../services/api";
 import { useAuth } from "../hooks/useAuth";
+import { useImmersiveReader } from "../hooks/useImmersiveReader";
 
 // ── Styles ──────────────────────────────────────────────────────────────────
 
@@ -136,6 +137,7 @@ const useStyles = makeStyles({
 export function FloatingChat() {
   const styles = useStyles();
   const { getAccessToken } = useAuth();
+  const { launch: launchIR } = useImmersiveReader();
   const [irOpen, setIrOpen] = useState(false);
   const [expanded, setExpanded] = useState(false);
   const [messages, setMessages] = useState<Message[]>([]);
@@ -192,16 +194,25 @@ export function FloatingChat() {
 
       if (!sessionId) setSessionId(response.sessionId);
 
+      const assistantContent = response.message.content;
+
       setMessages((prev) => [
         ...prev,
         {
           id: response.message.id,
           sessionId: response.sessionId,
           role: "assistant",
-          content: response.message.content,
+          content: assistantContent,
           createdAt: response.message.createdAt,
         },
       ]);
+
+      // Push the assistant's answer into the Immersive Reader with auto read-aloud
+      try {
+        await launchIR("Copilot CLR Response", assistantContent);
+      } catch {
+        // IR relaunch is best-effort; don't block the chat flow
+      }
     } catch {
       setMessages((prev) => [
         ...prev,

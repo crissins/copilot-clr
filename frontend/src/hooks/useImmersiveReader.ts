@@ -59,8 +59,8 @@ const PREFS_STORAGE_KEY = "ir-preferences"; // SDK preferences string
 
 const DEFAULT_SETTINGS: ImmersiveReaderSettings = {
   readAloudVoice: "Female",
-  readAloudSpeed: 1,
-  readAloudAutoPlay: false,
+  readAloudSpeed: 1.25,
+  readAloudAutoPlay: true,
   translationLanguage: "",
   autoEnableDocumentTranslation: false,
   autoEnableWordTranslation: false,
@@ -79,7 +79,13 @@ const DEFAULT_SETTINGS: ImmersiveReaderSettings = {
 function loadSettings(): ImmersiveReaderSettings {
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
-    if (raw) return { ...DEFAULT_SETTINGS, ...JSON.parse(raw) };
+    if (raw) {
+      const saved = { ...DEFAULT_SETTINGS, ...JSON.parse(raw) };
+      // Ensure auto-play and speed reflect the latest defaults
+      saved.readAloudAutoPlay = true;
+      if (saved.readAloudSpeed < 1.25) saved.readAloudSpeed = 1.25;
+      return saved;
+    }
   } catch { /* ignore */ }
   return { ...DEFAULT_SETTINGS };
 }
