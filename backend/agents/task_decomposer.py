@@ -66,7 +66,7 @@ Respond with valid JSON only (no markdown, no extra text):
 }
 """
 
-DECOMPOSER_AGENT_NAME = "Copilot CLR Task Decomposer"
+DECOMPOSER_AGENT_NAME = "Copilot-CLR-Task-Decomposer"
 DECOMPOSER_MODEL = os.environ.get("MODEL_DEPLOYMENT_NAME", "gpt-4o-mini")
 
 

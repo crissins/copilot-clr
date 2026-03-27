@@ -30,7 +30,7 @@ resource raiPolicy 'Microsoft.CognitiveServices/accounts/raiPolicies@2024-04-01-
   name: policyName
   properties: {
     basePolicyName: 'Microsoft.DefaultV2'
-    mode: 'Asynchronous_filter'
+    mode: 'Deferred'
     contentFilters: [
       // ── Hate ──
       {

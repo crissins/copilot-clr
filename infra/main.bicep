@@ -54,6 +54,9 @@ param openAiEmbeddingCapacity int = 10
 @description('Deploy gpt-4o-mini-realtime-preview for voice interactions. Set false in low-cost mode — Realtime API charges ~$0.06/min input + $0.24/min output audio.')
 param deployVoice bool = true
 
+@description('Deploy Bing Search grounding for AI Foundry agents. Set false if Bing Search API is unavailable in your region.')
+param deployBingGrounding bool = false
+
 @description('Container App CPU (vCPU). Use 0.25 in low-cost mode (must pair with 0.5Gi memory).')
 param containerCpu string = '0.5'
 
@@ -193,7 +196,7 @@ module communication 'modules/communication.bicep' = if (!localDevMode) {
   }
 }
 
-module bingGrounding 'modules/bing-grounding.bicep' = if (!localDevMode) {
+module bingGrounding 'modules/bing-grounding.bicep' = if (!localDevMode && deployBingGrounding) {
   name: 'bing-grounding-deployment'
   params: {
     location: location
