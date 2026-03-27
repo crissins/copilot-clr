@@ -5,6 +5,7 @@ import {
   Spinner,
   Toolbar,
   ToolbarButton,
+  Tooltip,
   makeStyles,
   tokens,
   shorthands,
@@ -14,6 +15,7 @@ import {
   Add24Regular,
   Mic24Regular,
   MicOff24Regular,
+  TasksApp24Regular,
 } from "@fluentui/react-icons";
 import * as speechSdk from "microsoft-cognitiveservices-speech-sdk";
 import { apiClient, type Message } from "../services/api";
@@ -103,6 +105,10 @@ export function Chat({ loadSessionId, onSessionLoaded }: {
   const [isLoading, setIsLoading] = useState(false);
   const [sessionId, setSessionId] = useState<string | null>(null);
   const [isRecording, setIsRecording] = useState(false);
+  const [uploadedFiles, setUploadedFiles] = useState<string[]>([]);
+  const [showDecomposer, setShowDecomposer] = useState(false);
+  const [decomposerGoal, setDecomposerGoal] = useState("");
+  const [decomposerLoading, setDecomposerLoading] = useState(false);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const recognizerRef = useRef<speechSdk.SpeechRecognizer | null>(null);
 
@@ -260,8 +266,69 @@ export function Chat({ loadSessionId, onSessionLoaded }: {
     setMessages([]);
     setSessionId(null);
     setInput("");
+    setUploadedFiles([]);
+    setShowDecomposer(false);
+    setDecomposerGoal("");
     textareaRef.current?.focus();
   };
+
+  const handleDecompose = useCallback(async () => {
+    const goal = decomposerGoal.trim();
+    if (!goal || decomposerLoading) return;
+    setDecomposerLoading(true);
+    try {
+      const token = await getAccessToken();
+      const res = await apiClient.decomposeTask(goal, "", token);
+      const plan = res.task;
+      // Format plan as a rich message in chat
+      const totalMinutes = plan.steps.reduce((sum: number, s: { estimatedMinutes: number }) => sum + s.estimatedMinutes, 0);
+      let content = `## 📋 Task Plan: ${plan.goal}\n\n`;
+      content += `**${plan.steps.length} steps** · ~${totalMinutes} min total\n\n`;
+      plan.steps.forEach((step: { title: string; estimatedMinutes: number; priority: string; focusTip?: string }, idx: number) => {
+        content += `### ${idx + 1}. ${step.title}\n`;
+        content += `⏱ ${step.estimatedMinutes} min · Priority: ${step.priority}\n`;
+        if (step.focusTip) content += `💡 *${step.focusTip}*\n`;
+        content += `\n`;
+      });
+      if (plan.explanation) {
+        content += `---\n**Why this breakdown:** ${plan.explanation}\n`;
+      }
+      content += `\n✅ *Plan saved — view and track progress in the Task Decomposer page.*`;
+
+      setMessages((prev) => [
+        ...prev,
+        {
+          id: crypto.randomUUID(),
+          sessionId: sessionId || "",
+          role: "user",
+          content: `Break down this goal: ${goal}`,
+          createdAt: new Date().toISOString(),
+        },
+        {
+          id: crypto.randomUUID(),
+          sessionId: sessionId || "",
+          role: "assistant",
+          content,
+          createdAt: new Date().toISOString(),
+        },
+      ]);
+      setDecomposerGoal("");
+      setShowDecomposer(false);
+    } catch {
+      setMessages((prev) => [
+        ...prev,
+        {
+          id: crypto.randomUUID(),
+          sessionId: sessionId || "",
+          role: "assistant",
+          content: "Something went wrong while breaking down the task. Please try again.",
+          createdAt: new Date().toISOString(),
+        },
+      ]);
+    } finally {
+      setDecomposerLoading(false);
+    }
+  }, [decomposerGoal, decomposerLoading, getAccessToken, sessionId]);
 
   const isEmpty = messages.length === 0 && !isLoading;
 
@@ -276,7 +343,55 @@ export function Chat({ loadSessionId, onSessionLoaded }: {
         >
           {t.chat.newChat}
         </ToolbarButton>
+        <ToolbarButton
+          icon={<TasksApp24Regular />}
+          onClick={() => setShowDecomposer(!showDecomposer)}
+          aria-label="Break down a task"
+        >
+          Break it down
+        </ToolbarButton>
       </Toolbar>
+
+      {/* Inline task decomposer panel */}
+      {showDecomposer && (
+        <div style={{
+          display: "flex",
+          gap: "8px",
+          alignItems: "flex-end",
+          padding: "12px 16px",
+          backgroundColor: tokens.colorNeutralBackground3,
+          borderBottom: `1px solid ${tokens.colorNeutralStroke1}`,
+        }}>
+          <Textarea
+            style={{ flex: 1, minHeight: "40px" }}
+            placeholder="Describe a goal… e.g. 'Write a 2-page essay on climate change'"
+            value={decomposerGoal}
+            onChange={(_, d) => setDecomposerGoal(d.value)}
+            disabled={decomposerLoading}
+            resize="none"
+            onKeyDown={(e) => {
+              if (e.key === "Enter" && !e.shiftKey) {
+                e.preventDefault();
+                handleDecompose();
+              }
+            }}
+          />
+          <Button
+            appearance="primary"
+            onClick={handleDecompose}
+            disabled={decomposerLoading || !decomposerGoal.trim()}
+            icon={decomposerLoading ? <Spinner size="tiny" /> : <TasksApp24Regular />}
+          >
+            {decomposerLoading ? "Breaking down…" : "Break it down"}
+          </Button>
+          <Button
+            appearance="subtle"
+            onClick={() => { setShowDecomposer(false); setDecomposerGoal(""); }}
+          >
+            Cancel
+          </Button>
+        </div>
+      )}
 
       {/* Message area */}
       <div className={styles.messageArea} role="log" aria-live="polite" aria-label="Chat messages">
@@ -296,36 +411,66 @@ export function Chat({ loadSessionId, onSessionLoaded }: {
 
       {/* Input row */}
       <div className={styles.inputRow}>
-        <FileUpload />
-        <Button
-          appearance={isRecording ? "primary" : "subtle"}
-          icon={isRecording ? <MicOff24Regular /> : <Mic24Regular />}
-          onClick={toggleMic}
-          disabled={isLoading}
-          aria-label={isRecording ? "Stop recording" : "Start voice input"}
-          shape="circular"
-          style={{ flexShrink: 0, minWidth: "44px", height: "44px" }}
-        />
-        <Textarea
-          ref={textareaRef}
-          className={styles.textarea}
-          value={input}
-          onChange={(_, d) => setInput(d.value)}
-          onKeyDown={handleKeyDown}
-          placeholder={t.chat.placeholder}
-          disabled={isLoading}
-          resize="none"
-          aria-label="Message input"
-        />
-        <Button
-          className={styles.sendBtn}
-          appearance="primary"
-          icon={isLoading ? <Spinner size="tiny" /> : <Send24Regular />}
-          onClick={handleSend}
-          disabled={!input.trim() || isLoading}
-          aria-label={t.chat.send}
-          shape="circular"
-        />
+        <div style={{ display: "flex", flexDirection: "column", flex: 1, gap: "6px" }}>
+          {uploadedFiles.length > 0 && (
+            <div style={{
+              display: "flex",
+              flexWrap: "wrap",
+              gap: "4px",
+              fontSize: "12px",
+              color: tokens.colorNeutralForeground3,
+            }}>
+              {uploadedFiles.map((f, i) => (
+                <span
+                  key={i}
+                  style={{
+                    backgroundColor: tokens.colorNeutralBackground4,
+                    borderRadius: "4px",
+                    padding: "2px 8px",
+                  }}
+                >
+                  📎 {f}
+                </span>
+              ))}
+            </div>
+          )}
+          <div style={{ display: "flex", alignItems: "flex-end", gap: "8px" }}>
+            <FileUpload onUploadComplete={(filename) => setUploadedFiles((prev) => [...prev, filename])} />
+            <Tooltip content="Talk and I'll write it down for you" relationship="label" positioning="above">
+              <Button
+                appearance={isRecording ? "primary" : "subtle"}
+                icon={isRecording ? <MicOff24Regular /> : <Mic24Regular />}
+                onClick={toggleMic}
+                disabled={isLoading}
+                aria-label={isRecording ? "Stop recording" : "Start voice input"}
+                shape="circular"
+                style={{ flexShrink: 0, minWidth: "44px", height: "44px" }}
+              />
+            </Tooltip>
+            <Textarea
+              ref={textareaRef}
+              className={styles.textarea}
+              value={input}
+              onChange={(_, d) => setInput(d.value)}
+              onKeyDown={handleKeyDown}
+              placeholder={t.chat.placeholder}
+              disabled={isLoading}
+              resize="none"
+              aria-label="Message input"
+            />
+            <Tooltip content="Send your message" relationship="label" positioning="above">
+              <Button
+                className={styles.sendBtn}
+                appearance="primary"
+                icon={isLoading ? <Spinner size="tiny" /> : <Send24Regular />}
+                onClick={handleSend}
+                disabled={!input.trim() || isLoading}
+                aria-label={t.chat.send}
+                shape="circular"
+              />
+            </Tooltip>
+          </div>
+        </div>
       </div>
     </div>
   );

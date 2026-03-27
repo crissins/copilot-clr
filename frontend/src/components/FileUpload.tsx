@@ -5,6 +5,7 @@ import {
   Button, 
   Spinner, 
   Toaster, 
+  Tooltip,
   useId, 
   useToastController, 
   Toast, 
@@ -34,11 +35,11 @@ export function FileUpload({ onUploadComplete }: Props) {
       
       dispatchToast(
         <Toast appearance="inverted" style={{ backgroundColor: "#107C10", color: "white" }}>
-          <ToastTitle>document uploaded and ready to rag on</ToastTitle>
+          <ToastTitle>📎 {file.name} uploaded — ask me anything about it!</ToastTitle>
         </Toast>,
         { intent: "success" }
       );
-      onUploadComplete?.(result.filename);
+      onUploadComplete?.(result.filename || file.name);
     } catch (err) {
       console.error(err);
     } finally {
@@ -50,15 +51,17 @@ export function FileUpload({ onUploadComplete }: Props) {
   return (
     <>
       <Toaster toasterId={toasterId} position="top-end" />
-      <Button
-        appearance="subtle"
-        icon={uploading ? <Spinner size="tiny" /> : <Attach24Regular />}
-        disabled={uploading}
-        onClick={() => fileRef.current?.click()}
-        aria-label="Upload file"
-        shape="circular"
-        style={{ flexShrink: 0, minWidth: "44px", height: "44px" }}
-      />
+      <Tooltip content="Upload a document so we can chat about it" relationship="label" positioning="above">
+        <Button
+          appearance="subtle"
+          icon={uploading ? <Spinner size="tiny" /> : <Attach24Regular />}
+          disabled={uploading}
+          onClick={() => fileRef.current?.click()}
+          aria-label="Upload file"
+          shape="circular"
+          style={{ flexShrink: 0, minWidth: "44px", height: "44px" }}
+        />
+      </Tooltip>
       <input
         ref={fileRef}
         type="file"

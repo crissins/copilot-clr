@@ -687,10 +687,34 @@ async def chat(req: Request) -> JSONResponse:
         "createdAt": datetime.now(timezone.utc).isoformat(),
     })
 
+    # ── Fetch user's uploaded documents to give the agent context ──
+    doc_context = ""
+    try:
+        user_docs = list(_content_container.query_items(
+            query=(
+                "SELECT c.id, c.filename, c.fileType, c.chunkCount, c.createdAt "
+                "FROM c WHERE c.userId = @uid ORDER BY c.createdAt DESC OFFSET 0 LIMIT 10"
+            ),
+            parameters=[{"name": "@uid", "value": user_id}],
+            enable_cross_partition_query=False,
+        ))
+        if user_docs:
+            doc_lines = ", ".join(
+                f'"{d.get("filename", "unknown")}"' for d in user_docs
+            )
+            doc_context = (
+                f"[The user has these uploaded documents: {doc_lines}. "
+                f"Use your search_documents tool to find answers from them.]\n\n"
+            )
+    except Exception:
+        logger.debug("Could not fetch user documents for context, continuing without")
+
+    augmented_message = doc_context + message if doc_context else message
+
     start = time.monotonic()
     try:
         agent_response = await get_agent_response(
-            message=message,
+            message=augmented_message,
             session_id=session_id,
             user_id=user_id,
         )
@@ -870,6 +894,25 @@ def delete_session(session_id: str, req: Request) -> JSONResponse:
             pass  # Best-effort cleanup
 
     return Response(status_code=204)
+
+
+# ── PATCH /api/sessions/{session_id}/star ─────────────────────────────────
+@app.patch("/api/sessions/{session_id}/star")
+def toggle_star_session(session_id: str, req: Request) -> JSONResponse:
+    """Toggle starred status on a session."""
+    try:
+        user_id = _get_user_id(req.headers.get("Authorization"))
+    except AuthError as e:
+        return JSONResponse({"error": str(e)}, status_code=401)
+
+    try:
+        session = _sessions_container.read_item(item=session_id, partition_key=user_id)
+    except Exception:
+        return JSONResponse({"error": "Session not found"}, status_code=404)
+
+    session["starred"] = not session.get("starred", False)
+    _sessions_container.upsert_item(session)
+    return JSONResponse(session)
 
 
 # ============================================================================

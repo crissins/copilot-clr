@@ -19,6 +19,7 @@ interface Session {
   title: string;
   createdAt: string;
   updatedAt: string;
+  starred?: boolean;
 }
 
 interface Message {
@@ -104,6 +105,18 @@ class ApiClient {
       headers: this.getHeaders(token),
     });
     if (!res.ok) throw new Error(`Delete session failed: ${res.status}`);
+  }
+
+  async toggleStarSession(
+    sessionId: string,
+    token: string | null
+  ): Promise<Session> {
+    const res = await fetch(`${API_BASE}/api/sessions/${encodeURIComponent(sessionId)}/star`, {
+      method: "PATCH",
+      headers: this.getHeaders(token),
+    });
+    if (!res.ok) throw new Error(`Toggle star failed: ${res.status}`);
+    return res.json();
   }
 
   async getPreferences(token: string | null): Promise<UserPreferences> {

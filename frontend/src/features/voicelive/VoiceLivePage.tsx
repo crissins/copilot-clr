@@ -605,6 +605,10 @@ export function VoiceLivePage() {
           </div>
         </div>
 
+        <Text size={300} style={{ color: tokens.colorNeutralForeground3 }}>
+          Have a natural, real-time voice conversation with AI. Just speak naturally — the AI will respond with a calm, clear voice. You can interrupt at any time.
+        </Text>
+
         {/* Transcript area */}
         {transcript.length === 0 ? (
           <div className={styles.emptyState}>

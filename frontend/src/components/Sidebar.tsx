@@ -9,10 +9,8 @@ import {
 } from "@fluentui/react-components";
 import {
   Chat28Regular,
-  Document28Regular,
   TextBulletListSquare28Regular,
   Clock28Regular,
-  VideoClip28Regular,
   TasksApp28Regular,
   Accessibility28Regular,
   Record28Regular,
@@ -33,10 +31,8 @@ export interface NavItem {
 
 const NAV_ITEM_ICONS: Record<string, JSX.Element> = {
   chat: <Chat28Regular />,
-  feature1: <Document28Regular />,
   feature2: <TextBulletListSquare28Regular />,
   feature3: <Clock28Regular />,  // Reminders & Focus
-  feature4: <VideoClip28Regular />,
   feature5: <TasksApp28Regular />,  // Task Decomposer
   feature6: <Accessibility28Regular />,
   feature7: <Record28Regular />,
@@ -125,15 +121,13 @@ export function Sidebar({ activeView, onNavigate, collapsed = false, onToggle }:
   const { t } = useI18n();
 
   const NAV_ITEMS: NavItem[] = [
-    { id: "chat",     label: t.nav.chat,              icon: NAV_ITEM_ICONS.chat },
-    { id: "feature1", label: t.nav.documentUpload,    icon: NAV_ITEM_ICONS.feature1 },
-    { id: "feature2", label: t.nav.simplifyContent,   icon: NAV_ITEM_ICONS.feature2 },
-    { id: "feature3", label: t.nav.remindersFocus,    icon: NAV_ITEM_ICONS.feature3 },
-    { id: "feature4", label: t.nav.mediaProcessing,   icon: NAV_ITEM_ICONS.feature4 },
-    { id: "feature5", label: t.nav.taskDecomposer,    icon: NAV_ITEM_ICONS.feature5 },
-    { id: "feature6", label: t.nav.accessibilityHub,  icon: NAV_ITEM_ICONS.feature6 },
-    { id: "feature7", label: t.nav.speechAssistant,   icon: NAV_ITEM_ICONS.feature7 },
-    { id: "avatar",   label: t.nav.avatar,             icon: NAV_ITEM_ICONS.avatar },
+    { id: "chat",      label: t.nav.chat,              icon: NAV_ITEM_ICONS.chat },
+    { id: "feature2",  label: t.nav.simplifyContent,   icon: NAV_ITEM_ICONS.feature2 },
+    { id: "feature3",  label: t.nav.remindersFocus,    icon: NAV_ITEM_ICONS.feature3 },
+    { id: "feature5",  label: t.nav.taskDecomposer,    icon: NAV_ITEM_ICONS.feature5 },
+    { id: "feature6",  label: t.nav.accessibilityHub,  icon: NAV_ITEM_ICONS.feature6 },
+    { id: "feature7",  label: t.nav.speechAssistant,   icon: NAV_ITEM_ICONS.feature7 },
+    { id: "avatar",    label: t.nav.avatar,             icon: NAV_ITEM_ICONS.avatar },
     { id: "voicelive", label: t.nav.voiceLive,          icon: NAV_ITEM_ICONS.voicelive },
     { id: "feedback",  label: t.nav.feedback,           icon: NAV_ITEM_ICONS.feedback },
   ];

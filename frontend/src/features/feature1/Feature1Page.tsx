@@ -21,6 +21,7 @@ import {
   DocumentBulletList24Regular,
   Document24Regular,
   Video24Regular,
+  Play24Regular,
 } from "@fluentui/react-icons";
 import { apiClient } from "../../services/api";
 import type { ContentItem } from "../../services/api";
@@ -95,6 +96,7 @@ export function Feature1Page() {
   const { t } = useI18n();
   const [documents, setDocuments] = useState<ContentItem[]>([]);
   const [loading, setLoading] = useState(true);
+  const [analyzingId, setAnalyzingId] = useState<string | null>(null);
 
   const loadDocuments = useCallback(async () => {
     setLoading(true);
@@ -113,6 +115,19 @@ export function Feature1Page() {
     loadDocuments();
   }, [loadDocuments]);
 
+  const handleAnalyzeVideo = useCallback(async (docId: string) => {
+    setAnalyzingId(docId);
+    try {
+      const token = await getAccessToken();
+      await apiClient.analyzeVideo(docId, token);
+      loadDocuments(); // Refresh to show updated status
+    } catch (err) {
+      console.error("Video analysis failed:", err);
+    } finally {
+      setAnalyzingId(null);
+    }
+  }, [getAccessToken, loadDocuments]);
+
   return (
     <div className={styles.container}>
       <div className={styles.header}>
@@ -130,6 +145,9 @@ export function Feature1Page() {
           />
         </div>
       </div>
+      <Text size={300} style={{ color: tokens.colorNeutralForeground3 }}>
+        Upload documents here to make them available across all your conversations. Supported formats: PDF, DOCX, and video files. Documents are indexed so the AI can search and answer questions about them.
+      </Text>
 
       {loading ? (
         <Spinner label={t.docs.loading} />
@@ -147,6 +165,17 @@ export function Feature1Page() {
                   <span className={styles.filename}>{doc.filename}</span>
                 </div>
                 <div className={styles.meta}>
+                  {doc.fileType === "video" && (
+                    <Button
+                      size="small"
+                      appearance="subtle"
+                      icon={analyzingId === doc.id ? <Spinner size="tiny" /> : <Play24Regular />}
+                      onClick={() => handleAnalyzeVideo(doc.id)}
+                      disabled={!!analyzingId}
+                    >
+                      {analyzingId === doc.id ? "Processing…" : "Process Video"}
+                    </Button>
+                  )}
                   <Badge appearance="outline">{doc.chunkCount} {t.docs.chunks}</Badge>
                   <Badge appearance="tint" color="brand">{doc.status}</Badge>
                   <Text size={200} style={{ opacity: 0.6 }}>

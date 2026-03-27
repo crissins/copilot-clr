@@ -303,6 +303,9 @@ export function AvatarPage() {
           {connecting ? "Connecting..." : connected ? "Disconnect" : "Connect Avatar"}
         </Button>
       </div>
+      <Text size={300} style={{ color: tokens.colorNeutralForeground3 }}>
+        Connect to a visual avatar that reads text aloud for you. Type or paste text, choose a speaking style, and the avatar will explain it in a calm, friendly way.
+      </Text>
 
       {error && (
         <MessageBar intent="error">

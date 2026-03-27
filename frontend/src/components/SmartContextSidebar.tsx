@@ -35,6 +35,8 @@ import {
   TasksApp20Regular,
   Alert20Regular,
   Document20Regular,
+  Star20Regular,
+  Star20Filled,
 } from "@fluentui/react-icons";
 import { apiClient } from "../services/api";
 import type { Session, TaskPlan, Reminder, ContentItem } from "../services/api";
@@ -438,6 +440,23 @@ export function SmartContextSidebar({
     [getAccessToken],
   );
 
+  /* ── Toggle star ───────────────────────────────────────────────── */
+  const toggleStar = useCallback(
+    async (sid: string, e: React.MouseEvent) => {
+      e.stopPropagation();
+      try {
+        const token = await getAccessToken();
+        const updated = await apiClient.toggleStarSession(sid, token);
+        setSessions((prev) =>
+          prev.map((s) => (s.id === updated.id ? { ...s, starred: updated.starred } : s))
+        );
+      } catch {
+        // fail silently
+      }
+    },
+    [getAccessToken],
+  );
+
   /* ── Collapsed state ─────────────────────────────────────────────── */
   if (collapsed) {
     return (
@@ -610,29 +629,78 @@ export function SmartContextSidebar({
             ) : sessions.length === 0 ? (
               <div className={styles.emptyState}>{t.chat?.noSessions ?? "No recent chats"}</div>
             ) : (
-              sessions.map((s) => (
-                <button
-                  key={s.id}
-                  role="listitem"
-                  className={mergeClasses(
-                    styles.recentItem,
-                    activeSessionId === s.id && styles.recentItemActive,
-                  )}
-                  onClick={() => onLoadSession(s.id)}
-                >
-                  <span className={styles.recentItemTitle}>{s.title || "Untitled"}</span>
-                  <span className={styles.recentItemDate}>
-                    {formatShortDate(s.updatedAt || s.createdAt)}
-                  </span>
-                  <Button
-                    appearance="subtle"
-                    icon={<Delete20Regular />}
-                    size="small"
-                    onClick={(e) => deleteSession(s.id, e)}
-                    aria-label={t.chat?.deleteSession ?? "Delete chat"}
-                  />
-                </button>
-              ))
+              <>
+                {/* Starred chats first */}
+                {sessions.filter((s) => s.starred).length > 0 && (
+                  <>
+                    <Text style={{ fontSize: "10px", fontWeight: 600, color: tokens.colorNeutralForeground3, textTransform: "uppercase", letterSpacing: "0.05em", padding: "4px 8px 2px" }}>
+                      ⭐ Pinned
+                    </Text>
+                    {sessions.filter((s) => s.starred).map((s) => (
+                      <button
+                        key={s.id}
+                        role="listitem"
+                        className={mergeClasses(
+                          styles.recentItem,
+                          activeSessionId === s.id && styles.recentItemActive,
+                        )}
+                        onClick={() => onLoadSession(s.id)}
+                      >
+                        <span className={styles.recentItemTitle}>{s.title || "Untitled"}</span>
+                        <Tooltip content="Unpin chat" relationship="label">
+                          <Button
+                            appearance="subtle"
+                            icon={<Star20Filled style={{ color: "#CA8A04" }} />}
+                            size="small"
+                            onClick={(e) => toggleStar(s.id, e)}
+                            aria-label="Unpin chat"
+                          />
+                        </Tooltip>
+                        <Button
+                          appearance="subtle"
+                          icon={<Delete20Regular />}
+                          size="small"
+                          onClick={(e) => deleteSession(s.id, e)}
+                          aria-label={t.chat?.deleteSession ?? "Delete chat"}
+                        />
+                      </button>
+                    ))}
+                  </>
+                )}
+                {/* Recent (non-starred) */}
+                {sessions.filter((s) => !s.starred).map((s) => (
+                  <button
+                    key={s.id}
+                    role="listitem"
+                    className={mergeClasses(
+                      styles.recentItem,
+                      activeSessionId === s.id && styles.recentItemActive,
+                    )}
+                    onClick={() => onLoadSession(s.id)}
+                  >
+                    <span className={styles.recentItemTitle}>{s.title || "Untitled"}</span>
+                    <span className={styles.recentItemDate}>
+                      {formatShortDate(s.updatedAt || s.createdAt)}
+                    </span>
+                    <Tooltip content="Pin chat" relationship="label">
+                      <Button
+                        appearance="subtle"
+                        icon={<Star20Regular />}
+                        size="small"
+                        onClick={(e) => toggleStar(s.id, e)}
+                        aria-label="Pin chat"
+                      />
+                    </Tooltip>
+                    <Button
+                      appearance="subtle"
+                      icon={<Delete20Regular />}
+                      size="small"
+                      onClick={(e) => deleteSession(s.id, e)}
+                      aria-label={t.chat?.deleteSession ?? "Delete chat"}
+                    />
+                  </button>
+                ))}
+              </>
             )}
           </div>
         )}
