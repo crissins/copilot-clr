@@ -488,15 +488,15 @@ export function VoiceLivePage() {
       const inputData = e.inputBuffer.getChannelData(0);
       const base64Audio = float32ToBase64PCM(inputData);
 
-      // Send audio via Web PubSub user message protocol
+      // Send audio via Web PubSub user event (triggers CloudEvent handler)
       ws.send(JSON.stringify({
-        type: "sendToGroup",
-        group: "_server_",
-        data: JSON.stringify({
-          type: "audio",
+        type: "event",
+        event: "message",
+        dataType: "json",
+        data: {
+          type: "input_audio_buffer.append",
           audio: base64Audio,
-        }),
-        dataType: "text",
+        },
       }));
     };
 
@@ -550,10 +550,10 @@ export function VoiceLivePage() {
   const bargeIn = useCallback(() => {
     if (wsRef.current?.readyState === WebSocket.OPEN) {
       wsRef.current.send(JSON.stringify({
-        type: "sendToGroup",
-        group: "_server_",
-        data: JSON.stringify({ type: "cancel_response" }),
-        dataType: "text",
+        type: "event",
+        event: "message",
+        dataType: "json",
+        data: { type: "response.cancel" },
       }));
     }
     playbackQueueRef.current = [];

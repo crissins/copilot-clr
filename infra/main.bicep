@@ -150,10 +150,14 @@ module serviceBus 'modules/servicebus.bicep' = if (!localDevMode) {
   }
 }
 
+// Deploy speech to eastus2 when location is eastus — eastus lacks avatar support
+// but eastus2 supports all speech features including TTS Avatar.
+var speechLocation = location == 'eastus' ? 'eastus2' : location
+
 module speech 'modules/speech.bicep' = {
   name: 'speech-deployment'
   params: {
-    location: location
+    location: speechLocation
     resourceToken: resourceToken
     tags: tags
     skuName: 'S0' // Use S0 for paid tier to avoid free-account limit
@@ -336,6 +340,7 @@ module containerApps 'modules/container-apps.bicep' = if (!localDevMode) {
     // Construct Web PubSub endpoint from naming convention to avoid circular dependency
     // (Web PubSub module needs Container App hostname; Container App needs PubSub endpoint)
     webPubSubEndpoint: 'https://webpubsub-${resourceToken}.webpubsub.azure.com'
+    voiceLiveEndpoint: aiFoundryProject.outputs.projectDiscoveryUrl
   }
 }
 

@@ -93,6 +93,9 @@ param openAiChatModel string = 'gpt-4o-mini'
 @description('Azure Web PubSub endpoint for real-time voice transport')
 param webPubSubEndpoint string = ''
 
+@description('Voice Live endpoint (AI Foundry project endpoint) for real-time voice sessions')
+param voiceLiveEndpoint string = ''
+
 @description('Container vCPU allocation. Valid: 0.25, 0.5, 0.75, 1.0. Use 0.25 in low-cost mode (0.25 CPU must pair with 0.5Gi memory).')
 param containerCpu string = '0.5'
 
@@ -197,6 +200,7 @@ resource containerApp 'Microsoft.App/containerApps@2024-03-01' = {
             { name: 'IR_ENDPOINT',                 value: irEndpoint }
             { name: 'DOC_INTELLIGENCE_ENDPOINT',   value: docIntelEndpoint }
             { name: 'WEBPUBSUB_ENDPOINT',           value: webPubSubEndpoint }
+            { name: 'VOICELIVE_ENDPOINT',             value: voiceLiveEndpoint }
             { name: 'AZURE_CONTENT_SAFETY_ENDPOINT', value: aiServicesEndpoint }
             { name: 'ENTRA_CLIENT_ID',            value: entraClientId }
             { name: 'ACS_ENDPOINT',               value: acsEndpoint }
