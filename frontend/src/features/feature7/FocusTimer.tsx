@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import {
   Button,
+  Input,
   Text,
   ProgressBar,
   Tooltip,
@@ -60,6 +61,9 @@ const useStyles = makeStyles({
   },
   presetBtn: {
     minWidth: "48px",
+  },
+  customInput: {
+    width: "72px",
   },
   visualContainer: {
     position: "relative",
@@ -126,6 +130,7 @@ export function FocusTimer({ duration, onComplete, onDismiss }: Props) {
   const [elapsedSeconds, setElapsedSeconds] = useState(0);
   const [isRunning, setIsRunning] = useState(false);
   const [encouragement, setEncouragement] = useState("");
+  const [customValue, setCustomValue] = useState("");
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const lastEncouragementRef = useRef(0);
 
@@ -179,7 +184,15 @@ export function FocusTimer({ duration, onComplete, onDismiss }: Props) {
     setElapsedSeconds(0);
     setIsRunning(false);
     setEncouragement("");
+    setCustomValue("");
   }, []);
+
+  const handleCustomApply = useCallback(() => {
+    const mins = parseInt(customValue, 10);
+    if (mins > 0 && mins <= 120) {
+      handlePreset(mins);
+    }
+  }, [customValue, handlePreset]);
 
   const handleDismiss = useCallback(() => {
     setIsRunning(false);
@@ -228,6 +241,29 @@ export function FocusTimer({ duration, onComplete, onDismiss }: Props) {
               {m}m
             </Button>
           ))}
+          <Input
+            className={styles.customInput}
+            size="small"
+            type="number"
+            min={1}
+            max={120}
+            placeholder="Min"
+            value={customValue}
+            onChange={(_e, data) => setCustomValue(data.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") handleCustomApply();
+            }}
+            aria-label="Custom minutes"
+          />
+          {customValue && (
+            <Button
+              size="small"
+              appearance="primary"
+              onClick={handleCustomApply}
+            >
+              Set
+            </Button>
+          )}
         </div>
       )}
 
