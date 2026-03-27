@@ -189,6 +189,7 @@ module communication 'modules/communication.bicep' = if (!localDevMode) {
     location: location
     resourceToken: resourceToken
     tags: tags
+    keyVaultName: keyVault.outputs.keyVaultName
   }
 }
 

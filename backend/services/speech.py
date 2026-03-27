@@ -6,6 +6,7 @@ used as agent tools in the Speech Assistant (Feature 7).
 
 import logging
 import os
+import re
 import tempfile
 import time
 
@@ -23,6 +24,47 @@ def _get_credential():
         from azure.identity import DefaultAzureCredential
         _credential = DefaultAzureCredential()
     return _credential
+
+
+# ── Markdown → plain text for TTS ───────────────────────────────────────────
+
+def strip_markdown_for_speech(text: str) -> str:
+    """Convert markdown to clean plain text suitable for speech synthesis.
+
+    Strips headers, bold/italic markers, links, images, code blocks,
+    bullet markers, and other markdown syntax so TTS reads naturally.
+    """
+    s = text
+    # Remove code blocks (``` ... ```)
+    s = re.sub(r"```[\s\S]*?```", "", s)
+    # Remove inline code (`...`)
+    s = re.sub(r"`([^`]+)`", r"\1", s)
+    # Remove images ![alt](url)
+    s = re.sub(r"!\[([^\]]*)\]\([^)]+\)", r"\1", s)
+    # Convert links [text](url) → text
+    s = re.sub(r"\[([^\]]+)\]\([^)]+\)", r"\1", s)
+    # Remove heading markers (# ## ### etc.)
+    s = re.sub(r"^#{1,6}\s+", "", s, flags=re.MULTILINE)
+    # Remove bold/italic (*** ** * __ _)
+    s = re.sub(r"\*{1,3}([^*]+)\*{1,3}", r"\1", s)
+    s = re.sub(r"_{1,3}([^_]+)_{1,3}", r"\1", s)
+    # Remove strikethrough (~~text~~)
+    s = re.sub(r"~~([^~]+)~~", r"\1", s)
+    # Remove blockquote markers (> )
+    s = re.sub(r"^>\s?", "", s, flags=re.MULTILINE)
+    # Remove horizontal rules (--- ___ ***)
+    s = re.sub(r"^[-*_]{3,}\s*$", "", s, flags=re.MULTILINE)
+    # Convert unordered list markers (- * +) to natural speech
+    s = re.sub(r"^[\s]*[-*+]\s+", "", s, flags=re.MULTILINE)
+    # Convert ordered list markers (1. 2. etc.)
+    s = re.sub(r"^[\s]*\d+\.\s+", "", s, flags=re.MULTILINE)
+    # Remove HTML tags
+    s = re.sub(r"<[^>]+>", "", s)
+    # Collapse multiple newlines into one
+    s = re.sub(r"\n{3,}", "\n\n", s)
+    # Collapse multiple spaces
+    s = re.sub(r" {2,}", " ", s)
+    return s.strip()
 
 
 # ── SSML builder with calm style ────────────────────────────────────────────
@@ -156,6 +198,7 @@ def synthesize_speech_sync(
 
     Returns: {"audio_bytes": bytes, "durationMs": int} or error dict.
     """
+    text = strip_markdown_for_speech(text)
     ssml = build_calm_ssml(text, voice=voice, style=style, rate=rate, lang=lang)
 
     speech_endpoint = os.environ.get("SPEECH_ENDPOINT", "")

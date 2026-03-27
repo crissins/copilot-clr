@@ -13,12 +13,31 @@ logger = logging.getLogger(__name__)
 
 _LOCAL_DEV = os.environ.get("LOCAL_DEV", "").lower() in ("1", "true", "yes")
 
+_acs_connection_string: str | None = None
+
+
+def _get_acs_connection_string() -> str:
+    """Fetch the ACS connection string from Key Vault (cached after first call)."""
+    global _acs_connection_string
+    if _acs_connection_string:
+        return _acs_connection_string
+
+    from azure.identity import DefaultAzureCredential
+    from azure.keyvault.secrets import SecretClient
+
+    key_vault_uri = os.environ.get("KEY_VAULT_URI", "")
+    client = SecretClient(vault_url=key_vault_uri, credential=DefaultAzureCredential())
+    secret = client.get_secret("acs-connection-string")
+    _acs_connection_string = secret.value
+    return _acs_connection_string
+
 
 async def send_email_reminder(
     recipient_email: str,
     subject: str,
     body: str,
     user_id: str = "",
+    html_body: str = "",
 ) -> dict[str, Any]:
     """Send an email reminder via Azure Communication Services.
 
@@ -27,14 +46,15 @@ async def send_email_reminder(
         subject: Email subject line.
         body: Email body content (plain text).
         user_id: User ID for audit logging.
+        html_body: Optional HTML body content.
 
     Returns:
         Dict with status and message ID.
     """
-    acs_endpoint = os.environ.get("ACS_ENDPOINT", "")
+    key_vault_uri = os.environ.get("KEY_VAULT_URI", "")
     sender = os.environ.get("ACS_EMAIL_SENDER", "")
 
-    if _LOCAL_DEV or not acs_endpoint:
+    if _LOCAL_DEV or not key_vault_uri:
         logger.info("email_reminder_simulated to=%s subject=%s", recipient_email, subject)
         return {
             "status": "simulated",
@@ -46,16 +66,18 @@ async def send_email_reminder(
 
     try:
         from azure.communication.email import EmailClient
-        from azure.identity import DefaultAzureCredential
 
-        client = EmailClient(acs_endpoint, credential=DefaultAzureCredential())
+        connection_string = _get_acs_connection_string()
+        client = EmailClient.from_connection_string(connection_string)
+
+        content: dict[str, str] = {"subject": subject, "plainText": body}
+        if html_body:
+            content["html"] = html_body
+
         message = {
             "senderAddress": sender,
             "recipients": {"to": [{"address": recipient_email}]},
-            "content": {
-                "subject": subject,
-                "plainText": body,
-            },
+            "content": content,
         }
         poller = client.begin_send(message)
         result = poller.result()
@@ -88,10 +110,10 @@ async def send_sms_reminder(
     Returns:
         Dict with status and message ID.
     """
-    acs_endpoint = os.environ.get("ACS_ENDPOINT", "")
+    key_vault_uri = os.environ.get("KEY_VAULT_URI", "")
     sms_sender = os.environ.get("ACS_SMS_SENDER", "")
 
-    if _LOCAL_DEV or not acs_endpoint:
+    if _LOCAL_DEV or not key_vault_uri:
         logger.info("sms_reminder_simulated to=%s msg=%s", phone_number, message[:50])
         return {
             "status": "simulated",
@@ -102,9 +124,9 @@ async def send_sms_reminder(
 
     try:
         from azure.communication.sms import SmsClient
-        from azure.identity import DefaultAzureCredential
 
-        client = SmsClient(acs_endpoint, credential=DefaultAzureCredential())
+        connection_string = _get_acs_connection_string()
+        client = SmsClient.from_connection_string(connection_string)
         responses = client.send(
             from_=sms_sender,
             to=[phone_number],

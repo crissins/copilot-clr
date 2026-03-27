@@ -11,6 +11,7 @@ import { useState, useCallback } from "react";
 import { launchAsync, close as irClose, CookiePolicy } from "@microsoft/immersive-reader-sdk";
 import { apiClient } from "../services/api";
 import { useAuth } from "./useAuth";
+import { markdownToHtml } from "../utils/markdown";
 
 // ThemeOption enum isn't re-exported from the main entry, use raw values
 const ThemeOption = { Light: 0, Dark: 1 } as const;
@@ -111,9 +112,13 @@ export function useImmersiveReader() {
         const token = await getAccessToken();
         const { token: irToken, subdomain } = await apiClient.getIRToken(token);
 
+        // Convert markdown to HTML for proper rendering in Immersive Reader
+        const irContent = mimeType === "text/html" ? text : markdownToHtml(text);
+        const irMimeType = "text/html";
+
         const content = {
           title,
-          chunks: [{ content: text, mimeType }],
+          chunks: [{ content: irContent, mimeType: irMimeType }],
         };
 
         // Build SDK options from settings

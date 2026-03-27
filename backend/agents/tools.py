@@ -104,11 +104,6 @@ def search_knowledge_base(query: str, reading_level: str = "", user_id: str = ""
 
         results = list(search_client.search(**search_kwargs))
 
-        # If user-scoped search returns nothing, try without user filter
-        if not results and user_id:
-            search_kwargs.pop("filter", None)
-            results = list(search_client.search(**search_kwargs))
-
         if not results:
             return json.dumps({
                 "results": [],

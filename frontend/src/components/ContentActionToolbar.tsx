@@ -29,6 +29,7 @@ import {
 import { useImmersiveReader } from "../hooks/useImmersiveReader";
 import { apiClient } from "../services/api";
 import { useAuth } from "../hooks/useAuth";
+import { useI18n } from "../I18nContext";
 
 interface ContentActionToolbarProps {
   /** The plain text content for TTS and Immersive Reader */
@@ -72,6 +73,7 @@ export function ContentActionToolbar({
   const styles = useStyles();
   const { launch, isOpen: irIsOpen } = useImmersiveReader();
   const { getAccessToken } = useAuth();
+  const { language } = useI18n();
 
   const [isSpeaking, setIsSpeaking] = useState(false);
   const [reported, setReported] = useState(false);
@@ -99,7 +101,7 @@ export function ContentActionToolbar({
     setIsSpeaking(true);
     try {
       const token = await getAccessToken();
-      const blob = await apiClient.speechSynthesize(text.slice(0, 5000), token);
+      const blob = await apiClient.speechSynthesize(text.slice(0, 5000), token, undefined, undefined, language || "en");
       const url = URL.createObjectURL(blob);
       const audio = new Audio(url);
       audioRef.current = audio;

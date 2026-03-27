@@ -5,6 +5,7 @@ python-multipart
 
 # Azure Runtime
 azure-identity
+azure-keyvault-secrets
 
 # Azure AI
 openai

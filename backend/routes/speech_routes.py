@@ -277,8 +277,9 @@ async def speech_synthesize(req: Request) -> Response:
     voice = body.get("voice", "en-US-JennyNeural")
     style = body.get("style", "calm")
     rate = body.get("rate", "slow")
+    lang = body.get("lang") or None
 
-    ssml = build_calm_ssml(text, voice=voice, style=style, rate=rate)
+    ssml = build_calm_ssml(text, voice=voice, style=style, rate=rate, lang=lang)
 
     speech_endpoint = os.environ.get("SPEECH_ENDPOINT", "")
     speech_region = os.environ.get("SPEECH_REGION", "eastus2")
