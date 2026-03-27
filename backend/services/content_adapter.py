@@ -142,12 +142,12 @@ async def _run_adaptation(
 ) -> dict[str, str]:
     """Call the AI agent to adapt the content.
 
-    Uses Azure AI Foundry Agent Framework when available, falls back to
-    a lightweight local simplification when no endpoint is configured.
+    Uses Azure AI Foundry Agent Framework and raises when Foundry is not
+    available instead of returning a local placeholder.
     """
     endpoint = os.environ.get("PROJECT_ENDPOINT", "") or os.environ.get("AI_FOUNDRY_ENDPOINT", "")
     if not endpoint:
-        return _local_adaptation_stub(source_text, profile, analysis)
+        raise RuntimeError("Azure AI Foundry is required for content adaptation, but no project endpoint is configured.")
 
     try:
         from agents.content_workflow import AzureAIClient, DefaultAzureCredential, Message
@@ -194,7 +194,7 @@ async def _run_adaptation(
         change_summary = data.get("change_summary", "").strip()
 
         if not adapted_text:
-            return _local_adaptation_stub(source_text, profile, analysis)
+            raise RuntimeError("Azure AI Foundry returned an empty adaptation result.")
 
         if not summary:
             parts = adapted_text.split("\n\n", 1)
@@ -209,25 +209,9 @@ async def _run_adaptation(
             "change_summary": change_summary,
         }
 
-    except Exception:
-        logger.exception("Agent adaptation failed, using fallback")
-        return _local_adaptation_stub(source_text, profile, analysis)
-
-
-def _local_adaptation_stub(text: str, profile: dict, analysis: dict) -> dict[str, str]:
-    """Fallback simplification used only when no Foundry endpoint is configured."""
-    excerpt = text[:3000].strip()
-    simplified = (
-        f"## Adapted Content\n\n"
-        f"### Summary\n"
-        f"This content was rewritten for Grade {profile['target_grade']} readers using shorter sentences and clearer structure.\n\n"
-        f"### Simplified Version\n{excerpt}"
-    )
-    return {
-        "adapted_text": simplified,
-        "summary": f"Document with {analysis['word_count']} words adapted to Grade {profile['target_grade']}.",
-        "change_summary": _default_change_summary(profile),
-    }
+    except Exception as exc:
+        logger.exception("Agent adaptation failed")
+        raise RuntimeError("Azure AI Foundry adaptation failed.") from exc
 
 
 def _parse_adaptation_payload(raw_text: str) -> dict[str, str]:

@@ -1,4 +1,4 @@
-﻿// ============================================================================
+// ============================================================================
 // Azure Container Apps — FastAPI Backend
 // Replaces Azure Functions as the primary compute layer.
 // Supports: HTTP endpoints (text chat, sessions CRUD) + WebSocket (voice relay)
@@ -71,6 +71,24 @@ param irEndpoint string = ''
 
 @description('Azure Document Intelligence endpoint')
 param docIntelEndpoint string = ''
+
+@description('Azure Communication Services endpoint')
+param acsEndpoint string = ''
+
+@description('Azure Communication Services Email Sender')
+param acsEmailSender string = ''
+
+@description('Video Indexer Account ID')
+param videoIndexerAccountId string = ''
+
+@description('Video Indexer Location')
+param videoIndexerLocation string = ''
+
+@description('Video Indexer Resource ID')
+param videoIndexerResourceId string = ''
+
+@description('OpenAI Chat Model Name')
+param openAiChatModel string = 'gpt-4o-mini'
 
 @description('Azure Web PubSub endpoint for real-time voice transport')
 param webPubSubEndpoint string = ''
@@ -181,6 +199,12 @@ resource containerApp 'Microsoft.App/containerApps@2024-03-01' = {
             { name: 'WEBPUBSUB_ENDPOINT',           value: webPubSubEndpoint }
             { name: 'AZURE_CONTENT_SAFETY_ENDPOINT', value: aiServicesEndpoint }
             { name: 'ENTRA_CLIENT_ID',            value: entraClientId }
+            { name: 'ACS_ENDPOINT',               value: acsEndpoint }
+            { name: 'ACS_EMAIL_SENDER',           value: acsEmailSender }
+            { name: 'VIDEO_INDEXER_ACCOUNT_ID',   value: videoIndexerAccountId }
+            { name: 'VIDEO_INDEXER_LOCATION',     value: videoIndexerLocation }
+            { name: 'VIDEO_INDEXER_RESOURCE_ID',  value: videoIndexerResourceId }
+            { name: 'OPENAI_CHAT_MODEL',          value: openAiChatModel }
           ]
         }
       ]

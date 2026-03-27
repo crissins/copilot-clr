@@ -21,6 +21,9 @@ resource communicationService 'Microsoft.Communication/communicationServices@202
   tags: tags
   properties: {
     dataLocation: 'United States'
+    linkedDomains: [
+      emailDomain.id
+    ]
   }
 }
 
@@ -45,4 +48,4 @@ resource emailDomain 'Microsoft.Communication/emailServices/domains@2023-04-01' 
 
 output acsName string = communicationService.name
 output acsConnectionEndpoint string = communicationService.properties.hostName
-output emailDomainSender string = ''
+output emailDomainSender string = 'DoNotReply@${emailDomain.properties.fromSenderDomain}'

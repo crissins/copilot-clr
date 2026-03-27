@@ -366,11 +366,9 @@ class ContentAdaptExecutor(Executor):
         if req.additional_instructions:
             instructions += f"\n\nAdditional user instructions: {req.additional_instructions}"
 
-        endpoint = os.getenv("PROJECT_ENDPOINT", "")
+        endpoint = os.getenv("PROJECT_ENDPOINT", "") or os.getenv("AI_FOUNDRY_ENDPOINT", "")
         if not endpoint:
-            state.adapted_text = _local_adapt_stub(state.source_text, profile)
-            state.summary = f"Document adapted to Grade {profile['target_grade']}."
-            state.audio_scripts = _generate_audio_scripts(state.adapted_text)
+            state.error = "Azure AI Foundry is required for content adaptation, but no project endpoint is configured."
             return messages
 
         # Bind tool context for search_documents / search_web
@@ -413,10 +411,8 @@ class ContentAdaptExecutor(Executor):
                 state.audio_scripts = _generate_audio_scripts(adapted)
 
         except Exception:
-            logger.exception("ContentAdapt agent failed, using fallback")
-            state.adapted_text = _local_adapt_stub(state.source_text, profile)
-            state.summary = f"Document adapted to Grade {profile['target_grade']}."
-            state.audio_scripts = _generate_audio_scripts(state.adapted_text)
+            logger.exception("ContentAdapt agent failed")
+            state.error = "Azure AI Foundry adaptation failed."
 
         return messages
 

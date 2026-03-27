@@ -44,6 +44,7 @@ from agents.chat_agent import get_agent_response
 from agents.task_decomposer import decompose_task
 from agents.speech_agent import get_speech_agent_response, ensure_speech_agent
 from auth.entra import AuthError, validate_token
+from routes import content
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -745,6 +746,9 @@ def get_session(session_id: str, req: Request) -> JSONResponse:
         ],
     })
 
+
+content.init_routes(_content_container, _adapted_container, _audio_container, _get_user_id, _check_content_safety)
+app.include_router(content.router)
 
 # ============================================================================
 # DELETE /api/sessions/{session_id} — Delete session and messages

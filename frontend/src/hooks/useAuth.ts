@@ -16,15 +16,16 @@ export function useAuth() {
     if (LOCAL_DEV) return;
     setIsLoading(true);
     try {
-      await instance.loginPopup({ scopes: ["openid", "profile", "email"] });
-    } finally {
+      await instance.loginRedirect({ scopes: ["openid", "profile", "email"] });
+    } catch (err) {
       setIsLoading(false);
+      console.error(err);
     }
   }, [instance]);
 
   const logout = useCallback(async () => {
     if (LOCAL_DEV) return;
-    await instance.logoutPopup();
+    await instance.logoutRedirect();
   }, [instance]);
 
   const getAccessToken = useCallback(async (): Promise<string | null> => {
@@ -39,8 +40,8 @@ export function useAuth() {
       return response.accessToken;
     } catch (error) {
       if (error instanceof InteractionRequiredAuthError) {
-        const response = await instance.acquireTokenPopup(apiRequest);
-        return response.accessToken;
+        await instance.acquireTokenRedirect(apiRequest);
+        return "";
       }
       // AADSTS70011 (invalid_scope) means the app registration's "Expose an API"
       // hasn't been configured yet — typically a first-deploy timing issue that

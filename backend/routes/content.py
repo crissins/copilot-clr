@@ -227,12 +227,16 @@ async def adapt_content_endpoint(content_id: str, req: Request) -> JSONResponse:
 
     start = time.monotonic()
     from services.content_adapter import adapt_content, build_change_metrics
-    result = await adapt_content(
-        source_text=source_text,
-        profile=profile,
-        user_prefs=user_prefs,
-        content_id=content_id,
-    )
+    try:
+        result = await adapt_content(
+            source_text=source_text,
+            profile=profile,
+            user_prefs=user_prefs,
+            content_id=content_id,
+        )
+    except RuntimeError as exc:
+        logger.exception("Foundry content adaptation failed for content_id=%s", content_id)
+        return JSONResponse({"error": str(exc)}, status_code=502)
     adapt_ms = int((time.monotonic() - start) * 1000)
     profile_description = result.get("profile_description", "") or profile
     change_metrics = build_change_metrics(

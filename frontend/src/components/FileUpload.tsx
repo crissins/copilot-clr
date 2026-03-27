@@ -1,7 +1,16 @@
-﻿import { useState, useCallback, useRef } from "react";
+import { useState, useCallback, useRef } from "react";
 import { apiClient } from "../services/api";
 import { useAuth } from "../hooks/useAuth";
-import { useI18n } from "../I18nContext";
+import { 
+  Button, 
+  Spinner, 
+  Toaster, 
+  useId, 
+  useToastController, 
+  Toast, 
+  ToastTitle 
+} from "@fluentui/react-components";
+import { Attach24Regular } from "@fluentui/react-icons";
 
 interface Props {
   onUploadComplete?: (filename: string) => void;
@@ -9,44 +18,55 @@ interface Props {
 
 export function FileUpload({ onUploadComplete }: Props) {
   const { getAccessToken } = useAuth();
-  const { t } = useI18n();
   const [uploading, setUploading] = useState(false);
-  const [status, setStatus] = useState("");
   const fileRef = useRef<HTMLInputElement>(null);
+
+  const toasterId = useId("upload-toaster");
+  const { dispatchToast } = useToastController(toasterId);
 
   const handleUpload = useCallback(async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
     setUploading(true);
-    setStatus("Uploading...");
     try {
       const token = await getAccessToken();
       const result = await apiClient.uploadDocument(file, token);
-      setStatus(t.upload.uploadedStatus(result.filename, result.chunks));
+      
+      dispatchToast(
+        <Toast appearance="inverted" style={{ backgroundColor: "#107C10", color: "white" }}>
+          <ToastTitle>document uploaded and ready to rag on</ToastTitle>
+        </Toast>,
+        { intent: "success" }
+      );
       onUploadComplete?.(result.filename);
     } catch (err) {
-      setStatus(t.upload.errorGeneric);
       console.error(err);
     } finally {
       setUploading(false);
       if (fileRef.current) fileRef.current.value = "";
     }
-  }, [getAccessToken, onUploadComplete]);
+  }, [getAccessToken, onUploadComplete, dispatchToast]);
 
   return (
-    <div className="file-upload">
-      <label className="btn-secondary file-upload-label">
-        {uploading ? t.upload.uploading : t.upload.label}
-        <input
-          ref={fileRef}
-          type="file"
-          accept=".pdf,.docx,.mp4,.mov,.avi,.mkv,.webm"
-          onChange={handleUpload}
-          disabled={uploading}
-          hidden
-        />
-      </label>
-      {status && <span className="file-upload-status">{status}</span>}
-    </div>
+    <>
+      <Toaster toasterId={toasterId} position="top-end" />
+      <Button
+        appearance="subtle"
+        icon={uploading ? <Spinner size="tiny" /> : <Attach24Regular />}
+        disabled={uploading}
+        onClick={() => fileRef.current?.click()}
+        aria-label="Upload file"
+        shape="circular"
+        style={{ flexShrink: 0, minWidth: "44px", height: "44px" }}
+      />
+      <input
+        ref={fileRef}
+        type="file"
+        accept=".pdf,.docx,.mp4,.mov,.avi,.mkv,.webm"
+        onChange={handleUpload}
+        disabled={uploading}
+        hidden
+      />
+    </>
   );
 }

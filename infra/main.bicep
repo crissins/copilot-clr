@@ -179,6 +179,25 @@ module documentIntelligence 'modules/document-intelligence.bicep' = {
   }
 }
 
+module communication 'modules/communication.bicep' = if (!localDevMode) {
+  name: 'communication-deployment'
+  params: {
+    location: location
+    resourceToken: resourceToken
+    tags: tags
+  }
+}
+
+module videoIndexer 'modules/video-indexer.bicep' = if (!localDevMode) {
+  name: 'video-indexer-deployment'
+  params: {
+    location: location
+    resourceToken: resourceToken
+    tags: tags
+    storageAccountId: storage.outputs.storageAccountId
+  }
+}
+
 // Container Registry — skipped in localDevMode (no containers in local development)
 module containerRegistry 'modules/container-registry.bicep' = if (!localDevMode) {
   name: 'container-registry-deployment'
@@ -303,6 +322,17 @@ module containerApps 'modules/container-apps.bicep' = if (!localDevMode) {
     storageAccountName: storage.outputs.storageAccountName
     irEndpoint: immersiveReader.outputs.irEndpoint
     docIntelEndpoint: documentIntelligence.outputs.docIntelEndpoint
+    #disable-next-line BCP318
+    acsEndpoint: localDevMode ? '' : communication.outputs.acsConnectionEndpoint
+    #disable-next-line BCP318
+    acsEmailSender: localDevMode ? '' : communication.outputs.emailDomainSender
+    #disable-next-line BCP318
+    videoIndexerAccountId: localDevMode ? '' : videoIndexer.outputs.videoIndexerAccountId
+    #disable-next-line BCP318
+    videoIndexerLocation: localDevMode ? '' : videoIndexer.outputs.videoIndexerLocation
+    #disable-next-line BCP318
+    videoIndexerResourceId: localDevMode ? '' : videoIndexer.outputs.videoIndexerId
+    openAiChatModel: 'gpt-4o-mini'
     // Construct Web PubSub endpoint from naming convention to avoid circular dependency
     // (Web PubSub module needs Container App hostname; Container App needs PubSub endpoint)
     webPubSubEndpoint: 'https://webpubsub-${resourceToken}.webpubsub.azure.com'
