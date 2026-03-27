@@ -11,7 +11,6 @@ import { useState, useCallback, useEffect } from "react";
 import {
   Button,
   Card,
-  CardHeader,
   Text,
   Badge,
   Spinner,
@@ -44,12 +43,20 @@ const useStyles = makeStyles({
     display: "flex",
     flexDirection: "column",
     gap: "20px",
-    maxWidth: "900px",
     marginLeft: "auto",
     marginRight: "auto",
     ...shorthands.padding("24px"),
     overflowY: "auto",
     height: "100%",
+  },
+  sideBySide: {
+    display: "grid",
+    gridTemplateColumns: "1fr 1fr",
+    gap: "16px",
+    alignItems: "start",
+  },
+  columnLabel: {
+    marginBottom: "8px",
   },
   header: { display: "flex", flexDirection: "column", gap: "8px" },
   headerRow: { display: "flex", alignItems: "center", justifyContent: "space-between" },
@@ -278,10 +285,9 @@ export function Feature2Page() {
 
       {loadingDetail && <Spinner label="Loading document details..." />}
 
-      {/* Adapted versions */}
+      {/* Side-by-side: Original (left) + Adapted (right) */}
       {contentDetail && contentDetail.adaptations.length > 0 && (
         <div className={styles.resultArea}>
-          <Text size={500} weight="semibold">Adapted Versions</Text>
           {contentDetail.adaptations.map((adaptation) => {
             const profileInfo = PROFILES.find(p => p.value === adaptation.profile);
             const originalWordCount = adaptation.originalWordCount ?? contentDetail.content.extractedText?.split(/\s+/).length ?? 0;
@@ -289,75 +295,64 @@ export function Feature2Page() {
             const reductionPercent = adaptation.reductionPercent ?? Math.round((1 - adaptedWordCount / Math.max(1, originalWordCount)) * 100);
             const fallbackChangeSummary = `Original: ${originalWordCount} words -> Adapted: ${adaptedWordCount} words (${reductionPercent}% reduction). Content rewritten for ${profileInfo?.description || adaptation.profile} readers - vocabulary simplified, sentences shortened, and structure improved for clarity.`;
             return (
-              <Card key={adaptation.id} style={{ padding: "16px" }}>
-                <CardHeader
-                  header={
-                    <div className={styles.metaBadges}>
-                      <Badge appearance="filled" color="brand">{profileInfo?.label || adaptation.profile}</Badge>
-                      <Badge appearance="outline">{new Date(adaptation.createdAt).toLocaleDateString()}</Badge>
-                    </div>
-                  }
-                />
+              <div key={adaptation.id}>
+                {/* Badges row */}
+                <div className={styles.metaBadges} style={{ marginBottom: 8 }}>
+                  <Badge appearance="filled" color="brand">{profileInfo?.label || adaptation.profile}</Badge>
+                  <Badge appearance="outline">{new Date(adaptation.createdAt).toLocaleDateString()}</Badge>
+                </div>
                 {adaptation.summary && (
-                  <div className={styles.summaryCard} style={{ marginTop: 12 }}>
+                  <div className={styles.summaryCard} style={{ marginBottom: 12 }}>
                     <Text size={200} weight="semibold">Summary</Text>
                     <Text block size={300} style={{ marginTop: 4 }}>{adaptation.summary}</Text>
                   </div>
                 )}
-                <div className={styles.adaptedText} style={{ marginTop: 12 }}>
-                  <ReactMarkdown>{adaptation.adaptedText}</ReactMarkdown>
-                </div>
-                <div style={{ display: "flex", gap: "4px", marginTop: 8 }}>
-                  <TTSButton text={adaptation.adaptedText} />
-                  <ImmersiveReaderButton title={`Adapted: ${profileInfo?.label || adaptation.profile}`} text={adaptation.adaptedText} />
-                  <Button
-                    appearance="subtle"
-                    icon={<ArrowDownload24Regular />}
-                    onClick={() => {
-                      const blob = new Blob([adaptation.adaptedText], { type: "text/markdown;charset=utf-8" });
-                      const url = URL.createObjectURL(blob);
-                      const a = document.createElement("a");
-                      a.href = url;
-                      a.download = `adapted-${adaptation.profile}-${new Date(adaptation.createdAt).toISOString().slice(0, 10)}.md`;
-                      a.click();
-                      URL.revokeObjectURL(url);
-                    }}
-                  >
-                    Download
-                  </Button>
-                </div>
-                {contentDetail?.content?.extractedText && (
-                  <div className={styles.explanationBar} style={{ marginTop: 12 }}>
-                    <Text size={200}>
-                      <strong>What changed:</strong>{" "}
-                      {adaptation.changeSummary || fallbackChangeSummary}
-                    </Text>
+                {/* Side-by-side panels */}
+                <div className={styles.sideBySide}>
+                  {/* Original */}
+                  <div>
+                    <Text size={400} weight="semibold" className={styles.columnLabel}>Original</Text>
+                    <div className={styles.adaptedText} style={{ opacity: 0.75 }}>
+                      <Text>{contentDetail?.content?.extractedText || "(no original text)"}</Text>
+                    </div>
                   </div>
-                )}
-                {!contentDetail?.content?.extractedText && (
-                  <div className={styles.explanationBar} style={{ marginTop: 12 }}>
-                    <Text size={200}>
-                      <strong>Why this version:</strong> Rewritten for{" "}
-                      {profileInfo?.description || adaptation.profile} readers. Vocabulary was simplified,
-                      sentences were shortened, and the content was restructured into clear sections
-                      to reduce cognitive load.
-                    </Text>
+                  {/* Adapted */}
+                  <div>
+                    <Text size={400} weight="semibold" className={styles.columnLabel}>Adapted</Text>
+                    <div className={styles.adaptedText}>
+                      <ReactMarkdown>{adaptation.adaptedText}</ReactMarkdown>
+                    </div>
+                    <div style={{ display: "flex", gap: "4px", marginTop: 8 }}>
+                      <TTSButton text={adaptation.adaptedText} />
+                      <ImmersiveReaderButton title={`Adapted: ${profileInfo?.label || adaptation.profile}`} text={adaptation.adaptedText} />
+                      <Button
+                        appearance="subtle"
+                        icon={<ArrowDownload24Regular />}
+                        onClick={() => {
+                          const blob = new Blob([adaptation.adaptedText], { type: "text/markdown;charset=utf-8" });
+                          const url = URL.createObjectURL(blob);
+                          const a = document.createElement("a");
+                          a.href = url;
+                          a.download = `adapted-${adaptation.profile}-${new Date(adaptation.createdAt).toISOString().slice(0, 10)}.md`;
+                          a.click();
+                          URL.revokeObjectURL(url);
+                        }}
+                      >
+                        Download
+                      </Button>
+                    </div>
                   </div>
-                )}
-              </Card>
+                </div>
+                {/* What changed */}
+                <div className={styles.explanationBar} style={{ marginTop: 12 }}>
+                  <Text size={200}>
+                    <strong>What changed:</strong>{" "}
+                    {adaptation.changeSummary || fallbackChangeSummary}
+                  </Text>
+                </div>
+              </div>
             );
           })}
-        </div>
-      )}
-
-      {/* Original text preview */}
-      {contentDetail?.content?.extractedText && (
-        <div>
-          <Divider />
-          <Text size={400} weight="semibold" style={{ marginTop: 12 }}>Original Text Preview</Text>
-          <div className={styles.adaptedText} style={{ marginTop: 8, opacity: 0.7 }}>
-            <Text>{contentDetail.content.extractedText}</Text>
-          </div>
         </div>
       )}
     </div>
