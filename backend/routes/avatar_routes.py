@@ -1,14 +1,17 @@
-"""Avatar & Audio Routes — TTS Avatar sessions and audio snippets.
+"""Avatar & Audio Routes — TTS Avatar sessions, batch avatar video, and audio snippets.
 
 Endpoints:
-  POST /api/avatar/session — Create avatar WebRTC session
-  POST /api/avatar/speak   — Generate SSML for avatar speech
-  POST /api/avatar/stop    — Stop avatar session
-  POST /api/tts/batch      — Generate audio for content audio scripts
+  POST /api/avatar/session       — Create avatar WebRTC session
+  POST /api/avatar/speak         — Generate SSML for avatar speech
+  POST /api/avatar/batch         — Submit batch avatar video synthesis
+  GET  /api/avatar/batch/{id}    — Check batch avatar job status
+  GET  /api/avatar/batch         — List batch avatar jobs
+  POST /api/tts/batch            — Generate audio for content audio scripts
 """
 
 import logging
 import os
+import re
 import time
 import uuid
 from datetime import datetime, timezone
@@ -21,6 +24,9 @@ logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api", tags=["avatar"])
 
 _LOCAL_DEV = os.environ.get("LOCAL_DEV", "").lower() in ("1", "true", "yes")
+
+# Strict UUID pattern for job IDs
+_UUID_RE = re.compile(r"^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$", re.IGNORECASE)
 
 _get_user_id = None
 _preferences_container = None
@@ -93,9 +99,102 @@ async def avatar_speak(req: Request) -> JSONResponse:
     from services.avatar import synthesize_avatar_speech
     result = await synthesize_avatar_speech(
         text=text,
-        voice=body.get("voice", "en-US-JennyNeural"),
+        voice=body.get("voice", "en-US-AvaMultilingualNeural"),
         style=body.get("style", ""),
     )
+    return JSONResponse(result)
+
+
+# ---------------------------------------------------------------------------
+# Batch avatar video synthesis
+# ---------------------------------------------------------------------------
+
+
+@router.post("/avatar/batch")
+async def submit_avatar_batch(req: Request) -> JSONResponse:
+    """Submit a batch avatar video synthesis job.
+
+    Body: {text, voice?, character?, style?, videoFormat?, videoCodec?,
+           backgroundColor?, subtitleType?, customized?}
+    Returns: {status, job_id}
+    """
+    from auth.entra import AuthError
+    try:
+        user_id = _get_user_id(req.headers.get("Authorization"))
+    except AuthError as e:
+        return JSONResponse({"error": str(e)}, status_code=401)
+
+    try:
+        body = await req.json()
+    except Exception:
+        return JSONResponse({"error": "Invalid JSON"}, status_code=400)
+
+    text = body.get("text", "").strip()
+    if not text:
+        return JSONResponse({"error": "Text is required."}, status_code=400)
+
+    if len(text) > 10000:
+        return JSONResponse({"error": "Text must be under 10000 characters."}, status_code=400)
+
+    from services.avatar import submit_batch_synthesis
+    result = submit_batch_synthesis(
+        text=text,
+        voice=body.get("voice", "en-US-AvaMultilingualNeural"),
+        character=body.get("character", "Lisa"),
+        style=body.get("style", "casual-sitting"),
+        video_format=body.get("videoFormat", "mp4"),
+        video_codec=body.get("videoCodec", "h264"),
+        background_color=body.get("backgroundColor", "#FFFFFFFF"),
+        subtitle_type=body.get("subtitleType", "soft_embedded"),
+        customized=body.get("customized", False),
+    )
+
+    if result.get("status") == "accepted":
+        logger.info("avatar_batch_submitted user=%s job_id=%s", user_id, result.get("job_id"))
+    else:
+        logger.warning("avatar_batch_failed user=%s error=%s", user_id, result.get("error", ""))
+
+    return JSONResponse(result)
+
+
+@router.get("/avatar/batch/{job_id}")
+async def get_avatar_batch_status(req: Request, job_id: str) -> JSONResponse:
+    """Check status of a batch avatar synthesis job.
+
+    Returns: {status, job_id, download_url?}
+    """
+    from auth.entra import AuthError
+    try:
+        _get_user_id(req.headers.get("Authorization"))
+    except AuthError as e:
+        return JSONResponse({"error": str(e)}, status_code=401)
+
+    if not _UUID_RE.match(job_id):
+        return JSONResponse({"error": "Invalid job ID format."}, status_code=400)
+
+    from services.avatar import get_batch_synthesis
+    result = get_batch_synthesis(job_id)
+    return JSONResponse(result)
+
+
+@router.get("/avatar/batch")
+async def list_avatar_batch_jobs(req: Request) -> JSONResponse:
+    """List batch avatar synthesis jobs.
+
+    Query params: skip (int), maxPageSize (int)
+    Returns: {status, jobs[]}
+    """
+    from auth.entra import AuthError
+    try:
+        _get_user_id(req.headers.get("Authorization"))
+    except AuthError as e:
+        return JSONResponse({"error": str(e)}, status_code=401)
+
+    skip = int(req.query_params.get("skip", "0"))
+    max_page_size = min(int(req.query_params.get("maxPageSize", "100")), 100)
+
+    from services.avatar import list_batch_syntheses
+    result = list_batch_syntheses(skip=skip, max_page_size=max_page_size)
     return JSONResponse(result)
 
 
