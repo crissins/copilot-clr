@@ -26,10 +26,34 @@ const useStyles = makeStyles({
     display: "flex",
     flexDirection: "column",
     gap: "24px",
-    maxWidth: "700px",
+    maxWidth: "1100px",
     marginLeft: "auto",
     marginRight: "auto",
     ...shorthands.padding("24px"),
+    height: "100%",
+  },
+  layout: {
+    display: "flex",
+    gap: "24px",
+    flex: 1,
+    minHeight: 0,
+    "@media (max-width: 768px)": {
+      flexDirection: "column",
+    },
+  },
+  formColumn: {
+    flex: "0 0 360px",
+    "@media (max-width: 768px)": {
+      flex: "none",
+    },
+  },
+  historyColumn: {
+    flex: 1,
+    display: "flex",
+    flexDirection: "column",
+    gap: "8px",
+    overflowY: "auto",
+    minHeight: 0,
   },
   formCard: {
     ...shorthands.padding("20px"),
@@ -127,7 +151,9 @@ export function FeedbackPage() {
       <Text size={600} weight="bold">{t.feedback.title}</Text>
       <Text size={300} style={{ opacity: 0.7 }}>{t.feedback.subtitle}</Text>
 
-      {/* Submit form */}
+      <div className={styles.layout}>
+      {/* Left — Submit form */}
+      <div className={styles.formColumn}>
       <Card className={styles.formCard}>
         <Text weight="semibold">{t.feedback.rateExperience}</Text>
         <div className={styles.ratingRow}>
@@ -181,8 +207,10 @@ export function FeedbackPage() {
           )}
         </div>
       </Card>
+      </div>
 
-      {/* History */}
+      {/* Right — History */}
+      <div className={styles.historyColumn}>
       <Text size={500} weight="semibold">{t.feedback.history}</Text>
       {loading ? (
         <Spinner label={t.feedback.loading} />
@@ -208,6 +236,8 @@ export function FeedbackPage() {
           </Card>
         ))
       )}
+      </div>
+      </div>
     </div>
   );
 }

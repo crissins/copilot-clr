@@ -137,7 +137,7 @@ const useStyles = makeStyles({
 export function FloatingChat() {
   const styles = useStyles();
   const { getAccessToken } = useAuth();
-  const { launch: launchIR } = useImmersiveReader();
+  const { launch: launchIR, close: closeIR } = useImmersiveReader();
   const [irOpen, setIrOpen] = useState(false);
   const [expanded, setExpanded] = useState(false);
   const [messages, setMessages] = useState<Message[]>([]);
@@ -209,6 +209,7 @@ export function FloatingChat() {
 
       // Push the assistant's answer into the Immersive Reader with auto read-aloud
       try {
+        closeIR();
         await launchIR("Copilot CLR Response", assistantContent);
       } catch {
         // IR relaunch is best-effort; don't block the chat flow
@@ -228,7 +229,7 @@ export function FloatingChat() {
       setIsLoading(false);
       textareaRef.current?.focus();
     }
-  }, [input, isLoading, sessionId, getAccessToken]);
+  }, [input, isLoading, sessionId, getAccessToken, closeIR, launchIR]);
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
     if (e.key === "Enter" && !e.shiftKey) {

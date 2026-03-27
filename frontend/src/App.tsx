@@ -116,7 +116,7 @@ function ViewContent({ activeView, onStartOnboarding, loadSessionId, onSessionLo
       <div style={activeView === "feature3" ? VIEW_STYLE_VISIBLE : VIEW_STYLE_HIDDEN}><Feature3Page /></div>
       <div style={activeView === "feature4" ? VIEW_STYLE_VISIBLE : VIEW_STYLE_HIDDEN}><Feature4Page /></div>
       <div style={activeView === "feature5" ? VIEW_STYLE_VISIBLE : VIEW_STYLE_HIDDEN}><Feature5Page /></div>
-      <div style={activeView === "feature6" ? VIEW_STYLE_VISIBLE : VIEW_STYLE_HIDDEN}><Feature6Page /></div>
+      <div style={activeView === "feature6" ? VIEW_STYLE_VISIBLE : VIEW_STYLE_HIDDEN}><Feature6Page onStartOnboarding={onStartOnboarding} /></div>
       <div style={activeView === "feature7" ? VIEW_STYLE_VISIBLE : VIEW_STYLE_HIDDEN}><Feature7Page /></div>
       <div style={activeView === "avatar" ? VIEW_STYLE_VISIBLE : VIEW_STYLE_HIDDEN}><AvatarPage /></div>
       <div style={activeView === "voicelive" ? VIEW_STYLE_VISIBLE : VIEW_STYLE_HIDDEN}><VoiceLivePage /></div>

@@ -26,10 +26,12 @@ import {
   PersonVoice24Regular,
   ArrowClockwise24Regular,
   LightbulbFilament24Regular,
+  Settings24Regular,
 } from "@fluentui/react-icons";
 import { apiClient } from "../../services/api";
-import type { UserInsights } from "../../services/api";
+import type { UserInsights, NeurodiverseSettings } from "../../services/api";
 import { useAuth } from "../../hooks/useAuth";
+import { useSharedSettings } from "../../hooks/SettingsContext";
 
 const useStyles = makeStyles({
   container: {
@@ -83,9 +85,82 @@ const useStyles = makeStyles({
   },
 });
 
-export function Feature6Page() {
+// ── Hardcoded suggestions based on user preferences ──────────────────────────
+
+function getSuggestionsFromSettings(s: NeurodiverseSettings): string[] {
+  const tips: string[] = [];
+
+  // Dyslexia-specific
+  if (s.dyslexiaFont) {
+    tips.push("Try Voice Live for hands-free audio conversations — great for reducing reading strain.");
+    tips.push("Use the Immersive Reader's dyslexia features: syllabification, line focus, and picture dictionary.");
+    tips.push("Set a slower voice speed so responses are easier to follow when read aloud.");
+  }
+
+  // Reading level based
+  if (s.readingLevel === "simple") {
+    tips.push("The Document Simplifier can rewrite any uploaded PDF at Grade 2 level — try uploading a complex document.");
+    tips.push("Enable auto-read responses so you can listen instead of reading.");
+  } else if (s.readingLevel === "moderate") {
+    tips.push("Try the Immersive Reader for longer responses — it adds line focus and picture dictionary support.");
+  }
+
+  // Format preferences
+  if (s.preferredFormat === "bullets" || s.preferredFormat === "steps") {
+    tips.push("Ask the assistant to break down tasks — the Task Decomposer creates time-boxed step-by-step plans.");
+  }
+
+  // Visual preferences
+  if (s.colorOverlay && s.colorOverlay !== "none") {
+    tips.push("Your color overlay is active. The Immersive Reader also supports custom themes for comfortable reading.");
+  }
+  if (s.reducedMotion) {
+    tips.push("Reduced motion is on — all animations are minimised for a calmer experience.");
+  }
+
+  // Voice preferences
+  if (s.autoReadResponses) {
+    tips.push("Auto-read is enabled. Try the Immersive Reader's read-aloud for longer content with adjustable speed.");
+  }
+
+  // Focus preferences
+  if (s.focusTimerMinutes && s.focusTimerMinutes <= 15) {
+    tips.push("Short focus sessions work well with the Task Decomposer — break big goals into small steps.");
+  }
+  if (s.focusTimerMinutes && s.focusTimerMinutes >= 45) {
+    tips.push("Long focus sessions are great — remember to use break reminders to stay fresh.");
+  }
+
+  // General tips if we have very few
+  if (tips.length < 3) {
+    tips.push("Upload a document and ask the assistant to simplify it at your preferred reading level.");
+  }
+  if (tips.length < 3) {
+    tips.push("Star important conversations from the chat sidebar for quick access later.");
+  }
+
+  return tips;
+}
+
+function getReadingLevelLabel(level: string): string {
+  const map: Record<string, string> = {
+    simple: "Simple (Grade 2–5)",
+    moderate: "Moderate (Grade 5–8)",
+    advanced: "Advanced (Grade 8–12)",
+  };
+  return map[level] || level;
+}
+
+interface Feature6PageProps {
+  onStartOnboarding?: () => void;
+}
+
+export function Feature6Page({ onStartOnboarding }: Feature6PageProps) {
   const styles = useStyles();
   const { getAccessToken } = useAuth();
+  const { settings } = useSharedSettings();
+
+  const hasCompletedOnboarding = !!settings?.updatedAt;
 
   const [insights, setInsights] = useState<UserInsights | null>(null);
   const [loading, setLoading] = useState(true);
@@ -185,21 +260,53 @@ export function Feature6Page() {
             <Text block size={200} style={{ color: tokens.colorNeutralForeground3, marginTop: 4 }}>
               The system tracks which reading levels you use most to adjust its default behavior.
             </Text>
-            {insights.preferredReadingLevel && (
-              <div style={{ marginTop: 8 }}>
-                <Text size={300}>
-                  Preferred level: <Badge appearance="filled" color="brand">{insights.preferredReadingLevel}</Badge>
+            {!hasCompletedOnboarding && !insights.preferredReadingLevel ? (
+              <div style={{ marginTop: 12 }}>
+                <Text block size={300} style={{ marginBottom: 8 }}>
+                  Set up your preferences to see personalised reading level recommendations.
                 </Text>
+                {onStartOnboarding && (
+                  <Button appearance="primary" icon={<Settings24Regular />} onClick={onStartOnboarding}>
+                    Set Up Preferences
+                  </Button>
+                )}
               </div>
-            )}
-            {insights.readingLevelsUsed && Object.keys(insights.readingLevelsUsed).length > 0 && (
-              <div className={styles.readingLevels} style={{ marginTop: 8 }}>
-                {Object.entries(insights.readingLevelsUsed).map(([level, count]) => (
-                  <Badge key={level} appearance="outline" size="large">
-                    {level}: {count} {count === 1 ? "use" : "uses"}
-                  </Badge>
-                ))}
-              </div>
+            ) : (
+              <>
+                {(settings?.readingLevel || insights.preferredReadingLevel) && (
+                  <div style={{ marginTop: 8 }}>
+                    <Text size={300}>
+                      Preferred level:{" "}
+                      <Badge appearance="filled" color="brand">
+                        {getReadingLevelLabel(insights.preferredReadingLevel || settings?.readingLevel || "moderate")}
+                      </Badge>
+                    </Text>
+                  </div>
+                )}
+                {settings?.preferredFormat && (
+                  <div style={{ marginTop: 6 }}>
+                    <Text size={300}>
+                      Format: <Badge appearance="outline">{settings.preferredFormat}</Badge>
+                    </Text>
+                  </div>
+                )}
+                {settings?.responseLengthPreference && (
+                  <div style={{ marginTop: 6 }}>
+                    <Text size={300}>
+                      Length: <Badge appearance="outline">{settings.responseLengthPreference}</Badge>
+                    </Text>
+                  </div>
+                )}
+                {insights.readingLevelsUsed && Object.keys(insights.readingLevelsUsed).length > 0 && (
+                  <div className={styles.readingLevels} style={{ marginTop: 8 }}>
+                    {Object.entries(insights.readingLevelsUsed).map(([level, count]) => (
+                      <Badge key={level} appearance="outline" size="large">
+                        {level}: {count} {count === 1 ? "use" : "uses"}
+                      </Badge>
+                    ))}
+                  </div>
+                )}
+              </>
             )}
           </div>
 
@@ -209,14 +316,29 @@ export function Feature6Page() {
           <div>
             <Text size={500} weight="semibold">Personalised Suggestions</Text>
             <Text block size={200} style={{ color: tokens.colorNeutralForeground3, marginTop: 4 }}>
-              Based on your usage patterns, here are some suggestions to get more from the assistant.
+              {hasCompletedOnboarding
+                ? "Based on your preferences and usage, here are suggestions to get more from the assistant."
+                : "Complete the onboarding to receive personalised suggestions tailored to your needs."}
             </Text>
-            {insights.suggestions.length === 0 ? (
-              <div className={styles.empty}><Text>Keep using the app — suggestions will appear here.</Text></div>
+            {!hasCompletedOnboarding && !insights.suggestions.length ? (
+              <div style={{ marginTop: 12 }}>
+                {onStartOnboarding && (
+                  <Button appearance="primary" icon={<Settings24Regular />} onClick={onStartOnboarding}>
+                    Set Up Preferences
+                  </Button>
+                )}
+              </div>
             ) : (
               <div style={{ display: "flex", flexDirection: "column", gap: "8px", marginTop: 8 }}>
+                {/* Show settings-based suggestions first, then any from backend */}
+                {settings && hasCompletedOnboarding && getSuggestionsFromSettings(settings).map((s, i) => (
+                  <div key={`pref-${i}`} className={styles.suggestionCard}>
+                    <LightbulbFilament24Regular style={{ flexShrink: 0, color: tokens.colorBrandForeground1 }} />
+                    <Text size={300}>{s}</Text>
+                  </div>
+                ))}
                 {insights.suggestions.map((s, i) => (
-                  <div key={i} className={styles.suggestionCard}>
+                  <div key={`api-${i}`} className={styles.suggestionCard}>
                     <LightbulbFilament24Regular style={{ flexShrink: 0, color: tokens.colorBrandForeground1 }} />
                     <Text size={300}>{s}</Text>
                   </div>
