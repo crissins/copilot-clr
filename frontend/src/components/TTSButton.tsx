@@ -1,4 +1,6 @@
 ﻿import { useState, useCallback, useRef, useEffect } from "react";
+import { Button, Tooltip } from "@fluentui/react-components";
+import { Speaker224Regular, Pause24Regular, Play24Regular } from "@fluentui/react-icons";
 import { apiClient } from "../services/api";
 import { useAuth } from "../hooks/useAuth";
 import { useI18n } from "../I18nContext";
@@ -6,9 +8,10 @@ import { useI18n } from "../I18nContext";
 interface Props {
   text: string;
   lang?: string;
+  size?: "small" | "medium" | "large";
 }
 
-export function TTSButton({ text, lang }: Props) {
+export function TTSButton({ text, lang, size = "small" }: Props) {
   const { getAccessToken } = useAuth();
   const { language } = useI18n();
   const [ttsState, setTtsState] = useState<"idle" | "playing" | "paused">("idle");
@@ -65,14 +68,18 @@ export function TTSButton({ text, lang }: Props) {
     }
   }, [text, ttsState, getAccessToken, effectiveLang]);
 
+  const label = ttsState === "playing" ? "Pause reading" : ttsState === "paused" ? "Resume reading" : "Read aloud";
+  const icon = ttsState === "playing" ? <Pause24Regular /> : ttsState === "paused" ? <Play24Regular /> : <Speaker224Regular />;
+
   return (
-    <button
-      onClick={handleClick}
-      className="btn-icon"
-      aria-label={ttsState === "playing" ? "Pause reading" : ttsState === "paused" ? "Resume reading" : "Read aloud"}
-      title={ttsState === "playing" ? "Pause" : ttsState === "paused" ? "Resume" : "Read aloud (Text-to-Speech)"}
-    >
-      {ttsState === "playing" ? "\u23F8" : ttsState === "paused" ? "\u25B6" : "\uD83D\uDD0A"}
-    </button>
+    <Tooltip content={label} relationship="label">
+      <Button
+        appearance="subtle"
+        size={size}
+        icon={icon}
+        onClick={handleClick}
+        aria-label={label}
+      />
+    </Tooltip>
   );
 }
