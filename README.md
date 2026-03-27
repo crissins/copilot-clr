@@ -1,260 +1,352 @@
 # Copilot CLR — AI Accessibility Assistant for Neurodiverse Users
 
-## Project Overview
-
-Copilot CLR is an AI-powered accessibility assistant designed to help neurodiverse individuals (including those with ADHD, autism, and dyslexia) reduce cognitive overload. The assistant transforms complex information into clear, structured, and personalized formats, supporting users with step-by-step task breakdowns, document simplification, reminders, and adaptive accessibility features. Built on Azure AI Foundry and the Microsoft Agent Framework SDK, the project emphasizes responsible AI, security, and user-centric design.
-
-## Current Status & Next Steps
-
-- All major features and deliverables are currently marked as "To Do" (see table below).
-- Team members should prioritize foundational infrastructure, authentication, and agent scaffolding.
-- Next steps: finalize architecture, set up Azure resources, and begin implementing core agent features.
+<p align="center">
+  <b>Azure Innovation Challenge 2026 Submission</b><br/>
+  Built on Azure AI Foundry &bull; Microsoft Agent Framework SDK &bull; 17 Azure Services
+</p>
 
 ---
-## Azure Innovation Challenge Submission
 
-AI-powered accessibility assistant built on Azure AI Foundry with the Microsoft Agent Framework SDK. Designed to reduce cognitive load for individuals with ADHD, autism, and dyslexia by transforming complex information into clear, structured, personalized formats.
+## The Problem
 
+> Neurodiverse individuals — including people with ADHD, autism, and dyslexia — often face cognitive overload when interacting with complex tasks, dense documents, or unstructured schedules.
 
-## The Challenge
+Over 1 billion people worldwide live with neurodivergent conditions. Reading a multi-page document, managing a schedule, or following complex instructions can trigger cognitive fatigue, frustration, and disengagement. Existing tools treat accessibility as an afterthought — a font toggle or a screen reader — rather than a core experience.
 
-> Neurodiverse individuals—including people with ADHD, autism, and dyslexia—often face cognitive overload when interacting with complex tasks, dense documents, or unstructured schedules. Build an AI-powered assistant that reduces cognitive load by transforming information into clear, structured, and personalized formats aligned to individual accessibility preferences. Your solution should decompose complex instructions into step‑by‑step, time‑boxed tasks; simplify and summarize documents at adjustable reading levels; and provide focus support through reminders, timers, or contextual nudges. User accessibility preferences should be securely stored and applied across interactions, and responsible AI safeguards must ensure calm, supportive, and non‑anxiety‑inducing language.
+## The Solution
 
+**Copilot CLR** is an AI-powered assistant that reduces cognitive load by transforming information into clear, structured, and personalized formats. It doesn't just simplify — it **adapts** to each user's preferences, reads aloud in a calm voice, and provides real-time support through chat, voice, and an embedded reading environment.
 
-## Documentation
+### Key Features
 
-- [Architecture](docs/02-architecture.md)
-- [Responsible AI](docs/03-responsible-ai.md)
-- [Performance Benchmarks](docs/04-performance-benchmarks.md)
-- [Azure Services Matrix](docs/05-azure-services-matrix.md)
-- [Low-Cost Deployment](docs/06-low-cost-deployment.md)
-- [Model Card](docs/07-model-card.md)
+| Feature | Description | Azure Service |
+|---------|-------------|---------------|
+| **Adaptive Chat** | Conversational AI that adjusts tone, reading level, and format to user preferences | Azure OpenAI (gpt-4o-mini) + AI Foundry Agent |
+| **Task Decomposer** | Breaks complex goals into time-boxed, prioritized steps with focus tips | Agent Framework tools + Cosmos DB |
+| **Document Simplifier** | Rewrites documents at selectable reading levels (Grade 2 / 5 / 8 / 12) | AI Search RAG + Content Adapter |
+| **Immersive Reader** | One-click reading mode with line focus, syllabification, picture dictionary, and 13+ language translations | Azure Immersive Reader SDK |
+| **Floating Chat in IR** | Keep chatting with the assistant while reading in Immersive Reader — responses auto-display in the reader with read-aloud | Custom component + IR SDK |
+| **Voice Input/Output** | Speak to the assistant and hear responses read aloud in a calm voice at adjustable speed | Azure Speech (TTS/STT) |
+| **Voice Live** | Real-time voice conversation with the AI agent using WebSocket audio streaming | Azure Web PubSub + Voice Live SDK + Foundry Agent |
+| **Talking Avatar** | Visual avatar that reads responses aloud for users who benefit from face-to-face interaction | Azure Speech Avatar |
+| **Focus Support** | In-app reminders, break timers, and contextual nudges to help users stay on task | Service Bus + Cosmos DB |
+| **Accessibility Preferences** | Per-user settings (font, spacing, theme, reading level, voice speed, color overlay) stored and applied across all sessions | Cosmos DB + Onboarding Wizard |
+| **Document Upload & RAG** | Upload PDFs and documents — the assistant can search and answer questions about them | Blob Storage + AI Search + Document Intelligence |
+| **Starred Chats** | Pin important conversations for quick access | Cosmos DB |
+| **Responsible AI** | Content Safety filtering, calm tone enforcement, PII awareness, human-in-the-loop reporting | Azure AI Content Safety |
+| **Multi-language** | Full i18n support: English, Spanish, Italian, Portuguese, German, Japanese | Custom i18n system |
 
 ## Architecture
 
 ![Architecture Diagram](docs/images/arch.drawio.png)
 
-## Azure Services (16)
+### Data Flow
 
-| Service | SKU | Cost | Purpose |
-|---------|-----|------|---------|
-| AI Foundry Hub | Basic | $0 | AI governance, connected services |
-| AI Foundry Project | — | $0 | Agent deployment, Agent Service |
-| Azure OpenAI | S0 | ~$1–5/mo | LLM inference (gpt-4o-mini, embeddings) |
-| Cosmos DB | Serverless | ~$0–2/mo | Chat history, sessions, user preferences |
-| Blob Storage | Standard LRS | ~$0 | Files, agent data, uploaded documents |
-| Azure Container Apps | Consumption | ~$0–5/mo | Python FastAPI backend (scale to zero) |
-| Container Registry | Basic | ~$5/mo | Docker image storage |
-| Static Web Apps | Free | $0 | React frontend + built-in Entra ID auth |
-| AI Search | Free | $0 | RAG knowledge base for accessibility content |
-| AI Services | S0 | ~$0 | Content Safety, PII detection |
-| **Azure Speech Service** | S0 | ~$0–3/mo | **Text-to-speech read-aloud, speech-to-text input** |
-| **Azure Immersive Reader** | S0 | ~$0 | **Embedded reading tool — line focus, syllabification, read-aloud** |
-| Service Bus | Basic | ~$0.05/mo | Async reminder and notification delivery |
-| Key Vault | Standard | ~$0 | Secrets management |
-| Monitor + App Insights | Free | $0 (5 GB) | Observability, latency telemetry |
-| Entra ID | Free | $0 | User authentication and identity |
+```
+┌──────────────┐     HTTPS/WSS      ┌────────────────────┐     Managed Identity     ┌──────────────────────┐
+│   React SPA  │ ◄──────────────►   │   Azure Container  │ ◄──────────────────────► │   Azure AI Foundry   │
+│  (Static Web │     SWA Proxy      │   Apps (FastAPI)    │        RBAC              │   Agent Service      │
+│   App)       │                    │                    │                           │   (gpt-4o-mini)      │
+└──────┬───────┘                    └────────┬───────────┘                           └──────────────────────┘
+       │                                     │
+       │  MSAL Auth                          ├── Cosmos DB (sessions, messages, preferences)
+       │  (Entra ID)                         ├── Blob Storage (uploaded documents)
+       │                                     ├── AI Search (RAG index, hybrid BM25+vector)
+       │  Speech SDK                         ├── Azure Speech (TTS/STT)
+       │  (browser STT)                      ├── Immersive Reader (token issuance)
+       │                                     ├── Content Safety (input/output filtering)
+       │  IR SDK                             ├── Service Bus (async reminders)
+       │  (immersive reading)                ├── Web PubSub (voice transport)
+       │                                     ├── Document Intelligence (PDF extraction)
+       │                                     └── Key Vault (secrets)
+       │
+       └── Web PubSub WebSocket (real-time voice sessions)
+```
 
-**Estimated dev cost: ~$8–$15/month**
+## Azure Services (17)
 
-## Deliverables
+| # | Service | SKU | Purpose |
+|---|---------|-----|---------|
+| 1 | **Azure OpenAI** | S0 | LLM inference — gpt-4o-mini (chat), text-embedding-ada-002, gpt-4o-mini-realtime (voice) |
+| 2 | **AI Foundry Hub** | S0 (AIServices) | AI governance, connected services, model management |
+| 3 | **AI Foundry Project** | — | Agent definitions, Agent Service endpoints |
+| 4 | **Cosmos DB** | Serverless | Chat sessions, messages, user preferences, task plans, reminders, feedback |
+| 5 | **Azure AI Search** | Basic | Hybrid RAG (semantic + BM25) for uploaded documents and accessibility content |
+| 6 | **Azure Speech** | S0 | Text-to-speech (JennyNeural calm voice), speech-to-text token issuance |
+| 7 | **Immersive Reader** | S0 | Embedded reading — line focus, syllabification, picture dictionary, translation |
+| 8 | **AI Services** | S0 | Content Safety filtering (Hate, SelfHarm, Sexual, Violence) |
+| 9 | **Container Apps** | Consumption | Python FastAPI backend (scale-to-zero) |
+| 10 | **Container Registry** | Basic | Docker image storage |
+| 11 | **Static Web Apps** | Standard | React frontend with linked backend API proxy |
+| 12 | **Blob Storage** | Standard LRS | Uploaded documents, Foundry artifacts |
+| 13 | **Service Bus** | Basic | Async reminder and notification delivery (2 queues) |
+| 14 | **Web PubSub** | Free | Real-time WebSocket transport for voice sessions |
+| 15 | **Key Vault** | Standard | Secrets management via RBAC |
+| 16 | **Document Intelligence** | S0 | PDF/DOCX text extraction |
+| 17 | **Log Analytics + App Insights** | Free (5 GB) | OpenTelemetry observability, latency metrics, Content Safety tracing |
 
-| # | Deliverable | Description | Status |
-|---|-------------|-------------|--------|
-| 1 | **Task Decomposer** | Breaks complex multi-step instructions into individually time-boxed steps with priority and estimated duration | To Do |
-| 2 | **Document Simplifier** | Summarizes and rewrites documents at selectable reading levels (Grades 2 / 5 / 8 / 12) | To Do |
-| 3 | **Focus Support** | In-chat reminders via Service Bus, contextual nudges to help users stay on task | To Do |
-| 4 | **Accessibility Preferences Store** | Per-user preferences (reading level, voice speed, theme, font size) stored securely in Cosmos DB and applied across all sessions | To Do |
-| 5 | **Speech I/O** | Agent responses read aloud via Azure Text-to-Speech with adjustable pace; real-time voice via OpenAI Realtime API | To Do |
-| 6 | **Immersive Reader Panel** | One-click Immersive Reader embed for any agent response — line focus, syllabification, picture vocabulary, bilingual support | To Do |
-| 7 | **Responsible AI Safeguards** | Calm and supportive tone enforcement, Content Safety filtering on all input/output, PII awareness, human-in-the-loop reporting | To Do |
-| 8 | **Adaptive Personalization** | Agent adapts responses to user preferences (reading level, format, tone); explains simplification choices on request | To Do |
-| 9 | **Deployed Azure Infrastructure** | All 16 Azure services active and integrated with zero-secret managed identity + RBAC | To Do |
-| 10 | **Performance Benchmarks** | Measured Content Safety latency, agent response time, reading level (FKGL) scores with OpenTelemetry + App Insights | To Do |
-| 11 | **Architecture Documentation** | End-to-end architecture diagram, service roles, data flow, and RBAC assignments in `docs/` | To Do |
-| 12 | **Responsible AI Documentation** | All six Microsoft RAI principles addressed with file:line code references in `docs/03-responsible-ai.md` | To Do |
-| 13 | **Video Demo** | 3 minute walkthrough showing all major features, live Azure telemetry, and RAI safeguards in action | To Do |
-| 14 | **PowerPoint Deck** | Judging-ready slide deck covering problem, architecture, RAI, performance, and innovation angle | To Do |
+**Additional**: Entra ID (free), Communication Services (email reminders)
 
-## Prerequisites
+## Security — Zero-Secret Architecture
+
+All service-to-service authentication uses **Managed Identity + RBAC**. No connection strings, no shared keys, no secrets in code.
+
+| Principal | Target | Role |
+|-----------|--------|------|
+| Container App MI | Azure OpenAI | Cognitive Services OpenAI User |
+| Container App MI | Cosmos DB | Contributor + Data Plane |
+| Container App MI | AI Search | Index Data Contributor |
+| Container App MI | Blob Storage | Blob Data Contributor |
+| Container App MI | Key Vault | Secrets User |
+| Container App MI | Service Bus | Data Owner |
+| Container App MI | Speech | Cognitive Services User |
+| Container App MI | Immersive Reader | Cognitive Services User |
+| Container App MI | Web PubSub | Service Owner |
+| Container App MI | AI Foundry Project | Azure ML Data Scientist |
+| Container App MI | Container Registry | AcrPull |
+
+---
+
+## Deploy to Your Azure Account
+
+### Prerequisites
 
 - [Azure CLI](https://learn.microsoft.com/en-us/cli/azure/install-azure-cli) (2.50+)
 - [Node.js](https://nodejs.org/) (18+)
 - [Python](https://python.org/) (3.11+)
-- Azure subscription with OpenAI access
+- Azure subscription with Azure OpenAI access approved
 
-## Quick Start
-
-### 1. Deploy Infrastructure
-
-First, login and choose your region:
+### Step 1: Login & Set Subscription
 
 ```bash
 az login --use-device-code
 az account show --query "{subscription:name, id:id}" -o table
 ```
 
-Pick a region with Azure OpenAI availability. Common choices:
+### Step 2: Choose a Region
 
-| Region | Name |
-|--------|------|
-| East US | `eastus` |
-| East US 2 | `eastus2` |
-| West US | `westus` |
-| West US 2 | `westus2` |
-| West US 3 | `westus3` |
-| South Central US | `southcentralus` |
-| Sweden Central | `swedencentral` |
-| UK South | `uksouth` |
-| Canada East | `canadaeast` |
+Pick a region with Azure OpenAI + Speech + Immersive Reader availability:
 
-Then choose one of the three deployment tiers (replace `eastus` with your region):
+| Region | Recommended |
+|--------|-------------|
+| East US 2 | Yes (all services available) |
+| East US | Yes |
+| Sweden Central | Yes |
+| West US 3 | Yes |
 
-#### Option A: Development (Local Dev — API services only, ~$0–2/mo)
+### Step 3: Deploy Infrastructure (17 Azure Services)
 
 ```bash
-az group create --name "rg-chatapp-dev" --location "eastus" --tags project=chatapp environment=dev managed-by=bicep deployment-tier=development -o none
-az deployment group create --resource-group "rg-chatapp-dev" --template-file infra/main.bicep --parameters infra/main.dev.bicepparam --parameters location=eastus -o json
+# Set your variables
+REGION="eastus2"
+RG_NAME="rg-copilot-clr"
+
+# Create resource group
+az group create --name $RG_NAME --location $REGION \
+  --tags project=copilot-clr environment=prod managed-by=bicep -o none
+
+# Deploy all 17 services (~10-15 minutes)
+az deployment group create \
+  --resource-group $RG_NAME \
+  --template-file infra/main.bicep \
+  --parameters infra/main.bicepparam \
+  --parameters location=$REGION \
+  -o json
 ```
 
-#### Option B: Low-Cost (Full deploy with free tiers, ~$6–8/mo)
+### Step 4: Capture Deployment Outputs
 
 ```bash
-az group create --name "rg-chatapp-dev" --location "eastus" --tags project=chatapp environment=dev managed-by=bicep cost-optimized=true -o none
-az deployment group create --resource-group "rg-chatapp-dev" --template-file infra/main.bicep --parameters infra/main.lowcost.bicepparam --parameters location=eastus -o json
+# Save all outputs to environment variables
+REGISTRY=$(az deployment group show -g $RG_NAME -n main \
+  --query properties.outputs.CONTAINER_REGISTRY_LOGIN_SERVER.value -o tsv)
+APP_NAME=$(az deployment group show -g $RG_NAME -n main \
+  --query properties.outputs.CONTAINER_APP_NAME.value -o tsv)
+SWA_NAME=$(az deployment group show -g $RG_NAME -n main \
+  --query properties.outputs.STATIC_WEB_APP_NAME.value -o tsv)
+CLIENT_ID=$(az deployment group show -g $RG_NAME -n main \
+  --query properties.outputs.ENTRA_CLIENT_ID.value -o tsv)
+
+echo "Registry: $REGISTRY"
+echo "Container App: $APP_NAME"
+echo "Static Web App: $SWA_NAME"
+echo "Entra Client ID: $CLIENT_ID"
 ```
 
-#### Option C: Standard (Full deploy, ~$8–15/mo)
+### Step 5: Configure Entra ID (Authentication)
+
+The Bicep deployment auto-creates an Entra App Registration. Verify it supports all account types:
 
 ```bash
-az group create --name "rg-chatapp-dev" --location "eastus" --tags project=chatapp environment=dev managed-by=bicep -o none
-az deployment group create --resource-group "rg-chatapp-dev" --template-file infra/main.bicep --parameters infra/main.bicepparam --parameters location=eastus -o json
+# Enable personal Microsoft accounts (Outlook, Hotmail, Xbox)
+az ad app update --id $CLIENT_ID \
+  --sign-in-audience "AzureADandPersonalMicrosoftAccount"
+
+# Get your SWA hostname
+SWA_HOST=$(az staticwebapp show -n $SWA_NAME -g $RG_NAME \
+  --query "defaultHostname" -o tsv)
+
+# Add SPA redirect URIs
+az ad app update --id $CLIENT_ID \
+  --spa-redirect-uris "https://$SWA_HOST" "http://localhost:5173"
+
+# Expose API scope
+az ad app update --id $CLIENT_ID \
+  --identifier-uris "api://$CLIENT_ID"
 ```
 
-### 2. Create Entra ID App Registration
+Then in [Azure Portal](https://portal.azure.com) → App Registrations → your app → **Expose an API** → Add scope `access_as_user` (Admins and users) → Grant admin consent.
+
+### Step 6: Build & Deploy Backend
 
 ```bash
-az ad app create --display-name "Copilot CLR-dev" --sign-in-audience "AzureADMyOrg" --web-redirect-uris "http://localhost:5173" "https://YOUR_SWA_HOSTNAME"
-# Note the appId — this is your ENTRA_CLIENT_ID
+# Build Docker image in ACR (~3 minutes)
+az acr build --registry $REGISTRY --image copilotclr-backend:latest backend/ --no-logs
+
+# Update the Container App with the new image
+SUFFIX="deploy$(date +%m%d%H%M)"
+az containerapp update \
+  --name $APP_NAME \
+  --resource-group $RG_NAME \
+  --image $REGISTRY/copilotclr-backend:latest \
+  --revision-suffix $SUFFIX
 ```
 
-### 3. Run Backend Locally
+### Step 7: Configure & Deploy Frontend
+
+Update the frontend environment file with your deployment values:
 
 ```bash
-cd backend
-python -m venv .venv
-source .venv/bin/activate  # or .venv\Scripts\activate on Windows
-pip install -r requirements.txt
-LOCAL_DEV=true uvicorn main:app --reload --port 8000
+# Create .env.production
+cat > frontend/.env.production << EOF
+VITE_LOCAL_DEV=false
+VITE_ENTRA_CLIENT_ID=$CLIENT_ID
+VITE_ENTRA_TENANT_ID=common
+EOF
 ```
 
-### 4. Run Frontend Locally
+Build and deploy:
 
 ```bash
 cd frontend
 npm install
-npm run dev
+npm run build
+
+# Get SWA deployment token
+TOKEN=$(az staticwebapp secrets list --name $SWA_NAME -g $RG_NAME \
+  --query "properties.apiKey" -o tsv)
+
+# Deploy
+npx @azure/static-web-apps-cli deploy "dist" --deployment-token $TOKEN --env production
 ```
 
-### 5. Deploy Application
+### Step 8: Link SWA Backend (API Proxy)
 
 ```bash
-# Build and push Container App image
-az acr build --registry $REGISTRY --image Copilot CLR-api:latest backend/
+# Get Container App hostname
+APP_HOST=$(az containerapp show -n $APP_NAME -g $RG_NAME \
+  --query "properties.configuration.ingress.fqdn" -o tsv)
 
-# Deploy Static Web App
-cd frontend
-npm run build
-npx @azure/static-web-apps-cli deploy ./dist
+# Link SWA to Container App backend
+az staticwebapp backends link \
+  --name $SWA_NAME \
+  --resource-group $RG_NAME \
+  --backend-resource-id $(az containerapp show -n $APP_NAME -g $RG_NAME --query id -o tsv) \
+  --backend-region $REGION
 ```
+
+### Step 9: Verify
+
+Open your SWA URL:
+```bash
+echo "https://$SWA_HOST"
+```
+
+Sign in with any Microsoft account (personal Outlook, work/school, or Xbox).
+
+> **Local development & alternative deployment tiers** (dev, low-cost) are documented in [Local Dev & Alt Deployments](docs/08-local-dev-and-alt-deployments.md).
+
+---
+
+## Tech Stack
+
+| Layer | Technology |
+|-------|------------|
+| **AI Framework** | Microsoft Agent Framework SDK (`agent-framework-azure-ai` 1.0.0rc3) |
+| **LLM** | Azure OpenAI gpt-4o-mini (chat + realtime voice) |
+| **Backend** | Python 3.11, FastAPI, uvicorn |
+| **Frontend** | React 18.3, TypeScript, Vite 5.4, Fluent UI v9 |
+| **Auth** | Microsoft Entra ID (MSAL React + JWT validation) |
+| **Voice** | Azure AI Voice Live SDK 1.2.0b4, Azure Speech SDK |
+| **Reading** | Microsoft Immersive Reader SDK 1.4 |
+| **Database** | Azure Cosmos DB (serverless, 7 containers) |
+| **Search** | Azure AI Search (hybrid BM25 + vector) |
+| **IaC** | Bicep (17 modules, 3 parameter tiers) |
+| **Observability** | OpenTelemetry → Azure Monitor + App Insights |
 
 ## Project Structure
 
 ```
-├── infra/                          # Bicep IaC
-│   ├── main.bicep                  # Orchestrator (16 Azure services)
-│   ├── main.bicepparam             # Parameters
-│   ├── modules/
-│   │   ├── storage.bicep             # Blob Storage
-│   │   ├── keyvault.bicep            # Key Vault
-│   │   ├── monitoring.bicep          # Log Analytics + App Insights
-│   │   ├── openai.bicep              # Azure OpenAI + models
-│   │   ├── ai-foundry-hub.bicep      # AI Foundry Hub
-│   │   ├── ai-foundry-project.bicep  # AI Foundry Project
-│   │   ├── cosmosdb.bicep            # Cosmos DB serverless
-│   │   ├── search.bicep              # AI Search
-│   │   ├── cognitiveservices.bicep   # AI Services (Content Safety)
-│   │   ├── speech.bicep              # Azure Speech Service (TTS/STT)
-│   │   ├── immersive-reader.bicep    # Immersive Reader
-│   │   ├── servicebus.bicep          # Service Bus
-│   │   ├── container-apps.bicep      # Container Apps backend
-│   │   ├── container-registry.bicep  # Container Registry
-│   │   ├── staticwebapp.bicep        # Static Web App
-│   │   └── security.bicep            # RBAC role assignments
-│   └── scripts/
-│       └── deploy.sh               # Deployment script
-├── backend/                        # Python FastAPI (Container Apps)
-│   ├── main.py                     # FastAPI entrypoint (12 endpoints + WebSocket)
+├── infra/                              # Bicep IaC (17 Azure services)
+│   ├── main.bicep                      # Orchestrator
+│   ├── main.bicepparam                 # Standard parameters
+│   └── modules/                        # One module per service
+├── backend/                            # Python FastAPI (Container Apps)
+│   ├── main.py                         # API entrypoint (15+ endpoints)
 │   ├── agents/
-│   │   ├── chat_agent.py           # Copilot CLR AI Foundry Agent
-│   │   └── tools.py                # Agent tools (decompose, simplify, search, remind)
-│   ├── auth/
-│   │   └── entra.py                # JWT validation
-│   ├── Dockerfile                  # Container image
-│   └── requirements.txt
-├── frontend/                       # React + Vite frontend
+│   │   ├── chat_agent.py              # AI Foundry Agent (Agent Framework SDK)
+│   │   ├── speech_agent.py            # Voice Live Agent
+│   │   ├── task_decomposer.py         # Goal → steps breakdown
+│   │   ├── content_workflow.py        # Document simplification pipeline
+│   │   └── tools.py                   # 6 agent tools
+│   ├── auth/entra.py                  # JWT validation (multi-tenant)
+│   ├── routes/                        # Route modules (avatar, content, speech, reminders)
+│   ├── services/                      # Azure service integrations
+│   └── Dockerfile                     # Container image
+├── frontend/                           # React + TypeScript SPA
 │   ├── src/
-│   │   ├── App.tsx                  # Main app with auth + preferences
-│   │   ├── components/
-│   │   │   ├── Chat.tsx             # Chat interface + file upload
-│   │   │   ├── MessageList.tsx      # Message display + TTS/IR/Report buttons
-│   │   │   ├── PreferencesPanel.tsx # Accessibility preferences modal
-│   │   │   ├── TTSButton.tsx        # Text-to-speech playback
-│   │   │   ├── ImmersiveReaderButton.tsx  # Immersive Reader embed
-│   │   │   ├── ReportButton.tsx     # Human-in-the-loop AI reporting
-│   │   │   ├── FileUpload.tsx       # Document upload for RAG
-│   │   │   └── LoginButton.tsx      # MSAL login
-│   │   ├── hooks/
-│   │   │   └── useAuth.ts          # Auth hook
-│   │   ├── services/
-│   │   │   └── api.ts              # Backend API client
-│   │   └── auth/
-│   │       └── msalConfig.ts       # MSAL config
-│   ├── staticwebapp.config.json    # SWA routing + security headers
-│   └── package.json
-└── .github/workflows/
-    ├── deploy-infra.yml            # Bicep deployment
-    ├── deploy-api.yml              # Functions deployment
-    └── deploy-app.yml              # SWA deployment
+│   │   ├── App.tsx                    # Root app (view routing, themes, onboarding)
+│   │   ├── components/                # Chat, FloatingChat, Sidebar, MessageList, etc.
+│   │   ├── features/                  # Feature pages (simplify, reminders, tasks, etc.)
+│   │   ├── hooks/                     # Auth, settings, immersive reader, focus timer
+│   │   └── services/api.ts           # API client
+│   └── staticwebapp.config.json       # SWA routing + security headers
+└── docs/                               # Documentation
+    ├── 02-architecture.md
+    ├── 03-responsible-ai.md
+    ├── 04-performance-benchmarks.md
+    ├── 05-azure-services-matrix.md
+    └── 07-model-card.md
 ```
 
-## Security
+## Responsible AI
 
-- **Authentication**: Microsoft Entra ID (MSAL React + JWT validation)
-- **Authorization**: RBAC role assignments, no shared keys
-- **Secrets**: Azure Key Vault, managed identity references
-- **Transport**: HTTPS only, TLS 1.2 minimum
-- **Headers**: CSP, X-Frame-Options, X-Content-Type-Options
+Copilot CLR implements all six Microsoft Responsible AI principles:
 
-## CI/CD (GitHub Actions)
+| Principle | Implementation |
+|-----------|----------------|
+| **Fairness** | Equal accessibility across neurodivergent conditions; multi-language support; no bias in simplification |
+| **Reliability & Safety** | Content Safety filtering on all input/output; graceful degradation; error boundaries |
+| **Privacy & Security** | Zero-secret architecture; per-user data isolation in Cosmos DB; HTTPS-only; CSP headers |
+| **Inclusiveness** | Immersive Reader, voice I/O, adjustable reading levels, color overlays, dyslexia fonts, OpenDyslexic |
+| **Transparency** | Agent explains simplification choices; reading level shown; user controls all preferences |
+| **Accountability** | Human-in-the-loop reporting on every AI response; feedback collection; App Insights telemetry |
 
-Three separate workflows triggered by path changes:
+See [docs/03-responsible-ai.md](docs/03-responsible-ai.md) for detailed code references.
 
-| Workflow | Trigger Path | Action |
-|----------|-------------|--------|
-| `deploy-infra.yml` | `infra/**` | Deploys Bicep templates |
-| `deploy-api.yml` | `backend/**` | Deploys Python Functions |
-| `deploy-app.yml` | `frontend/**` | Deploys React SWA |
+## Documentation
 
-### Setup GitHub Actions OIDC
+| Document | Description |
+|----------|-------------|
+| [Architecture](docs/02-architecture.md) | End-to-end system design, data flow, RBAC |
+| [Responsible AI](docs/03-responsible-ai.md) | All 6 RAI principles with code references |
+| [Performance Benchmarks](docs/04-performance-benchmarks.md) | Latency, FKGL scores, Content Safety metrics |
+| [Azure Services Matrix](docs/05-azure-services-matrix.md) | All 17 services: SKUs, costs, roles |
+| [Model Card](docs/07-model-card.md) | Model selection, capabilities, limitations |
+| [Local Dev & Alt Deployments](docs/08-local-dev-and-alt-deployments.md) | Local setup, dev tier, low-cost tier, parameter reference |
 
-```bash
-# Create service principal with federated credentials (no secrets!)
-az ad app create --display-name "github-chatapp-deploy"
-# Follow: https://learn.microsoft.com/en-us/azure/developer/github/connect-from-azure
+## License
 
-# Set GitHub secrets:
-# AZURE_CLIENT_ID, AZURE_TENANT_ID, AZURE_SUBSCRIPTION_ID
-```
+This project was built for the Azure Innovation Challenge 2026.
 
 
