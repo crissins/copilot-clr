@@ -422,6 +422,100 @@ async def speech_onboarding(req: Request):
 
 
 # ============================================================================
+# Content Safety — RAI screening for all endpoints
+# ============================================================================
+
+# Content Safety severity threshold (0–6). Flag at 2+ (low severity and above).
+_CONTENT_SAFETY_THRESHOLD = 2
+
+# Calm fallback returned to the client when a response is moderated.
+_CONTENT_SAFETY_FALLBACK = (
+    "I'm sorry, I wasn't able to process that response. "
+    "Please try rephrasing your question."
+)
+
+
+_content_safety_client = None
+_content_safety_client_inited = False
+
+
+def _build_content_safety_client():
+    """Return a cached Azure AI Content Safety client via Managed Identity.
+
+    Returns None when AZURE_CONTENT_SAFETY_ENDPOINT is not set (e.g. LOCAL_DEV).
+    Imports are deferred so the module loads cleanly even when the SDK is absent.
+    """
+    global _content_safety_client, _content_safety_client_inited
+    if _content_safety_client_inited:
+        return _content_safety_client
+    endpoint = os.environ.get("AZURE_CONTENT_SAFETY_ENDPOINT", "")
+    if not endpoint:
+        _content_safety_client_inited = True
+        return None
+    from azure.ai.contentsafety import ContentSafetyClient  # noqa: PLC0415
+    _content_safety_client = ContentSafetyClient(endpoint=endpoint, credential=DefaultAzureCredential())
+    _content_safety_client_inited = True
+    return _content_safety_client
+
+
+def _check_content_safety(text: str, user_id: str) -> tuple[bool, str]:
+    """Run Azure AI Content Safety on text synchronously.
+
+    Called from an async context via asyncio.to_thread() when used in the
+    voice relay — keep this function fully synchronous.
+
+    Args:
+        text:    Text to screen (first 10 000 chars checked; API limit).
+        user_id: Used only for logging — never sent to Content Safety.
+
+    Returns:
+        (is_safe, reason) — is_safe=False means at least one category exceeded
+        the threshold and the content should be replaced with the safe fallback.
+    """
+    cs_client = _build_content_safety_client()
+
+    if cs_client is None:
+        if not _LOCAL_DEV:
+            logger.warning(
+                "AZURE_CONTENT_SAFETY_ENDPOINT not set — "
+                "skipping safety check for user=%s", user_id,
+            )
+        return True, ""
+
+    from azure.ai.contentsafety.models import AnalyzeTextOptions, TextCategory  # noqa: PLC0415
+
+    try:
+        response = cs_client.analyze_text(
+            AnalyzeTextOptions(
+                text=text[:10_000],
+                categories=[
+                    TextCategory.HATE,
+                    TextCategory.SELF_HARM,
+                    TextCategory.SEXUAL,
+                    TextCategory.VIOLENCE,
+                ],
+            )
+        )
+        for result in response.categories_analysis:
+            if result.severity >= _CONTENT_SAFETY_THRESHOLD:
+                reason = f"{result.category} (severity={result.severity})"
+                logger.warning(
+                    "content_safety_flag user=%s category=%s severity=%d",
+                    user_id, result.category, result.severity,
+                )
+                return False, reason
+        return True, ""
+
+    except Exception:
+        # Fail open with a warning so a transient CS outage doesn't
+        # break voice sessions entirely — log for investigation.
+        logger.exception(
+            "Content Safety check failed for user=%s — allowing through", user_id
+        )
+        return True, ""
+
+
+# ============================================================================
 # POST /api/speech/chat — Full speech pipeline via Agent Framework (Feature 7)
 # ============================================================================
 
@@ -746,9 +840,6 @@ def get_session(session_id: str, req: Request) -> JSONResponse:
         ],
     })
 
-
-content.init_routes(_content_container, _adapted_container, _audio_container, _get_user_id, _check_content_safety)
-app.include_router(content.router)
 
 # ============================================================================
 # DELETE /api/sessions/{session_id} — Delete session and messages
@@ -1222,50 +1313,6 @@ async def api_create_task(req: Request) -> JSONResponse:
     )
 
 
-@app.put("/api/tasks/{task_id}")
-async def api_update_task(task_id: str, req: Request) -> JSONResponse:
-    """Update an existing task."""
-    try:
-        user_id = _get_user_id(req.headers.get("Authorization"))
-    except AuthError as e:
-        return JSONResponse({"error": str(e)}, status_code=401)
-
-    try:
-        body = await req.json()
-    except Exception:
-        return JSONResponse({"error": "Invalid JSON"}, status_code=400)
-
-    try:
-        task = _tasks_container.read_item(item=task_id, partition_key=task_id)
-    except Exception:
-        return JSONResponse({"error": "Task not found"}, status_code=404)
-
-    allowed = {"title", "description", "priority", "status", "dueDate"}
-    for key in allowed:
-        if key in body:
-            task[key] = body[key]
-    task["updatedAt"] = datetime.now(timezone.utc).isoformat()
-
-    _tasks_container.upsert_item(task)
-    return JSONResponse({k: v for k, v in task.items() if not k.startswith("_")})
-
-
-@app.delete("/api/tasks/{task_id}")
-def api_delete_task(task_id: str, req: Request) -> JSONResponse:
-    """Delete a task."""
-    try:
-        user_id = _get_user_id(req.headers.get("Authorization"))
-    except AuthError as e:
-        return JSONResponse({"error": str(e)}, status_code=401)
-
-    try:
-        _tasks_container.delete_item(item=task_id, partition_key=task_id)
-    except Exception:
-        return JSONResponse({"error": "Task not found"}, status_code=404)
-
-    return Response(status_code=204)
-
-
 # ============================================================================
 # POST /api/tasks/decompose — Break a complex goal into time-boxed steps
 # ============================================================================
@@ -1476,10 +1523,6 @@ async def send_reminder(task_id: str, req: Request) -> JSONResponse:
     if not target_step:
         return JSONResponse({"error": "Step not found"}, status_code=404)
 
-    # Queue reminder to Service Bus
-    sb_conn_str = os.environ.get("SERVICE_BUS_CONNECTION_STRING", "")
-    queue_name = os.environ.get("SERVICE_BUS_QUEUE_NAME", "task-reminders")
-
     reminder_payload = {
         "taskId": task_id,
         "stepId": step_id,
@@ -1491,38 +1534,109 @@ async def send_reminder(task_id: str, req: Request) -> JSONResponse:
         "queuedAt": datetime.now(timezone.utc).isoformat(),
     }
 
-    if not sb_conn_str or _LOCAL_DEV:
-        logger.info(
-            "LOCAL_DEV or no Service Bus configured — reminder logged only: %s",
-            json.dumps(reminder_payload),
-        )
-        return JSONResponse({
-            "status": "queued",
-            "message": "Reminder noted (Service Bus not configured — logged locally).",
-            "reminder": reminder_payload,
-        })
+    # ── Send email reminder directly via ACS ──────────────────────────────
+    if notify_email:
+        try:
+            from services.notifications import send_email_reminder  # noqa: PLC0415
 
-    try:
-        from azure.servicebus import ServiceBusClient, ServiceBusMessage  # noqa: PLC0415
-        sb_client = ServiceBusClient.from_connection_string(sb_conn_str)
-        with sb_client:
-            sender = sb_client.get_queue_sender(queue_name=queue_name)
-            with sender:
-                message = ServiceBusMessage(json.dumps(reminder_payload))
-                sender.send_messages(message)
-        logger.info("Reminder queued for task=%s step=%s", task_id, step_id)
-    except Exception:
-        logger.exception("Failed to queue reminder for task=%s step=%s", task_id, step_id)
-        return JSONResponse(
-            {"error": "Could not queue reminder. Please try again later."},
-            status_code=500,
-        )
+            step_title = target_step["title"]
+            goal_text = task.get("goal", "your goal")
+            subject = f"Reminder: {step_title}"
+            body = (
+                f"Hi! This is a gentle reminder about your task step.\n\n"
+                f"Goal: {goal_text}\n"
+                f"Step: {step_title}\n"
+                f"Estimated time: {target_step['estimatedMinutes']} minutes\n\n"
+                f"You've got this — take it one step at a time."
+            )
+            email_result = await send_email_reminder(
+                recipient_email=notify_email,
+                subject=subject,
+                body=body,
+                user_id=user_id,
+            )
+            logger.info("Reminder email sent for task=%s step=%s result=%s", task_id, step_id, email_result.get("status"))
+        except Exception:
+            logger.exception("Failed to send reminder email for task=%s step=%s", task_id, step_id)
+
+    # Also queue to Service Bus for async processing (if configured)
+    sb_namespace = os.environ.get("SERVICE_BUS_NAMESPACE", "")
+    if sb_namespace and not _LOCAL_DEV:
+        try:
+            from azure.servicebus import ServiceBusClient, ServiceBusMessage  # noqa: PLC0415
+            from azure.identity import DefaultAzureCredential as SBCredential  # noqa: PLC0415
+
+            sb = ServiceBusClient(
+                fully_qualified_namespace=sb_namespace,
+                credential=SBCredential(),
+            )
+            with sb.get_queue_sender("task-reminders") as sender:
+                sender.send_messages(ServiceBusMessage(
+                    json.dumps(reminder_payload),
+                    content_type="application/json",
+                ))
+            logger.info("Reminder queued for task=%s step=%s", task_id, step_id)
+        except Exception:
+            logger.warning("Failed to queue reminder for task=%s step=%s (email already sent)", task_id, step_id)
 
     return JSONResponse({
         "status": "queued",
         "message": "Reminder has been queued. You will be notified when it is time.",
         "reminder": reminder_payload,
     })
+
+
+# ============================================================================
+# PUT /api/tasks/{task_id} — Update a task (parameterized — MUST be after
+# fixed-path /api/tasks/decompose and /api/tasks/plans to avoid 405)
+# ============================================================================
+
+@app.put("/api/tasks/{task_id}")
+async def api_update_task(task_id: str, req: Request) -> JSONResponse:
+    """Update an existing task."""
+    try:
+        user_id = _get_user_id(req.headers.get("Authorization"))
+    except AuthError as e:
+        return JSONResponse({"error": str(e)}, status_code=401)
+
+    try:
+        body = await req.json()
+    except Exception:
+        return JSONResponse({"error": "Invalid JSON"}, status_code=400)
+
+    try:
+        task = _tasks_container.read_item(item=task_id, partition_key=task_id)
+    except Exception:
+        return JSONResponse({"error": "Task not found"}, status_code=404)
+
+    allowed = {"title", "description", "priority", "status", "dueDate"}
+    for key in allowed:
+        if key in body:
+            task[key] = body[key]
+    task["updatedAt"] = datetime.now(timezone.utc).isoformat()
+
+    _tasks_container.upsert_item(task)
+    return JSONResponse({k: v for k, v in task.items() if not k.startswith("_")})
+
+
+# ============================================================================
+# DELETE /api/tasks/{task_id} — Delete a task
+# ============================================================================
+
+@app.delete("/api/tasks/{task_id}")
+def api_delete_task(task_id: str, req: Request) -> JSONResponse:
+    """Delete a task."""
+    try:
+        user_id = _get_user_id(req.headers.get("Authorization"))
+    except AuthError as e:
+        return JSONResponse({"error": str(e)}, status_code=401)
+
+    try:
+        _tasks_container.delete_item(item=task_id, partition_key=task_id)
+    except Exception:
+        return JSONResponse({"error": "Task not found"}, status_code=404)
+
+    return Response(status_code=204)
 
 
 # ============================================================================
@@ -1749,98 +1863,6 @@ def get_user_insights(req: Request) -> JSONResponse:
 #   4. Backend bridges each connection to Voice Live + Foundry Agent
 #   5. Backend pushes Voice Live events to client via PubSub REST API
 # ============================================================================
-
-# Content Safety severity threshold (0–6). Flag at 2+ (low severity and above).
-_CONTENT_SAFETY_THRESHOLD = 2
-
-# Calm fallback returned to the client when a response is moderated.
-_CONTENT_SAFETY_FALLBACK = (
-    "I'm sorry, I wasn't able to process that response. "
-    "Please try rephrasing your question."
-)
-
-
-_content_safety_client = None
-_content_safety_client_inited = False
-
-
-def _build_content_safety_client():
-    """Return a cached Azure AI Content Safety client via Managed Identity.
-
-    Returns None when AZURE_CONTENT_SAFETY_ENDPOINT is not set (e.g. LOCAL_DEV).
-    Imports are deferred so the module loads cleanly even when the SDK is absent.
-    """
-    global _content_safety_client, _content_safety_client_inited
-    if _content_safety_client_inited:
-        return _content_safety_client
-    endpoint = os.environ.get("AZURE_CONTENT_SAFETY_ENDPOINT", "")
-    if not endpoint:
-        _content_safety_client_inited = True
-        return None
-    from azure.ai.contentsafety import ContentSafetyClient  # noqa: PLC0415
-    _content_safety_client = ContentSafetyClient(endpoint=endpoint, credential=DefaultAzureCredential())
-    _content_safety_client_inited = True
-    return _content_safety_client
-
-
-def _check_content_safety(text: str, user_id: str) -> tuple[bool, str]:
-    """Run Azure AI Content Safety on text synchronously.
-
-    Called from an async context via asyncio.to_thread() when used in the
-    voice relay — keep this function fully synchronous.
-
-    Args:
-        text:    Text to screen (first 10 000 chars checked; API limit).
-        user_id: Used only for logging — never sent to Content Safety.
-
-    Returns:
-        (is_safe, reason) — is_safe=False means at least one category exceeded
-        the threshold and the content should be replaced with the safe fallback.
-    """
-    cs_client = _build_content_safety_client()
-
-    if cs_client is None:
-        if not _LOCAL_DEV:
-            logger.warning(
-                "AZURE_CONTENT_SAFETY_ENDPOINT not set — "
-                "skipping safety check for user=%s", user_id,
-            )
-        return True, ""
-
-    from azure.ai.contentsafety.models import AnalyzeTextOptions, TextCategory  # noqa: PLC0415
-
-    try:
-        response = cs_client.analyze_text(
-            AnalyzeTextOptions(
-                text=text[:10_000],
-                categories=[
-                    TextCategory.HATE,
-                    TextCategory.SELF_HARM,
-                    TextCategory.SEXUAL,
-                    TextCategory.VIOLENCE,
-                ],
-            )
-        )
-        for result in response.categories_analysis:
-            if result.severity >= _CONTENT_SAFETY_THRESHOLD:
-                reason = f"{result.category} (severity={result.severity})"
-                logger.warning(
-                    "content_safety_flag user=%s category=%s severity=%d",
-                    user_id, result.category, result.severity,
-                )
-                return False, reason
-        return True, ""
-
-    except Exception:
-        # Fail open with a warning so a transient CS outage doesn't
-        # break voice sessions entirely — log for investigation.
-        logger.exception(
-            "Content Safety check failed for user=%s — allowing through", user_id
-        )
-        return True, ""
-
-
-
 
 # ---------------------------------------------------------------------------
 # Register sub-routers from routes/ modules

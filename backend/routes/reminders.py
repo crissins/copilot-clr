@@ -129,46 +129,45 @@ async def create_reminder(req: Request) -> JSONResponse:
         except Exception:
             logger.warning("Failed to queue reminder %s", reminder_id)
 
-    # ── Dispatch ACS notification for email / sms channels ────────────
-    if channel in ("email", "sms"):
-        try:
-            from services.notifications import send_email_reminder, send_sms_reminder
-            import asyncio
+    # ── Dispatch ACS notification ────────────────────────────────────
+    try:
+        from services.notifications import send_email_reminder, send_sms_reminder
 
-            # Look up contact info from user preferences
-            contact_email = ""
-            contact_phone = ""
-            if _preferences_container:
-                try:
-                    prefs = _preferences_container.read_item(item=user_id, partition_key=user_id)
-                    contact_email = prefs.get("email", "")
-                    contact_phone = prefs.get("phone", "")
-                except Exception:
-                    logger.debug("No preferences found for user=%s", user_id)
+        # Look up contact info from user preferences
+        contact_email = ""
+        contact_phone = ""
+        if _preferences_container:
+            try:
+                prefs = _preferences_container.read_item(item=user_id, partition_key=user_id)
+                contact_email = prefs.get("email", "")
+                contact_phone = prefs.get("phone", "")
+            except Exception:
+                logger.debug("No preferences found for user=%s", user_id)
 
-            reminder_msg = f"Reminder: {title}"
-            if description:
-                reminder_msg += f" — {description[:200]}"
+        reminder_msg = f"Reminder: {title}"
+        if description:
+            reminder_msg += f" — {description[:200]}"
 
-            if channel == "email" and contact_email:
-                await send_email_reminder(
-                    recipient_email=contact_email,
-                    subject=f"Reminder: {title}",
-                    body=reminder_msg,
-                    user_id=user_id,
-                )
-            elif channel == "sms" and contact_phone:
-                await send_sms_reminder(
-                    phone_number=contact_phone,
-                    message=reminder_msg,
-                    user_id=user_id,
-                )
-            else:
-                logger.warning(
-                    "No contact info for channel=%s user=%s", channel, user_id
-                )
-        except Exception:
-            logger.exception("ACS notification failed for reminder %s", reminder_id)
+        if channel == "sms" and contact_phone:
+            await send_sms_reminder(
+                phone_number=contact_phone,
+                message=reminder_msg,
+                user_id=user_id,
+            )
+        elif contact_email:
+            # email channel, or push channel with email fallback
+            await send_email_reminder(
+                recipient_email=contact_email,
+                subject=f"Reminder: {title}",
+                body=reminder_msg,
+                user_id=user_id,
+            )
+        else:
+            logger.warning(
+                "No contact info for channel=%s user=%s", channel, user_id
+            )
+    except Exception:
+        logger.exception("ACS notification failed for reminder %s", reminder_id)
 
     logger.info("reminder_created user=%s id=%s channel=%s", user_id, reminder_id, channel)
     return JSONResponse(doc, status_code=201)
