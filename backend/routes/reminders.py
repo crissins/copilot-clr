@@ -144,23 +144,41 @@ async def create_reminder(req: Request) -> JSONResponse:
             except Exception:
                 logger.debug("No preferences found for user=%s", user_id)
 
-        reminder_msg = f"Reminder: {title}"
+        reminder_msg = f"Hi there! 🌱\n\nJust a gentle nudge about: {title}"
         if description:
-            reminder_msg += f" — {description[:200]}"
+            reminder_msg += f"\n\n{description[:500]}"
+        reminder_msg += "\n\nTake it at your own pace — you've got this! 💛\n\n— Copilot CLR"
 
         if channel == "sms" and contact_phone:
             await send_sms_reminder(
                 phone_number=contact_phone,
-                message=reminder_msg,
+                message=f"🌱 Reminder: {title}" + (f" — {description[:100]}" if description else ""),
                 user_id=user_id,
             )
         elif contact_email:
             # email channel, or push channel with email fallback
+            html_body = f"""\
+<div style="font-family:'Segoe UI',Arial,sans-serif;max-width:600px;margin:0 auto;padding:24px;color:#333;">
+  <div style="background:linear-gradient(135deg,#0078d4,#50e6ff);padding:20px 24px;border-radius:12px 12px 0 0;">
+    <h1 style="color:#fff;margin:0;font-size:22px;">&#127793; Copilot CLR</h1>
+    <p style="color:rgba(255,255,255,0.9);margin:6px 0 0 0;font-size:14px;">Your friendly assistant</p>
+  </div>
+  <div style="background:#ffffff;padding:20px 24px;border:1px solid #e0e0e0;border-top:none;border-radius:0 0 12px 12px;">
+    <h2 style="color:#0078d4;margin:0 0 12px 0;">Friendly Reminder</h2>
+    <p style="font-size:16px;margin:0 0 12px 0;">{title}</p>
+    {"<p style='color:#555;margin:0 0 12px 0;'>" + description[:500] + "</p>" if description else ""}
+    <p style="margin:16px 0 0 0;color:#666;">Take it at your own pace — you've got this! &#128155;</p>
+  </div>
+  <p style="text-align:center;color:#999;font-size:12px;margin-top:16px;">
+    Sent with care by Copilot CLR
+  </p>
+</div>"""
             await send_email_reminder(
                 recipient_email=contact_email,
-                subject=f"Reminder: {title}",
+                subject=f"🌱 Friendly Reminder: {title}",
                 body=reminder_msg,
                 user_id=user_id,
+                html_body=html_body,
             )
         else:
             logger.warning(

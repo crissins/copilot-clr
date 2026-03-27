@@ -37,12 +37,16 @@ from azure.identity.aio import DefaultAzureCredential
 
 from agents.agent_tools import (
     create_task,
+    decompose_goal,
     delete_task,
     get_chat_history,
     get_preferences_container,
+    get_task_plan,
+    list_task_plans,
     list_tasks,
     search_documents,
     search_web,
+    send_reminder_email,
     set_tool_context,
     update_task,
 )
@@ -79,7 +83,17 @@ You are Copilot CLR — a calm, supportive AI assistant for neurodiverse users \
 articles, reports, or study material. Do not guess — search first, then answer.
 - Use search_web when the user needs current or external information not found in documents.
 - Use task tools when the user wants to create, view, update, or complete tasks.
+- Use decompose_goal when the user asks to break down, plan, decompose, or split a complex \
+task or goal into smaller steps. The plan is saved automatically so the user can access it later. \
+After decomposing, proactively offer to email the plan as a reminder.
+- Use list_task_plans to show the user their saved task plans when they ask about previous plans.
+- Use get_task_plan to show details and progress of a specific plan.
 - Use get_chat_history when the user references something said earlier.
+- Use send_reminder_email when the user asks you to set a reminder, send a summary, \
+or share a task plan by email. Write a warm, clear subject line and a friendly body \
+that includes the task plan, steps, or reminder details. Use markdown formatting \
+(headings, bullets, numbered lists) in the body — it will be styled automatically. \
+Always confirm with the user before sending.
 - Simplify complex content to the user's preferred reading level.
 - Say clearly when you do not know something.
 - Format responses with markdown — headings, bullets, and code blocks where helpful.
@@ -162,6 +176,10 @@ async def _run_agent(
         update_task,
         delete_task,
         get_chat_history,
+        decompose_goal,
+        list_task_plans,
+        get_task_plan,
+        send_reminder_email,
     ]
 
     async with AzureAIClient(
