@@ -1839,6 +1839,22 @@ def list_feedback(req: Request) -> JSONResponse:
     ]})
 
 
+@app.delete("/api/feedback/{feedback_id}")
+async def delete_feedback(feedback_id: str, req: Request) -> JSONResponse:
+    """Delete a single feedback item owned by the authenticated user."""
+    try:
+        user_id = _get_user_id(req.headers.get("Authorization"))
+    except AuthError as e:
+        return JSONResponse({"error": str(e)}, status_code=401)
+
+    try:
+        _feedback_container.delete_item(item=feedback_id, partition_key=user_id)
+    except Exception:
+        return JSONResponse({"error": "Feedback not found"}, status_code=404)
+
+    return JSONResponse({"deleted": feedback_id})
+
+
 # ============================================================================
 # GET /api/insights — Adaptive behavior: user interaction insights
 # ============================================================================
@@ -2074,6 +2090,7 @@ async def webpubsub_voice_handler(req: Request):
     # Abuse protection (OPTIONS)
     if req.method == "OPTIONS":
         origin = req.headers.get("WebHook-Request-Origin", "")
+        logger.info("webpubsub_abuse_protection origin=%s", origin)
         return JSONResponse(
             content={},
             headers={"WebHook-Allowed-Origin": origin},
@@ -2082,6 +2099,11 @@ async def webpubsub_voice_handler(req: Request):
     ce_type = req.headers.get("ce-type", "")
     connection_id = req.headers.get("ce-connectionid", "")
     user_id = req.headers.get("ce-userid", "")
+
+    logger.info(
+        "webpubsub_event type=%s conn=%s user=%s",
+        ce_type, connection_id, user_id
+    )
 
     from services.webpubsub import get_session, stop_session  # noqa: PLC0415
 

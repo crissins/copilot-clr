@@ -32,9 +32,7 @@ import {
 import {
   Delete24Regular,
   Save24Regular,
-  Trophy24Regular,
   Trophy16Regular,
-  Clock24Regular,
   Clock16Regular,
   Info24Regular,
   Sparkle24Regular,
@@ -46,9 +44,7 @@ import {
   Chat24Regular,
   Send24Regular,
   ChevronDown24Regular,
-  ArrowUp24Regular,
   ArrowUp16Regular,
-  ArrowDown24Regular,
   ArrowDown16Regular,
 } from "@fluentui/react-icons";
 import { apiClient } from "../../services/api";

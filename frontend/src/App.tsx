@@ -218,7 +218,7 @@ function AppShell() {
 
   // Session loading from history sidebar
   const [pendingSessionId, setPendingSessionId] = useState<string | null>(null);
-  const [activeSessionId, setActiveSessionId] = useState<string | null>(null);
+  const [, setActiveSessionId] = useState<string | null>(null);
 
   const handleLoadSession = useCallback((sessionId: string) => {
     setActiveView("chat");

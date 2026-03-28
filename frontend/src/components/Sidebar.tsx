@@ -120,7 +120,7 @@ const useStyles = makeStyles({
 
 });
 
-export function Sidebar({ activeView, onNavigate, collapsed = false, onToggle, onLoadSession }: SidebarProps): ReactNode {
+export function Sidebar({ activeView, onNavigate, collapsed = false, onToggle, onLoadSession: _onLoadSession }: SidebarProps): ReactNode {
   const styles = useStyles();
   const { t } = useI18n();
 
