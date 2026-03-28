@@ -1,4 +1,4 @@
-# Copilot CLR — AI Accessibility Assistant for Neurodiverse Users
+# Cognitive Load Reduced Copilot  — AI Accessibility Assistant for Neurodiverse Users
 
 <p align="center">
   <b>Azure Innovation Challenge 2026 Submission</b><br/>
@@ -35,6 +35,15 @@ Over 1 billion people worldwide live with neurodivergent conditions. Reading a m
 | **Starred Chats** | Pin important conversations for quick access | Cosmos DB |
 | **Responsible AI** | Content Safety filtering, calm tone enforcement, PII awareness, human-in-the-loop reporting | Azure AI Content Safety |
 | **Multi-language** | Full i18n support: English, Spanish, Italian, Portuguese, German, Japanese | Custom i18n system |
+
+### Visual Demos
+
+<table border="0">
+  <tr>
+    <td align="center"><b>Document Simplification</b><br/><img src="docs/images/simplified-content.gif" width="400" alt="Document Simplification Demo"/></td>
+    <td align="center"><b>Multi-Agent RAG</b><br/><img src="docs/images/rag.gif" width="400" alt="RAG Demo"/></td>
+  </tr>
+</table>
 
 ## Architecture
 
