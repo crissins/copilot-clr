@@ -218,22 +218,30 @@ export function AvatarPage() {
       console.log("[Avatar] Endpoint from backend:", result.endpoint);
 
       // Enable SDK verbose logging to console for debugging
-      speechSdk.Diagnostics.logging.enableConsoleLogging();
+      speechSdk.Diagnostics.StartConsoleOutput();
 
-      const speechConfig = speechSdk.SpeechConfig.fromAuthorizationToken(
-        result.authToken!,
-        result.region!,
-      );
-
-      // Explicitly set the host if a custom subdomain is used
+      // Use fromEndpoint when a custom subdomain endpoint is provided,
+      // otherwise fall back to regional auth-token flow.
+      let speechConfig: speechSdk.SpeechConfig;
       if (result.endpoint) {
         try {
           const url = new URL(result.endpoint);
-          speechConfig.host = `wss://${url.host}/`;
-          console.log("[Avatar] Set SpeechConfig host to:", speechConfig.host);
+          const wssUrl = `wss://${url.host}/`;
+          console.log("[Avatar] Using custom endpoint host:", wssUrl);
+          speechConfig = speechSdk.SpeechConfig.fromEndpoint(new URL(wssUrl));
+          speechConfig.authorizationToken = result.authToken!;
         } catch (e) {
-          console.warn("[Avatar] Failed to parse endpoint URL, using default regional host:", e);
+          console.warn("[Avatar] Failed to parse endpoint URL, falling back to regional host:", e);
+          speechConfig = speechSdk.SpeechConfig.fromAuthorizationToken(
+            result.authToken!,
+            result.region!,
+          );
         }
+      } else {
+        speechConfig = speechSdk.SpeechConfig.fromAuthorizationToken(
+          result.authToken!,
+          result.region!,
+        );
       }
 
       const videoFormat = new speechSdk.AvatarVideoFormat();
