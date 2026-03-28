@@ -294,14 +294,16 @@ Sign in with any Microsoft account (personal Outlook, work/school, or Xbox).
 ├── backend/                            # Python FastAPI (Container Apps)
 │   ├── main.py                         # API entrypoint (15+ endpoints)
 │   ├── agents/
-│   │   ├── chat_agent.py              # AI Foundry Agent (Agent Framework SDK)
-│   │   ├── speech_agent.py            # Voice Live Agent
+│   │   ├── chat_agent.py              # Fallback OpenAI chat agent
+│   │   ├── workflow.py                # Main chat workflow agent (Agent Framework)
+│   │   ├── speech_agent.py            # Voice conversation agent
 │   │   ├── task_decomposer.py         # Goal → steps breakdown
-│   │   ├── content_workflow.py        # Document simplification pipeline
-│   │   └── tools.py                   # 6 agent tools
+│   │   ├── content_workflow.py        # 4-stage document pipeline (4 agents)
+│   │   └── tools.py                   # Agent tools (search, tasks, preferences)
+│   ├── services/
+│   │   └── content_adapter.py         # Per-grade content simplifier agent
 │   ├── auth/entra.py                  # JWT validation (multi-tenant)
 │   ├── routes/                        # Route modules (avatar, content, speech, reminders)
-│   ├── services/                      # Azure service integrations
 │   └── Dockerfile                     # Container image
 ├── frontend/                           # React + TypeScript SPA
 │   ├── src/
@@ -318,6 +320,35 @@ Sign in with any Microsoft account (personal Outlook, work/school, or Xbox).
     ├── 05-azure-services-matrix.md
     └── 07-model-card.md
 ```
+
+## AI Agents (9)
+
+The application runs **9 specialized AI agents** organized into 3 workflows. All agents use the Microsoft Agent Framework SDK with Azure AI Foundry.
+
+| # | Agent | File | Triggering Route | Purpose |
+|---|-------|------|------------------|---------|
+| 1 | **Copilot CLRAssistant** | `agents/chat_agent.py` | `POST /api/chat` | Fallback direct chat when only Azure OpenAI is configured |
+| 2 | **CopilotCLR-Workflow** | `agents/workflow.py` | `POST /api/chat` | Main conversational agent with tools (search, tasks, memory, history) |
+| 3 | **CopilotCLR-RequestBuilder** | `agents/content_workflow.py` | `POST /api/content/process` | Builds structured content request from user input |
+| 4 | **CopilotCLR-ContentAdapter** | `agents/content_workflow.py` | `POST /api/content/process` | Adapts content to target reading level |
+| 5 | **CopilotCLR-TaskPlanner** | `agents/content_workflow.py` | `POST /api/content/process` | Decomposes content into micro-steps with time estimates |
+| 6 | **CopilotCLR-AudiobookScripter** | `agents/content_workflow.py` | `POST /api/content/process` | Converts adapted content into TTS narration script |
+| 7 | **Copilot-CLR-Task-Decomposer** | `agents/task_decomposer.py` | `POST /api/tasks/plans/decompose` | Breaks goals into time-boxed, prioritized sub-tasks |
+| 8 | **CopilotCLR-SpeechAssistant** | `agents/speech_agent.py` | `POST /api/speech/chat`, `WS /ws/realtime` | Voice conversation with calm TTS delivery |
+| 9 | **CopilotCLR-Simplifier-{grade}** | `services/content_adapter.py` | `POST /api/content/simplify`, `POST /api/content/{id}/adapt` | Dynamic per-grade-level content simplification |
+
+### Agent Workflows
+
+**Chat Workflow** — Agent #2 runs with document search, web search, task management, and goal decomposition tools. Agent #1 serves as fallback when only `AZURE_OPENAI_ENDPOINT` is set.
+
+**Content Processing Pipeline** — Sequential 4-stage multi-agent workflow:
+```
+User input → #3 RequestBuilder → #4 ContentAdapter → #5 TaskPlanner → #6 AudiobookScripter
+```
+
+**Speech Pipeline** — Agent #8 with conversation memory (CosmosDB history) and calm Voice Live TTS synthesis.
+
+**Standalone Simplification** — Agent #9 is invoked dynamically per reading level (Simplifier-2, Simplifier-5, Simplifier-8) for direct text or document adaptation.
 
 ## Responsible AI
 

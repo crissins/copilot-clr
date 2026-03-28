@@ -115,7 +115,7 @@ const useStyles = makeStyles({
   },
 });
 
-function MessageBubble({ msg, sessionId }: { msg: Message; sessionId: string | null }) {
+function MessageBubble({ msg, sessionId, allMessages }: { msg: Message; sessionId: string | null; allMessages: Message[] }) {
   const styles = useStyles();
   const isUser = msg.role === "user";
 
@@ -157,7 +157,11 @@ function MessageBubble({ msg, sessionId }: { msg: Message; sessionId: string | n
 
               <div className={styles.actions}>
                 <TTSButton text={msg.content} />
-                <ImmersiveReaderButton title="Copilot CLR Response" text={msg.content} />
+                <ImmersiveReaderButton
+                  title="Copilot CLR Response"
+                  text={msg.content}
+                  chatHistory={{ messages: allMessages, sessionId }}
+                />
                 <ReportButton messageId={msg.id} sessionId={sessionId ?? ""} />
               </div>
             </>
@@ -180,7 +184,7 @@ export function MessageList({ messages, isLoading, sessionId }: Props) {
     <div className={styles.list} role="list">
       {messages.map((msg) => (
         <div role="listitem" key={msg.id}>
-          <MessageBubble msg={msg} sessionId={sessionId} />
+          <MessageBubble msg={msg} sessionId={sessionId} allMessages={messages} />
         </div>
       ))}
 

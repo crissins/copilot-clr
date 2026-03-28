@@ -111,7 +111,7 @@ export function useImmersiveReader() {
   }, []);
 
   const launch = useCallback(
-    async (title: string, text: string, mimeType: string = "text/plain") => {
+    async (title: string, text: string, mimeType: string = "text/plain", eventDetail?: unknown) => {
       setError(null);
 
       try {
@@ -183,7 +183,7 @@ export function useImmersiveReader() {
         // Pause any active TTS playback before opening Immersive Reader
         window.dispatchEvent(new Event("pause-all-tts"));
         setIsOpen(true);
-        window.dispatchEvent(new Event("immersive-reader-opened"));
+        window.dispatchEvent(new CustomEvent("immersive-reader-opened", { detail: eventDetail }));
         await launchAsync(irToken, subdomain, content, options);
       } catch (err: unknown) {
         setIsOpen(false);

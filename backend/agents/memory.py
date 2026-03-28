@@ -65,7 +65,7 @@ class UserMemoryProvider(BaseContextProvider):
         """Extract and store user info in session state after each call."""
         # Check input messages for self-introductions
         for msg in context.input_messages:
-            text = msg.content if hasattr(msg, "content") else ""
+            text = msg.contents if hasattr(msg, "contents") else ""
             if isinstance(text, str) and "my name is" in text.lower():
                 name_part = text.lower().split("my name is")[-1].strip()
                 if name_part:
@@ -107,7 +107,12 @@ class CosmosDBHistoryProvider(BaseHistoryProvider):
             for item in reversed(items):
                 role = item.get("role", "user")
                 content = item.get("content", "")
-                messages.append(Message(role=role, contents=[content]))
+                # content may be a list of strings (new format) or a single string (legacy)
+                if isinstance(content, list):
+                    contents = content if content else [""]
+                else:
+                    contents = [str(content)]
+                messages.append(Message(role=role, contents=contents))
             
             return messages
         except Exception:
@@ -126,12 +131,20 @@ class CosmosDBHistoryProvider(BaseHistoryProvider):
             try:
                 # Avoid duplicates by checking if we already saved this message if necessary,
                 # but usually we can just upsert.
+                # Serialize contents to plain strings for JSON storage
+                raw_contents = msg.contents if hasattr(msg, "contents") else []
+                serialized = []
+                for c in (raw_contents or []):
+                    if hasattr(c, "text"):
+                        serialized.append(c.text)
+                    else:
+                        serialized.append(str(c))
                 doc = {
                     "id": str(uuid.uuid4()),
                     "sessionId": self.session_id,
                     "userId": self.user_id,
                     "role": msg.role,
-                    "content": msg.content,
+                    "content": serialized,
                     "createdAt": datetime.now(timezone.utc).isoformat(),
                 }
                 await asyncio.to_thread(container.upsert_item, doc)

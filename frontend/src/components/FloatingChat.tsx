@@ -149,7 +149,17 @@ export function FloatingChat() {
 
   // Listen for IR lifecycle events
   useEffect(() => {
-    const onOpen = () => setIrOpen(true);
+    const onOpen = (e: Event) => {
+      setIrOpen(true);
+      const detail = (e as CustomEvent).detail;
+      if (detail?.messages?.length) {
+        setMessages(detail.messages);
+        setSessionId(detail.sessionId ?? null);
+      } else {
+        setMessages([]);
+        setSessionId(null);
+      }
+    };
     const onClose = () => {
       setIrOpen(false);
       setExpanded(false);

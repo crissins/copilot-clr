@@ -188,9 +188,73 @@ The Foundry Account (`Microsoft.CognitiveServices/accounts` kind `AIServices`) i
 | 100x (500 users) | ~15 replicas (raise maxReplicas in Bicep) | Azure OpenAI TPM (50 capacity) | Increase TPM cap in `foundry-agent-setup.bicep` |
 | Voice at scale | 1 Voice Live session per Web PubSub connection (~20 voice sessions/replica) | Voice Live concurrency | Horizontal replica scale |
 
-## Agent Architecture
+## Agent Architecture (9 Agents, 3 Workflows)
 
-### Text Chat Agent (`backend/agents/chat_agent.py`)
+The application runs **9 specialized AI agents** organized into 3 workflows. All agents use the Microsoft Agent Framework SDK (`agent-framework-azure-ai` 1.0.0rc3) with Azure AI Foundry.
+
+### Agent Inventory
+
+| # | Agent Name | File | Triggering Route | Purpose |
+|---|-----------|------|------------------|---------|
+| 1 | **Copilot CLRAssistant** | `agents/chat_agent.py` | `POST /api/chat` | Fallback direct chat via OpenAI Assistants API (when only `AZURE_OPENAI_ENDPOINT` is set) |
+| 2 | **CopilotCLR-Workflow** | `agents/workflow.py` | `POST /api/chat` | Main conversational agent with tools: document search, web search, task management, goal decomposition, conversation history |
+| 3 | **CopilotCLR-RequestBuilder** | `agents/content_workflow.py` | `POST /api/content/process`, `POST /api/content/build-request` | Stage 2 of content pipeline — builds structured content request from chat or form input |
+| 4 | **CopilotCLR-ContentAdapter** | `agents/content_workflow.py` | `POST /api/content/process` | Stage 3 of content pipeline — adapts content to target reading level with optional web-search enrichment |
+| 5 | **CopilotCLR-TaskPlanner** | `agents/content_workflow.py` | `POST /api/content/process` | Stage 4 of content pipeline — decomposes adapted content into micro-steps with time estimates and focus tips |
+| 6 | **CopilotCLR-AudiobookScripter** | `agents/content_workflow.py` | `POST /api/content/process` | Stage 5 of content pipeline — converts adapted content into spoken narration script for TTS synthesis |
+| 7 | **Copilot-CLR-Task-Decomposer** | `agents/task_decomposer.py` | `POST /api/tasks/plans/decompose` | Standalone goal decomposition — breaks complex goals into time-boxed, prioritized sub-tasks |
+| 8 | **CopilotCLR-SpeechAssistant** | `agents/speech_agent.py` | `POST /api/speech/chat`, `WS /ws/realtime` | Voice conversation agent with calm TTS delivery via Azure Speech and Voice Live SDK |
+| 9 | **CopilotCLR-Simplifier-{grade}** | `services/content_adapter.py` | `POST /api/content/simplify`, `POST /api/content/{id}/adapt` | Dynamic per-grade-level content simplification (e.g., Simplifier-2, Simplifier-5, Simplifier-8) |
+
+### Workflow 1: Chat
+
+```
+POST /api/chat
+  → main.py:chat()
+  → get_agent_response()                         # chat_agent.py
+    ├─ [if PROJECT_ENDPOINT] → run_workflow()     # Agent #2 (CopilotCLR-Workflow)
+    │    tools: search_documents, web_search, manage_tasks, decompose_goal
+    │    context_providers: CosmosDBHistoryProvider, UserMemoryProvider
+    └─ [fallback]            → Assistants API     # Agent #1 (Copilot CLRAssistant)
+```
+
+### Workflow 2: Content Processing Pipeline
+
+Sequential 4-stage multi-agent workflow triggered by `POST /api/content/process`:
+
+```
+User input
+  → Stage 1: IntakeExecutor (no agent — validation + text extraction)
+  → Stage 2: Agent #3 (RequestBuilder) — structures the content request
+  → Stage 3: Agent #4 (ContentAdapter) — rewrites to target reading level
+  → Stage 4: Agent #5 (TaskPlanner) — decomposes into micro-steps  [if requested]
+  → Stage 5: Agent #6 (AudiobookScripter) — generates TTS script   [if requested]
+```
+
+### Workflow 3: Speech + Voice
+
+```
+POST /api/speech/chat
+  → main.py:speech_chat()
+  → get_speech_agent_response()                   # Agent #8 (CopilotCLR-SpeechAssistant)
+       context_providers: CosmosDBHistoryProvider, UserMemoryProvider
+       TTS: Azure Speech SDK (JennyNeural calm voice, slow rate)
+
+WS /ws/realtime (Voice Live)
+  → Web PubSub CloudEvent → voicelive_connect()   # Agent #8 via Voice Live SDK
+       voice: en-US-Ava:DragonHDLatestNeural
+       VAD: Azure Semantic (multilingual)
+```
+
+### Standalone Simplification
+
+```
+POST /api/content/simplify           → Agent #9 (CopilotCLR-Simplifier-{grade})
+POST /api/content/{id}/adapt         → Agent #9 (CopilotCLR-Simplifier-{grade})
+POST /api/tasks/plans/decompose      → Agent #7 (Copilot-CLR-Task-Decomposer)
+```
+
+### Text Chat Agent Detail (`backend/agents/chat_agent.py`)
 
 Uses the **Azure OpenAI Assistants API** (`openai` SDK with `AzureOpenAI` client):
 - **Agent**: `Copilot CLRAssistant` — created/retrieved via `client.beta.assistants.create()`
@@ -199,7 +263,7 @@ Uses the **Azure OpenAI Assistants API** (`openai` SDK with `AzureOpenAI` client
 - **Tools**: `get_current_time`, `search_knowledge_base` (Azure AI Search), `simplify_text`
 - **All sync SDK calls** wrapped in `asyncio.to_thread()` to avoid blocking FastAPI's event loop
 
-### Speech Agent (`backend/agents/speech_agent.py`)
+### Speech Agent Detail (`backend/agents/speech_agent.py`)
 
 Uses the **Azure AI Foundry Agent Service** (`azure-ai-projects` SDK with `AIProjectClient`):
 - **Agent**: `CopilotCLR-SpeechAssistant` — created via `agents.create_version()` with `PromptAgentDefinition`

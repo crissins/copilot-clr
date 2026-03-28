@@ -100,6 +100,19 @@ class ContentPipelineState:
     error: str = ""
 
 
+# Active pipeline runs keyed by run_id (async-safe, single event loop)
+_active_runs: dict[str, ContentPipelineState] = {}
+
+
+def _get_state(messages: list[Message]) -> ContentPipelineState | None:
+    """Extract run_id from messages and look up the active pipeline state."""
+    if messages:
+        run_id = messages[0].text if hasattr(messages[0], "text") else ""
+        if run_id:
+            return _active_runs.get(run_id)
+    return None
+
+
 # ============================================================================
 # Agent instructions per stage
 # ============================================================================
@@ -243,13 +256,16 @@ _PROFILES = {
 class IntakeExecutor(Executor):
     """Load user preferences from Cosmos DB, merge into the request."""
 
-    @handler
+    @handler(input=list[Message], output=list[Message])
     async def handle(
         self,
         messages: list[Message],
-        ctx: WorkflowContext[ContentPipelineState],
-    ) -> list[Message]:
-        state = ctx.state
+        ctx: WorkflowContext,
+    ) -> None:
+        state = _get_state(messages)
+        if not state:
+            await ctx.send_message(messages)
+            return
 
         # Load preferences
         try:
@@ -280,7 +296,7 @@ class IntakeExecutor(Executor):
                 req.target_format = prefs.get("preferredFormat", "bullet points")
 
         state.source_text = req.source_text
-        return messages
+        await ctx.send_message(messages)
 
 
 # ============================================================================
@@ -296,22 +312,27 @@ class RequestBuilderExecutor(Executor):
     request from the conversation.
     """
 
-    @handler
+    @handler(input=list[Message], output=list[Message])
     async def handle(
         self,
         messages: list[Message],
-        ctx: WorkflowContext[ContentPipelineState],
-    ) -> list[Message]:
-        state = ctx.state
+        ctx: WorkflowContext,
+    ) -> None:
+        state = _get_state(messages)
+        if not state:
+            await ctx.send_message(messages)
+            return
 
         # If we already have source text (upload/form), skip the builder
         if state.source_text.strip():
-            return messages
+            await ctx.send_message(messages)
+            return
 
         endpoint = os.getenv("PROJECT_ENDPOINT", "")
         if _LOCAL_DEV or not endpoint:
             logger.info("RequestBuilder: local dev mode, using defaults")
-            return messages
+            await ctx.send_message(messages)
+            return
 
         credential = DefaultAzureCredential()
         try:
@@ -354,7 +375,7 @@ class RequestBuilderExecutor(Executor):
         except Exception:
             logger.exception("RequestBuilder agent failed")
 
-        return messages
+        await ctx.send_message(messages)
 
 
 # ============================================================================
@@ -366,18 +387,22 @@ class ContentAdaptExecutor(Executor):
     """Adapt the source content using an AI Foundry agent with optional
     web search tool for enrichment."""
 
-    @handler
+    @handler(input=list[Message], output=list[Message])
     async def handle(
         self,
         messages: list[Message],
-        ctx: WorkflowContext[ContentPipelineState],
-    ) -> list[Message]:
-        state = ctx.state
+        ctx: WorkflowContext,
+    ) -> None:
+        state = _get_state(messages)
+        if not state:
+            await ctx.send_message(messages)
+            return
         req = state.request
 
         if not state.source_text.strip():
             state.error = "No source content to adapt."
-            return messages
+            await ctx.send_message(messages)
+            return
 
         # Analyze source
         state.source_analysis = _analyze_source(state.source_text)
@@ -399,7 +424,8 @@ class ContentAdaptExecutor(Executor):
         endpoint = os.getenv("PROJECT_ENDPOINT", "") or os.getenv("AI_FOUNDRY_ENDPOINT", "")
         if not endpoint:
             state.error = "Azure AI Foundry is required for content adaptation, but no project endpoint is configured."
-            return messages
+            await ctx.send_message(messages)
+            return
 
         # Bind tool context for search_documents / search_web
         set_tool_context(state.user_id, "")
@@ -444,7 +470,7 @@ class ContentAdaptExecutor(Executor):
             logger.exception("ContentAdapt agent failed")
             state.error = "Azure AI Foundry adaptation failed."
 
-        return messages
+        await ctx.send_message(messages)
 
 
 # ============================================================================
@@ -455,23 +481,28 @@ class ContentAdaptExecutor(Executor):
 class TaskPlanExecutor(Executor):
     """Break adapted content into small, achievable task steps."""
 
-    @handler
+    @handler(input=list[Message], output=list[Message])
     async def handle(
         self,
         messages: list[Message],
-        ctx: WorkflowContext[ContentPipelineState],
-    ) -> list[Message]:
-        state = ctx.state
+        ctx: WorkflowContext,
+    ) -> None:
+        state = _get_state(messages)
+        if not state:
+            await ctx.send_message(messages)
+            return
         req = state.request
 
         wants_tasks = "all" in req.desired_outputs or "task_plan" in req.desired_outputs
         if not wants_tasks or not state.adapted_text:
-            return messages
+            await ctx.send_message(messages)
+            return
 
         endpoint = os.getenv("PROJECT_ENDPOINT", "")
         if _LOCAL_DEV or not endpoint:
             state.task_steps = _local_decompose_tasks(state.adapted_text)
-            return messages
+            await ctx.send_message(messages)
+            return
 
         credential = DefaultAzureCredential()
         try:
@@ -488,10 +519,10 @@ class TaskPlanExecutor(Executor):
                 plan_messages = [
                     Message(
                         role="user",
-                        content=(
+                        contents=[
                             f"Decompose this into micro-steps:\n\n"
                             f"{state.adapted_text[:8000]}"
-                        ),
+                        ],
                     )
                 ]
                 response = await agent.run(plan_messages)
@@ -517,7 +548,7 @@ class TaskPlanExecutor(Executor):
             logger.exception("TaskPlan agent failed, using fallback")
             state.task_steps = _local_decompose_tasks(state.adapted_text)
 
-        return messages
+        await ctx.send_message(messages)
 
 
 # ============================================================================
@@ -533,18 +564,22 @@ class AudiobookExecutor(Executor):
     section with Azure Speech.
     """
 
-    @handler
+    @handler(input=list[Message], output=list[Message])
     async def handle(
         self,
         messages: list[Message],
-        ctx: WorkflowContext[ContentPipelineState],
-    ) -> list[Message]:
-        state = ctx.state
+        ctx: WorkflowContext,
+    ) -> None:
+        state = _get_state(messages)
+        if not state:
+            await ctx.send_message(messages)
+            return
         req = state.request
 
         wants_audio = "all" in req.desired_outputs or "audiobook" in req.desired_outputs
         if not wants_audio or not state.adapted_text:
-            return messages
+            await ctx.send_message(messages)
+            return
 
         # Step 1: Generate narration script via AI
         narration_sections = await self._generate_script(state)
@@ -555,7 +590,7 @@ class AudiobookExecutor(Executor):
                 narration_sections, state
             )
 
-        return messages
+        await ctx.send_message(messages)
 
     async def _generate_script(
         self, state: ContentPipelineState
@@ -589,10 +624,10 @@ class AudiobookExecutor(Executor):
                 script_messages = [
                     Message(
                         role="user",
-                        content=(
+                        contents=[
                             f"Convert this adapted content into an audiobook "
                             f"narration script:\n\n{state.adapted_text[:8000]}"
-                        ),
+                        ],
                     )
                 ]
                 response = await agent.run(script_messages)
@@ -671,23 +706,36 @@ class AudiobookExecutor(Executor):
 
 
 # ============================================================================
-# Workflow assembly
+# Workflow assembly (built per-request to avoid shared mutable state)
 # ============================================================================
 
-_intake = IntakeExecutor()
-_request_builder = RequestBuilderExecutor()
-_content_adapt = ContentAdaptExecutor()
-_task_plan = TaskPlanExecutor()
-_audiobook = AudiobookExecutor()
 
-_content_workflow = (
-    WorkflowBuilder(start_executor=_intake)
-    .add_edge(_intake, _request_builder)
-    .add_edge(_request_builder, _content_adapt)
-    .add_edge(_content_adapt, _task_plan)
-    .add_edge(_task_plan, _audiobook)
-    .build()
-)
+def _build_full_workflow():
+    """Build a fresh workflow instance for one pipeline run."""
+    intake = IntakeExecutor(id="intake")
+    request_builder = RequestBuilderExecutor(id="request-builder")
+    content_adapt = ContentAdaptExecutor(id="content-adapt")
+    task_plan = TaskPlanExecutor(id="task-plan")
+    audiobook = AudiobookExecutor(id="audiobook")
+    return (
+        WorkflowBuilder(start_executor=intake)
+        .add_edge(intake, request_builder)
+        .add_edge(request_builder, content_adapt)
+        .add_edge(content_adapt, task_plan)
+        .add_edge(task_plan, audiobook)
+        .build()
+    )
+
+
+def _build_intake_workflow():
+    """Build a mini-workflow for intake + request building only."""
+    intake = IntakeExecutor(id="intake")
+    builder = RequestBuilderExecutor(id="request-builder")
+    return (
+        WorkflowBuilder(start_executor=intake)
+        .add_edge(intake, builder)
+        .build()
+    )
 
 
 # ============================================================================
@@ -712,18 +760,16 @@ async def run_content_pipeline(
     now = datetime.now(timezone.utc).isoformat()
 
     state = ContentPipelineState(user_id=user_id, request=request)
+    run_id = str(uuid.uuid4())
+    _active_runs[run_id] = state
 
     input_messages = [
-        Message(
-            role="user",
-            content=request.source_text[:200] if request.source_text else request.topic,
-        )
+        Message(role="user", contents=[run_id])
     ]
 
-    ctx = WorkflowContext(state=state)
-
     try:
-        await _content_workflow.run(input_messages, ctx)
+        workflow = _build_full_workflow()
+        result = await workflow.run(input_messages)
     except Exception:
         logger.exception("Content pipeline failed")
         return PipelineOutput(
@@ -732,6 +778,8 @@ async def run_content_pipeline(
             error=state.error or "Pipeline execution failed.",
             created_at=now,
         )
+    finally:
+        _active_runs.pop(run_id, None)
 
     if state.error:
         return PipelineOutput(
@@ -810,24 +858,19 @@ async def build_request_from_chat(
     except Exception:
         pass
 
+    run_id = str(uuid.uuid4())
+    _active_runs[run_id] = state
+
     messages = [
-        Message(role=m.get("role", "user"), contents=[m.get("content", "")])
-        for m in chat_messages
+        Message(role="user", contents=[run_id])
     ]
 
-    ctx = WorkflowContext(state=state)
+    try:
+        mini_workflow = _build_intake_workflow()
+        await mini_workflow.run(messages)
+    finally:
+        _active_runs.pop(run_id, None)
 
-    # Run only Intake + RequestBuilder stages
-    intake_exec = IntakeExecutor()
-    builder_exec = RequestBuilderExecutor()
-
-    mini_workflow = (
-        WorkflowBuilder(start_executor=intake_exec)
-        .add_edge(intake_exec, builder_exec)
-        .build()
-    )
-
-    await mini_workflow.run(messages, ctx)
     return state.request
 
 
