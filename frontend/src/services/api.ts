@@ -525,6 +525,35 @@ class ApiClient {
     if (!res.ok) throw new Error(`Delete content failed: ${res.status}`);
   }
 
+  async sendEmail(
+    contentId: string,
+    profile: string,
+    adaptationId: string,
+    token: string | null,
+  ): Promise<{ status: string; email: string }> {
+    const res = await fetch(`${API_BASE}/api/content/${encodeURIComponent(contentId)}/email`, {
+      method: "POST",
+      headers: this.getHeaders(token),
+      body: JSON.stringify({ profile, adaptationId }),
+    });
+    if (!res.ok) throw new Error(`Send email failed: ${res.status}`);
+    return res.json();
+  }
+
+  async sendEmailSimplified(
+    text: string,
+    profile: string,
+    token: string | null,
+  ): Promise<{ status: string; email: string }> {
+    const res = await fetch(`${API_BASE}/api/content/simplify/email`, {
+      method: "POST",
+      headers: this.getHeaders(token),
+      body: JSON.stringify({ text, profile }),
+    });
+    if (!res.ok) throw new Error(`Send email failed: ${res.status}`);
+    return res.json();
+  }
+
   // ── Reminders ───────────────────────────────────────────────────────
 
   async createReminder(

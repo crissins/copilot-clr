@@ -16,6 +16,10 @@ env:
   CONTAINER_APP_NAME: container-apps-kvhky
   CONTAINER_APP_ENV: container-apps-environment-kvhky
 
+  # Web PubSub (re-register event handler after backend deploy)
+  WEBPUBSUB_NAME: webpubsub-kvhky
+  WEBPUBSUB_HUB: voice
+
   # Static Web App
   SWA_NAME: swa-kvhky
 
@@ -72,6 +76,30 @@ jobs:
             --image "$IMAGE" \
             --query "{name:name, latestRevision:properties.latestRevisionName}" \
             --output table
+
+      # Web PubSub validates event handlers via abuse-protection OPTIONS on hub
+      # creation/update. On first infra deploy the Container App runs a placeholder
+      # image that 404s, so the handler is marked unhealthy. Re-registering the
+      # hub AFTER the real backend is running forces re-validation.
+      - name: Re-register Web PubSub event handler
+        run: |
+          FQDN=$(az containerapp show \
+            --name ${{ env.CONTAINER_APP_NAME }} \
+            --resource-group ${{ env.RESOURCE_GROUP }} \
+            --query "properties.configuration.ingress.fqdn" -o tsv)
+
+          echo "Container App FQDN: $FQDN"
+
+          az webpubsub hub update \
+            --hub-name ${{ env.WEBPUBSUB_HUB }} \
+            --name ${{ env.WEBPUBSUB_NAME }} \
+            --resource-group ${{ env.RESOURCE_GROUP }} \
+            --event-handler \
+              url-template="https://${FQDN}/api/webpubsub/voice" \
+              user-event-pattern="*" \
+              system-event=connect \
+              system-event=connected \
+              system-event=disconnected
 
   # ═══════════════════════════════════════════════════════════════════════════
   # JOB 2 — Build frontend, deploy to Azure Static Web Apps

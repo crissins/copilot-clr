@@ -1,4 +1,4 @@
-﻿/**
+/**
  * Feature 2 — Simplify Content
  *
  * Select a previously uploaded document, choose a reading-level / neurodiverse
@@ -30,6 +30,7 @@ import {
   Checkmark24Regular,
   ArrowDownload24Regular,
   Clipboard24Regular,
+  Mail24Regular,
 } from "@fluentui/react-icons";
 import ReactMarkdown from "react-markdown";
 import { apiClient } from "../../services/api";
@@ -150,6 +151,7 @@ export function Feature2Page() {
   const [loadingDetail, setLoadingDetail] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [successMsg, setSuccessMsg] = useState<string | null>(null);
+  const [sendingEmail, setSendingEmail] = useState(false);
 
   const loadDocuments = useCallback(async () => {
     setLoading(true);
@@ -225,6 +227,28 @@ export function Feature2Page() {
       setAdapting(false);
     }
   }, [inputText, profile, getAccessToken]);
+
+  const handleSendEmail = useCallback(async (adaptationId?: string) => {
+    setSendingEmail(true);
+    setError(null);
+    setSuccessMsg(null);
+    try {
+      const token = await getAccessToken();
+      let res;
+      if (mode === "paste") {
+        if (!simplifiedResult) return;
+        res = await apiClient.sendEmailSimplified(inputText, profile, token);
+      } else {
+        if (!selectedDocId || !adaptationId) return;
+        res = await apiClient.sendEmail(selectedDocId, profile, adaptationId, token);
+      }
+      setSuccessMsg(`Adapted content sent to ${res.email}!`);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to send email. Ensure you are logged in.");
+    } finally {
+      setSendingEmail(false);
+    }
+  }, [mode, inputText, profile, selectedDocId, simplifiedResult, getAccessToken]);
 
   return (
     <div className={styles.container}>
@@ -361,6 +385,14 @@ export function Feature2Page() {
                     >
                       Download
                     </Button>
+                    <Button
+                      appearance="subtle"
+                      icon={sendingEmail ? <Spinner size="tiny" /> : <Mail24Regular />}
+                      onClick={() => handleSendEmail()}
+                      disabled={sendingEmail}
+                    >
+                      Email
+                    </Button>
                   </div>
                 </div>
               </div>
@@ -495,6 +527,14 @@ export function Feature2Page() {
                         }}
                       >
                         Download
+                      </Button>
+                      <Button
+                        appearance="subtle"
+                        icon={sendingEmail ? <Spinner size="tiny" /> : <Mail24Regular />}
+                        onClick={() => handleSendEmail(adaptation.id)}
+                        disabled={sendingEmail}
+                      >
+                        Email
                       </Button>
                     </div>
                   </div>

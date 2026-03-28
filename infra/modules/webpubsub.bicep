@@ -54,10 +54,15 @@ resource voiceHub 'Microsoft.SignalRService/webPubSub/hubs@2024-03-01' = {
         userEventPattern: '*'
         systemEvents: [
           'connect'
+          'connected'
           'disconnected'
         ]
+        auth: {
+          type: 'None'
+        }
       }
     ]
+    eventListeners: []
     anonymousConnectPolicy: 'deny'
   }
 }

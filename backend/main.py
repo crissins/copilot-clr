@@ -142,12 +142,14 @@ class _InMemoryContainer:
         docs = list(self._store.values())
         for param in parameters:
             name, value = param["name"], param["value"]
-            if name == "@userId":
+            if name in ("@userId", "@uid"):
                 docs = [d for d in docs if d.get("userId") == value]
             elif name == "@sid":
                 docs = [d for d in docs if d.get("sessionId") == value]
         if "ORDER BY c.updatedAt DESC" in query:
             docs.sort(key=lambda d: d.get("updatedAt", ""), reverse=True)
+        elif "ORDER BY c.createdAt DESC" in query:
+            docs.sort(key=lambda d: d.get("createdAt", ""), reverse=True)
         elif "ORDER BY c.createdAt ASC" in query:
             docs.sort(key=lambda d: d.get("createdAt", ""))
         return docs
@@ -1916,7 +1918,7 @@ def get_user_insights(req: Request) -> JSONResponse:
     tasks = list(_tasks_container.query_items(
         query="SELECT c.steps, c.readingLevel FROM c WHERE c.userId = @uid",
         parameters=[{"name": "@uid", "value": user_id}],
-        partition_key=user_id,
+        enable_cross_partition_query=True,
     ))
     total_task_plans = len(tasks)
     total_steps = 0
@@ -2022,7 +2024,7 @@ from routes.reminders import router as reminders_router, init_routes as init_rem
 from routes.avatar_routes import router as avatar_router, init_routes as init_avatar
 from routes.speech_routes import router as speech_router, init_routes as init_speech_routes
 
-init_content(_content_container, _adapted_container, _audio_container, _get_user_id, _check_content_safety)
+init_content(_content_container, _adapted_container, _audio_container, _get_user_id, _check_content_safety, _get_user_profile)
 init_reminders(_get_user_id, _reminders_container, _preferences_container)
 init_avatar(_get_user_id, _preferences_container, _adapted_container)
 init_speech_routes(_get_user_id)
@@ -2114,6 +2116,13 @@ async def webpubsub_voice_handler(req: Request):
         )
         asyncio.create_task(_start_voice_session(connection_id, user_id))
         return JSONResponse({"userId": user_id})
+
+    # System: connected — acknowledgement (no action needed)
+    if ce_type == "azure.webpubsub.sys.connected":
+        logger.info(
+            "voice_pubsub_connected conn=%s user=%s", connection_id, user_id,
+        )
+        return JSONResponse({})
 
     # System: disconnected — tear down Voice Live session
     if ce_type == "azure.webpubsub.sys.disconnected":
