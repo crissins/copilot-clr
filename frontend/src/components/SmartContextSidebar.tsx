@@ -28,18 +28,13 @@ import {
   Send20Regular,
   ChevronLeft20Regular,
   ChevronRight20Regular,
-  ChevronDown20Regular,
-  ChevronUp20Regular,
-  Delete20Regular,
   Open20Regular,
   TasksApp20Regular,
   Alert20Regular,
   Document20Regular,
-  Star20Regular,
-  Star20Filled,
 } from "@fluentui/react-icons";
 import { apiClient } from "../services/api";
-import type { Session, TaskPlan, Reminder, ContentItem } from "../services/api";
+import type { TaskPlan, Reminder, ContentItem } from "../services/api";
 import { useAuth } from "../hooks/useAuth";
 import { useI18n } from "../I18nContext";
 
@@ -48,9 +43,7 @@ import { useI18n } from "../I18nContext";
 interface SmartContextSidebarProps {
   collapsed: boolean;
   onToggle: () => void;
-  onLoadSession: (sessionId: string) => void;
   onNavigate: (viewId: string) => void;
-  activeSessionId?: string | null;
   /** Fire a chat message from the mini-prompt */
   onSendPrompt?: (text: string) => void;
 }
@@ -188,69 +181,6 @@ const useStyles = makeStyles({
     color: tokens.colorNeutralForeground3,
     textAlign: "center" as const,
   },
-
-  /* ── Bottom: recent history ─────────────────────────────────────── */
-  recentSection: {
-    ...shorthands.borderTop("1px", "solid", tokens.colorNeutralStroke1),
-    display: "flex",
-    flexDirection: "column",
-  },
-  recentToggle: {
-    display: "flex",
-    alignItems: "center",
-    justifyContent: "space-between",
-    ...shorthands.padding("8px", "12px"),
-    cursor: "pointer",
-    backgroundColor: "transparent",
-    ...shorthands.border("none"),
-    width: "100%",
-    color: tokens.colorNeutralForeground2,
-    fontSize: tokens.fontSizeBase200,
-    fontWeight: tokens.fontWeightSemibold,
-    ":hover": {
-      backgroundColor: tokens.colorNeutralBackground3,
-    },
-  },
-  recentList: {
-    display: "flex",
-    flexDirection: "column",
-    gap: "1px",
-    ...shorthands.padding("0", "8px", "8px"),
-    maxHeight: "200px",
-    overflowY: "auto",
-  },
-  recentItem: {
-    display: "flex",
-    alignItems: "center",
-    gap: "6px",
-    ...shorthands.padding("6px", "8px"),
-    ...shorthands.borderRadius(tokens.borderRadiusMedium),
-    cursor: "pointer",
-    backgroundColor: "transparent",
-    ...shorthands.border("none"),
-    width: "100%",
-    textAlign: "left" as const,
-    fontSize: tokens.fontSizeBase200,
-    color: tokens.colorNeutralForeground2,
-    ":hover": {
-      backgroundColor: tokens.colorNeutralBackground3,
-    },
-  },
-  recentItemActive: {
-    backgroundColor: tokens.colorBrandBackground2,
-    color: tokens.colorBrandForeground1,
-  },
-  recentItemTitle: {
-    flex: 1,
-    overflow: "hidden",
-    textOverflow: "ellipsis",
-    whiteSpace: "nowrap",
-  },
-  recentItemDate: {
-    fontSize: tokens.fontSizeBase100,
-    color: tokens.colorNeutralForeground3,
-    flexShrink: 0,
-  },
 });
 
 /* ─── Helpers ──────────────────────────────────────────────────────────── */
@@ -282,9 +212,7 @@ function detectIntent(text: string): "reminder" | "task" | "chat" {
 export function SmartContextSidebar({
   collapsed,
   onToggle,
-  onLoadSession,
   onNavigate,
-  activeSessionId,
   onSendPrompt,
 }: SmartContextSidebarProps) {
   const styles = useStyles();
@@ -301,11 +229,6 @@ export function SmartContextSidebar({
   const [nextReminder, setNextReminder] = useState<Reminder | null>(null);
   const [lastDoc, setLastDoc] = useState<ContentItem | null>(null);
   const [contextLoading, setContextLoading] = useState(false);
-
-  // Recent section
-  const [recentOpen, setRecentOpen] = useState(false);
-  const [sessions, setSessions] = useState<Session[]>([]);
-  const [sessionsLoading, setSessionsLoading] = useState(false);
 
   /* ── Fetch active context on mount ───────────────────────────────── */
   useEffect(() => {
@@ -360,27 +283,6 @@ export function SmartContextSidebar({
     };
   }, [collapsed, getAccessToken]);
 
-  /* ── Load recent chats when expanded ─────────────────────────────── */
-  useEffect(() => {
-    if (!recentOpen) return;
-    let cancelled = false;
-
-    async function loadSessions() {
-      setSessionsLoading(true);
-      try {
-        const token = await getAccessToken();
-        const list = await apiClient.listSessions(token);
-        if (!cancelled) setSessions(list.slice(0, 10));
-      } catch {
-        // fail silently
-      } finally {
-        if (!cancelled) setSessionsLoading(false);
-      }
-    }
-    loadSessions();
-    return () => { cancelled = true; };
-  }, [recentOpen, getAccessToken]);
-
   /* ── Mini-prompt submit ──────────────────────────────────────────── */
   const handlePromptSubmit = useCallback(async () => {
     const text = promptText.trim();
@@ -423,38 +325,6 @@ export function SmartContextSidebar({
       }
     },
     [handlePromptSubmit],
-  );
-
-  /* ── Delete session ──────────────────────────────────────────────── */
-  const deleteSession = useCallback(
-    async (sid: string, e: React.MouseEvent) => {
-      e.stopPropagation();
-      try {
-        const token = await getAccessToken();
-        await apiClient.deleteSession(sid, token);
-        setSessions((prev) => prev.filter((s) => s.id !== sid));
-      } catch {
-        // fail silently
-      }
-    },
-    [getAccessToken],
-  );
-
-  /* ── Toggle star ───────────────────────────────────────────────── */
-  const toggleStar = useCallback(
-    async (sid: string, e: React.MouseEvent) => {
-      e.stopPropagation();
-      try {
-        const token = await getAccessToken();
-        const updated = await apiClient.toggleStarSession(sid, token);
-        setSessions((prev) =>
-          prev.map((s) => (s.id === updated.id ? { ...s, starred: updated.starred } : s))
-        );
-      } catch {
-        // fail silently
-      }
-    },
-    [getAccessToken],
   );
 
   /* ── Collapsed state ─────────────────────────────────────────────── */
@@ -610,101 +480,6 @@ export function SmartContextSidebar({
         )}
       </div>
 
-      {/* ── Bottom: Collapsed Recent ─────────────────────────────── */}
-      <div className={styles.recentSection}>
-        <button
-          className={styles.recentToggle}
-          onClick={() => setRecentOpen(!recentOpen)}
-          aria-expanded={recentOpen}
-          aria-controls="smart-sidebar-recent"
-        >
-          <span>{t.contextSidebar?.recent ?? "Recent"}</span>
-          {recentOpen ? <ChevronUp20Regular /> : <ChevronDown20Regular />}
-        </button>
-
-        {recentOpen && (
-          <div id="smart-sidebar-recent" className={styles.recentList} role="list">
-            {sessionsLoading ? (
-              <Spinner size="tiny" label={t.chat?.loadingSessions ?? "Loading…"} />
-            ) : sessions.length === 0 ? (
-              <div className={styles.emptyState}>{t.chat?.noSessions ?? "No recent chats"}</div>
-            ) : (
-              <>
-                {/* Starred chats first */}
-                {sessions.filter((s) => s.starred).length > 0 && (
-                  <>
-                    <Text style={{ fontSize: "10px", fontWeight: 600, color: tokens.colorNeutralForeground3, textTransform: "uppercase", letterSpacing: "0.05em", padding: "4px 8px 2px" }}>
-                      ⭐ Pinned
-                    </Text>
-                    {sessions.filter((s) => s.starred).map((s) => (
-                      <button
-                        key={s.id}
-                        role="listitem"
-                        className={mergeClasses(
-                          styles.recentItem,
-                          activeSessionId === s.id && styles.recentItemActive,
-                        )}
-                        onClick={() => onLoadSession(s.id)}
-                      >
-                        <span className={styles.recentItemTitle}>{s.title || "Untitled"}</span>
-                        <Tooltip content="Unpin chat" relationship="label">
-                          <Button
-                            appearance="subtle"
-                            icon={<Star20Filled style={{ color: "#CA8A04" }} />}
-                            size="small"
-                            onClick={(e) => toggleStar(s.id, e)}
-                            aria-label="Unpin chat"
-                          />
-                        </Tooltip>
-                        <Button
-                          appearance="subtle"
-                          icon={<Delete20Regular />}
-                          size="small"
-                          onClick={(e) => deleteSession(s.id, e)}
-                          aria-label={t.chat?.deleteSession ?? "Delete chat"}
-                        />
-                      </button>
-                    ))}
-                  </>
-                )}
-                {/* Recent (non-starred) */}
-                {sessions.filter((s) => !s.starred).map((s) => (
-                  <button
-                    key={s.id}
-                    role="listitem"
-                    className={mergeClasses(
-                      styles.recentItem,
-                      activeSessionId === s.id && styles.recentItemActive,
-                    )}
-                    onClick={() => onLoadSession(s.id)}
-                  >
-                    <span className={styles.recentItemTitle}>{s.title || "Untitled"}</span>
-                    <span className={styles.recentItemDate}>
-                      {formatShortDate(s.updatedAt || s.createdAt)}
-                    </span>
-                    <Tooltip content="Pin chat" relationship="label">
-                      <Button
-                        appearance="subtle"
-                        icon={<Star20Regular />}
-                        size="small"
-                        onClick={(e) => toggleStar(s.id, e)}
-                        aria-label="Pin chat"
-                      />
-                    </Tooltip>
-                    <Button
-                      appearance="subtle"
-                      icon={<Delete20Regular />}
-                      size="small"
-                      onClick={(e) => deleteSession(s.id, e)}
-                      aria-label={t.chat?.deleteSession ?? "Delete chat"}
-                    />
-                  </button>
-                ))}
-              </>
-            )}
-          </div>
-        )}
-      </div>
     </div>
   );
 }

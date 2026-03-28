@@ -31,19 +31,25 @@ import {
 } from "@fluentui/react-components";
 import {
   Delete24Regular,
+  Save24Regular,
   Trophy24Regular,
+  Trophy16Regular,
   Clock24Regular,
+  Clock16Regular,
   Info24Regular,
   Sparkle24Regular,
   History24Regular,
   Dismiss24Regular,
   ArrowRight24Regular,
+  ArrowRight16Regular,
   CheckmarkCircle24Regular,
   Chat24Regular,
   Send24Regular,
   ChevronDown24Regular,
   ArrowUp24Regular,
+  ArrowUp16Regular,
   ArrowDown24Regular,
+  ArrowDown16Regular,
 } from "@fluentui/react-icons";
 import { apiClient } from "../../services/api";
 import type { TaskPlan, TaskStep, Message } from "../../services/api";
@@ -283,9 +289,10 @@ const useStyles = makeStyles({
   },
   stepMeta: {
     display: "flex",
-    gap: "6px",
+    gap: "8px",
     alignItems: "center",
     flexWrap: "wrap",
+    marginTop: "2px",
   },
   focusTip: {
     display: "flex",
@@ -511,9 +518,9 @@ const PRIORITY_COLOR: Record<string, "important" | "informative" | "subtle"> = {
 };
 
 const PRIORITY_ICON: Record<string, JSX.Element> = {
-  high: <ArrowUp24Regular />,
-  medium: <ArrowRight24Regular />,
-  low: <ArrowDown24Regular />,
+  high: <ArrowUp16Regular />,
+  medium: <ArrowRight16Regular />,
+  low: <ArrowDown16Regular />,
 };
 
 // ── Component ──────────────────────────────────────────────────────────────
@@ -590,13 +597,19 @@ export function Feature5Page() {
   const handleToggleStep = useCallback(
     async (stepId: string, completed: boolean) => {
       if (!currentPlan) return;
+      // Optimistic local update — works even if API is unreachable
+      const updatedSteps = currentPlan.steps.map((s) =>
+        s.id === stepId ? { ...s, completed, completedAt: completed ? new Date().toISOString() : null } : s,
+      );
+      const updatedPlan = { ...currentPlan, steps: updatedSteps };
+      setCurrentPlan(updatedPlan);
+      setHistory((prev) => prev.map((p) => (p.id === updatedPlan.id ? updatedPlan : p)));
+      // Best-effort sync to backend
       try {
         const token = await getToken();
-        const updated = await apiClient.toggleStep(currentPlan.id, stepId, completed, token);
-        setCurrentPlan(updated);
-        setHistory((prev) => prev.map((p) => (p.id === updated.id ? updated : p)));
+        await apiClient.toggleStep(currentPlan.id, stepId, completed, token);
       } catch {
-        setError("Could not update step. Please try again.");
+        // Local state is already updated; no error shown
       }
     },
     [currentPlan, getToken],
@@ -604,17 +617,33 @@ export function Feature5Page() {
 
   const handleDeletePlan = useCallback(
     async (planId: string) => {
+      // Optimistic local delete
+      setHistory((prev) => prev.filter((p) => p.id !== planId));
+      if (currentPlan?.id === planId) setCurrentPlan(null);
+      // Best-effort sync to backend
       try {
         const token = await getToken();
         await apiClient.deleteTaskPlan(planId, token);
-        setHistory((prev) => prev.filter((p) => p.id !== planId));
-        if (currentPlan?.id === planId) setCurrentPlan(null);
       } catch {
-        setError("Could not delete plan.");
+        // Already removed locally
       }
     },
     [currentPlan, getToken],
   );
+
+  const handleSavePlan = useCallback(async () => {
+    if (!currentPlan) return;
+    try {
+      const token = await getToken();
+      await apiClient.saveTaskPlan(currentPlan.goal, currentPlan.steps, token);
+      setError(null);
+      // Brief success feedback
+      setNextNudge("Plan saved! You can find it in Past Plans.");
+      setTimeout(() => setNextNudge(null), 4000);
+    } catch {
+      setError("Could not save plan. Please try again.");
+    }
+  }, [currentPlan, getToken]);
 
   const handleLoadPlan = useCallback(
     async (planId: string) => {
@@ -849,14 +878,17 @@ export function Feature5Page() {
                 <div className={styles.planInfo}>
                   <Text className={styles.planGoal}>{currentPlan.goal}</Text>
                   <div className={styles.statRow}>
-                    <Badge appearance="outline" size="medium" icon={<Trophy24Regular />} color={allDone ? "success" : "informative"}>
+                    <Badge appearance="outline" size="medium" icon={<Trophy16Regular />} color={allDone ? "success" : "informative"}>
                       {completedCount}/{totalSteps} done
                     </Badge>
-                    <Badge appearance="outline" size="medium" icon={<Clock24Regular />}>
+                    <Badge appearance="outline" size="medium" icon={<Clock16Regular />}>
                       ~{remainingMinutes} min left of {totalMinutes}
                     </Badge>
                   </div>
                 </div>
+                <Tooltip content="Save this plan" relationship="label">
+                  <Button appearance="subtle" icon={<Save24Regular />} onClick={handleSavePlan} />
+                </Tooltip>
                 <Tooltip content="Delete this plan" relationship="label">
                   <Button appearance="subtle" icon={<Delete24Regular />} onClick={() => handleDeletePlan(currentPlan.id)} />
                 </Tooltip>
@@ -934,7 +966,7 @@ export function Feature5Page() {
                             <Badge size="small" color={PRIORITY_COLOR[step.priority] ?? "informative"} icon={PRIORITY_ICON[step.priority]}>
                               {step.priority}
                             </Badge>
-                            <Badge size="small" appearance="outline" icon={<Clock24Regular />}>
+                            <Badge size="small" appearance="outline" icon={<Clock16Regular />}>
                               {step.estimatedMinutes} min
                             </Badge>
                             {isCurrent && !step.completed && (

@@ -68,7 +68,11 @@ def get_client_access_url(user_id: str) -> str:
     """Generate a Web PubSub client access URL with userId claim."""
     logger.info("webpubsub_get_url user=%s", user_id)
     client = _get_service_client_sync()
-    token = client.get_client_access_token(user_id=user_id)
+    # Explicitly grant roles for PubSub subprotocol (json.webpubsub.azure.v1)
+    token = client.get_client_access_token(
+        user_id=user_id,
+        roles=["webpubsub.sendToGroup", "webpubsub.joinLeaveGroup"],
+    )
     logger.info("webpubsub_url_ok user=%s", user_id)
     return token["url"]
 

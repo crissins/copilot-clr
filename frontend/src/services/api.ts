@@ -471,6 +471,14 @@ class ApiClient {
     return data.feedback;
   }
 
+  async deleteFeedback(feedbackId: string, token: string | null): Promise<void> {
+    const res = await fetch(`${API_BASE}/api/feedback/${encodeURIComponent(feedbackId)}`, {
+      method: "DELETE",
+      headers: this.getHeaders(token),
+    });
+    if (!res.ok) throw new Error(`Delete feedback failed: ${res.status}`);
+  }
+
   // ── Content Adaptation ──────────────────────────────────────────────
 
   async simplifyText(

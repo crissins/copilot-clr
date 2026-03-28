@@ -100,10 +100,17 @@ export function Chat({ loadSessionId, onSessionLoaded }: {
   const { getAccessToken } = useAuth();
   const { t } = useI18n();
   const { settings } = useSharedSettings();
-  const [messages, setMessages] = useState<Message[]>([]);
+  const [messages, setMessages] = useState<Message[]>(() => {
+    try {
+      const cached = localStorage.getItem("clr_chat_messages");
+      return cached ? JSON.parse(cached) : [];
+    } catch { return []; }
+  });
   const [input, setInput] = useState("");
   const [isLoading, setIsLoading] = useState(false);
-  const [sessionId, setSessionId] = useState<string | null>(null);
+  const [sessionId, setSessionId] = useState<string | null>(() => {
+    try { return localStorage.getItem("clr_chat_session"); } catch { return null; }
+  });
   const [isRecording, setIsRecording] = useState(false);
   const [uploadedFiles, setUploadedFiles] = useState<string[]>([]);
   const [showDecomposer, setShowDecomposer] = useState(false);
@@ -111,10 +118,48 @@ export function Chat({ loadSessionId, onSessionLoaded }: {
   const [decomposerLoading, setDecomposerLoading] = useState(false);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const recognizerRef = useRef<speechSdk.SpeechRecognizer | null>(null);
+  const initialLoadDone = useRef(false);
 
   useEffect(() => {
     textareaRef.current?.focus();
   }, []);
+
+  // Persist sessionId to localStorage
+  useEffect(() => {
+    try {
+      if (sessionId) localStorage.setItem("clr_chat_session", sessionId);
+      else localStorage.removeItem("clr_chat_session");
+    } catch { /* storage unavailable */ }
+  }, [sessionId]);
+
+  // Persist messages to localStorage
+  useEffect(() => {
+    try {
+      if (messages.length > 0) {
+        localStorage.setItem("clr_chat_messages", JSON.stringify(messages));
+      } else {
+        localStorage.removeItem("clr_chat_messages");
+      }
+    } catch { /* storage unavailable */ }
+  }, [messages]);
+
+  // Auto-load last session on first mount (when no explicit loadSessionId)
+  // Messages load instantly from localStorage cache; API refreshes in background.
+  useEffect(() => {
+    if (initialLoadDone.current || loadSessionId) return;
+    initialLoadDone.current = true;
+    if (!sessionId) return;
+    (async () => {
+      try {
+        const token = await getAccessToken();
+        const detail = await apiClient.getSession(sessionId, token);
+        setMessages(detail.messages);
+      } catch {
+        // Session no longer exists — clear stale id only if no cached messages
+        if (messages.length === 0) setSessionId(null);
+      }
+    })();
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Load session from history sidebar
   useEffect(() => {
@@ -269,6 +314,7 @@ export function Chat({ loadSessionId, onSessionLoaded }: {
     setUploadedFiles([]);
     setShowDecomposer(false);
     setDecomposerGoal("");
+    try { localStorage.removeItem("clr_chat_messages"); } catch { /* */ }
     textareaRef.current?.focus();
   };
 

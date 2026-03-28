@@ -120,33 +120,11 @@ class CosmosDBHistoryProvider(BaseHistoryProvider):
             return []
 
     async def save_messages(self, session_id: str | None = None, messages: list[Message] | None = None, **kwargs) -> None:
-        """Store new messages into Cosmos DB."""
-        if not messages:
-            return
-        container = get_messages_container()
-        if not container:
-            return
+        """No-op: main.py already persists messages to Cosmos DB.
 
-        for msg in messages:
-            try:
-                # Avoid duplicates by checking if we already saved this message if necessary,
-                # but usually we can just upsert.
-                # Serialize contents to plain strings for JSON storage
-                raw_contents = msg.contents if hasattr(msg, "contents") else []
-                serialized = []
-                for c in (raw_contents or []):
-                    if hasattr(c, "text"):
-                        serialized.append(c.text)
-                    else:
-                        serialized.append(str(c))
-                doc = {
-                    "id": str(uuid.uuid4()),
-                    "sessionId": self.session_id,
-                    "userId": self.user_id,
-                    "role": msg.role,
-                    "content": serialized,
-                    "createdAt": datetime.now(timezone.utc).isoformat(),
-                }
-                await asyncio.to_thread(container.upsert_item, doc)
-            except Exception:
-                logger.exception("Failed to store message to Cosmos DB for session=%s", self.session_id)
+        The chat and speech endpoints store both user and assistant messages
+        directly.  Letting the Agent Framework *also* save would create
+        duplicates (and leak the internal doc-context prefix into the
+        visible conversation history).
+        """
+        return

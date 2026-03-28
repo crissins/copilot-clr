@@ -11,11 +11,18 @@ import {
   Select,
   Spinner,
   Badge,
+  Dialog,
+  DialogTrigger,
+  DialogSurface,
+  DialogBody,
+  DialogTitle,
+  DialogContent,
+  DialogActions,
   makeStyles,
   tokens,
   shorthands,
 } from "@fluentui/react-components";
-import { Send24Regular } from "@fluentui/react-icons";
+import { Send24Regular, Delete24Regular } from "@fluentui/react-icons";
 import { apiClient } from "../services/api";
 import type { FeedbackItem } from "../services/api";
 import { useAuth } from "../hooks/useAuth";
@@ -90,6 +97,11 @@ const useStyles = makeStyles({
     alignItems: "center",
     marginTop: "6px",
   },
+  historyHeader: {
+    display: "flex",
+    justifyContent: "space-between",
+    alignItems: "flex-start",
+  },
   empty: {
     textAlign: "center" as const,
     ...shorthands.padding("32px"),
@@ -111,6 +123,8 @@ export function FeedbackPage() {
   const [submitted, setSubmitted] = useState(false);
   const [history, setHistory] = useState<FeedbackItem[]>([]);
   const [loading, setLoading] = useState(true);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<FeedbackItem | null>(null);
 
   const loadHistory = useCallback(async () => {
     try {
@@ -149,6 +163,20 @@ export function FeedbackPage() {
       setSubmitting(false);
     }
   }, [comment, rating, category, getAccessToken]);
+
+  const handleDelete = useCallback(async (item: FeedbackItem) => {
+    setDeletingId(item.id);
+    try {
+      const token = await getAccessToken();
+      await apiClient.deleteFeedback(item.id, token);
+      setHistory((prev) => prev.filter((f) => f.id !== item.id));
+    } catch (err) {
+      console.error("Delete feedback failed:", err);
+    } finally {
+      setDeletingId(null);
+      setDeleteTarget(null);
+    }
+  }, [getAccessToken]);
 
   return (
     <div className={styles.container}>
@@ -225,7 +253,17 @@ export function FeedbackPage() {
       ) : (
         history.map((item) => (
           <Card key={item.id} className={styles.historyCard}>
-            {item.comment && <Text>{item.comment}</Text>}
+            <div className={styles.historyHeader}>
+              {item.comment ? <Text>{item.comment}</Text> : <span />}
+              <Button
+                appearance="subtle"
+                icon={deletingId === item.id ? <Spinner size="tiny" /> : <Delete24Regular />}
+                size="small"
+                aria-label="Delete feedback"
+                disabled={deletingId === item.id}
+                onClick={() => setDeleteTarget(item)}
+              />
+            </div>
             <div className={styles.historyMeta}>
               {item.rating > 0 && (
                 <Badge appearance="tint" color="brand">
@@ -242,6 +280,31 @@ export function FeedbackPage() {
       )}
       </div>
       </div>
+
+      {/* Delete confirmation dialog */}
+      <Dialog open={!!deleteTarget} onOpenChange={(_, data) => { if (!data.open) setDeleteTarget(null); }}>
+        <DialogSurface>
+          <DialogBody>
+            <DialogTitle>Delete feedback?</DialogTitle>
+            <DialogContent>
+              This will permanently remove this feedback entry. This action cannot be undone.
+            </DialogContent>
+            <DialogActions>
+              <DialogTrigger disableButtonEnhancement>
+                <Button appearance="secondary" onClick={() => setDeleteTarget(null)}>Cancel</Button>
+              </DialogTrigger>
+              <Button
+                appearance="primary"
+                onClick={() => deleteTarget && handleDelete(deleteTarget)}
+                disabled={!!deletingId}
+                icon={deletingId ? <Spinner size="tiny" /> : undefined}
+              >
+                Delete
+              </Button>
+            </DialogActions>
+          </DialogBody>
+        </DialogSurface>
+      </Dialog>
     </div>
   );
 }

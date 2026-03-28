@@ -1,4 +1,4 @@
-import { type ReactNode, useState, useEffect, useCallback } from "react";
+import { type ReactNode } from "react";
 import {
   Button,
   Tooltip,
@@ -6,7 +6,6 @@ import {
   tokens,
   shorthands,
   mergeClasses,
-  Spinner,
 } from "@fluentui/react-components";
 import {
   Chat28Regular,
@@ -21,13 +20,9 @@ import {
   ChevronRight24Regular,
   Settings28Regular,
   ChatBubblesQuestion28Regular,
-  ChevronDown20Regular,
-  ChevronUp20Regular,
-  History20Regular,
+  Info28Regular,
 } from "@fluentui/react-icons";
 import { useI18n } from "../I18nContext";
-import { useAuth } from "../hooks/useAuth";
-import { apiClient } from "../services/api";
 
 export interface NavItem {
   id: string;
@@ -45,6 +40,7 @@ const NAV_ITEM_ICONS: Record<string, JSX.Element> = {
   avatar: <Person28Regular />,
   voicelive: <Headset28Regular />,
   feedback: <ChatBubblesQuestion28Regular />,
+  about: <Info28Regular />,
 };
 
 interface SidebarProps {
@@ -121,87 +117,12 @@ const useStyles = makeStyles({
     textOverflow: "ellipsis",
     whiteSpace: "nowrap",
   },
-  recentSection: {
-    ...shorthands.borderTop("1px", "solid", tokens.colorNeutralStroke1),
-    ...shorthands.padding("4px", "8px", "8px"),
-  },
-  recentToggle: {
-    display: "flex",
-    alignItems: "center",
-    justifyContent: "space-between",
-    width: "100%",
-    background: "none",
-    border: "none",
-    cursor: "pointer",
-    color: tokens.colorNeutralForeground2,
-    fontSize: tokens.fontSizeBase200,
-    fontWeight: tokens.fontWeightSemibold,
-    ...shorthands.padding("6px", "4px"),
-    ...shorthands.borderRadius(tokens.borderRadiusMedium),
-    ":hover": {
-      backgroundColor: tokens.colorNeutralBackground3,
-    },
-  },
-  recentList: {
-    display: "flex",
-    flexDirection: "column",
-    gap: "1px",
-    maxHeight: "200px",
-    overflowY: "auto",
-    marginTop: "4px",
-  },
-  recentItem: {
-    display: "flex",
-    alignItems: "center",
-    gap: "8px",
-    width: "100%",
-    background: "none",
-    border: "none",
-    cursor: "pointer",
-    color: tokens.colorNeutralForeground2,
-    fontSize: tokens.fontSizeBase200,
-    ...shorthands.padding("6px", "8px"),
-    ...shorthands.borderRadius(tokens.borderRadiusMedium),
-    textAlign: "left" as const,
-    ":hover": {
-      backgroundColor: tokens.colorNeutralBackground3,
-      color: tokens.colorNeutralForeground1,
-    },
-  },
-  recentTitle: {
-    overflow: "hidden",
-    textOverflow: "ellipsis",
-    whiteSpace: "nowrap",
-    flex: 1,
-  },
+
 });
 
 export function Sidebar({ activeView, onNavigate, collapsed = false, onToggle, onLoadSession }: SidebarProps): ReactNode {
   const styles = useStyles();
   const { t } = useI18n();
-  const { getAccessToken } = useAuth();
-
-  const [recentOpen, setRecentOpen] = useState(false);
-  const [sessions, setSessions] = useState<{ id: string; title?: string }[]>([]);
-  const [sessionsLoading, setSessionsLoading] = useState(false);
-
-  const loadSessions = useCallback(async () => {
-    if (collapsed) return;
-    setSessionsLoading(true);
-    try {
-      const token = await getAccessToken();
-      const list = await apiClient.listSessions(token);
-      setSessions(list.slice(0, 8));
-    } catch {
-      // fail silently
-    } finally {
-      setSessionsLoading(false);
-    }
-  }, [collapsed, getAccessToken]);
-
-  useEffect(() => {
-    if (recentOpen) loadSessions();
-  }, [recentOpen, loadSessions]);
 
   const NAV_ITEMS: NavItem[] = [
     { id: "chat",      label: t.nav.chat,              icon: NAV_ITEM_ICONS.chat },
@@ -213,6 +134,7 @@ export function Sidebar({ activeView, onNavigate, collapsed = false, onToggle, o
     { id: "avatar",    label: t.nav.avatar,             icon: NAV_ITEM_ICONS.avatar },
     { id: "voicelive", label: t.nav.voiceLive,          icon: NAV_ITEM_ICONS.voicelive },
     { id: "feedback",  label: t.nav.feedback,           icon: NAV_ITEM_ICONS.feedback },
+    { id: "about",     label: "About",                  icon: NAV_ITEM_ICONS.about },
   ];
 
   const BOTTOM_ITEMS: NavItem[] = [
@@ -275,46 +197,6 @@ export function Sidebar({ activeView, onNavigate, collapsed = false, onToggle, o
           );
         })}
       </ul>
-
-      {/* Recent chats */}
-      {!collapsed && (
-        <div className={styles.recentSection}>
-          <button
-            className={styles.recentToggle}
-            onClick={() => setRecentOpen(!recentOpen)}
-            aria-expanded={recentOpen}
-          >
-            <span style={{ display: "flex", alignItems: "center", gap: "6px" }}>
-              <History20Regular /> Recent
-            </span>
-            {recentOpen ? <ChevronUp20Regular /> : <ChevronDown20Regular />}
-          </button>
-          {recentOpen && (
-            <div className={styles.recentList}>
-              {sessionsLoading ? (
-                <Spinner size="tiny" />
-              ) : sessions.length === 0 ? (
-                <span style={{ fontSize: "11px", color: tokens.colorNeutralForeground3, padding: "4px 8px" }}>
-                  No recent chats
-                </span>
-              ) : (
-                sessions.map((s) => (
-                  <button
-                    key={s.id}
-                    className={styles.recentItem}
-                    onClick={() => {
-                      onLoadSession?.(s.id);
-                      onNavigate("chat");
-                    }}
-                  >
-                    <span className={styles.recentTitle}>{s.title || "Untitled"}</span>
-                  </button>
-                ))
-              )}
-            </div>
-          )}
-        </div>
-      )}
 
       {/* Settings at the bottom */}
       <div className={styles.bottomSection}>

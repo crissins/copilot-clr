@@ -438,16 +438,22 @@ export function VoiceLivePage() {
         }
       };
 
-      ws.onerror = (ev) => {
-        console.error("[VoiceLive] WebSocket error:", ev);
+      ws.onerror = (ev: any) => {
+        console.error("[VoiceLive] WebSocket error observed. Handshake likely failed or unauthorized.", ev);
         setConnectionState("error");
-        setStatus("Connection error. Please try again.");
+        setStatus("Connection failed. Check authentication and project configuration.");
       };
 
       ws.onclose = (ev) => {
-        console.warn("[VoiceLive] WebSocket closed — code:", ev.code, "reason:", ev.reason, "wasClean:", ev.wasClean);
+        console.warn(`[VoiceLive] WebSocket closed. Code: ${ev.code}, Reason: ${ev.reason || "No reason provided"}`);
+        
+        // Handle specific Web PubSub error codes
+        if (ev.code === 4001) setStatus("Unauthorized: Web PubSub access token is invalid.");
+        else if (ev.code === 4004) setStatus("Hub not found: Ensure the 'voice' hub is configured in Azure.");
+        else if (ev.code === 1006) setStatus("Connection dropped (1006): This often means the upstream 'connect' event handler failed.");
+        else setStatus("Disconnected. Press Connect to start again.");
+
         setConnectionState("disconnected");
-        setStatus("Disconnected. Press Connect to start again.");
         stopMicStream();
       };
 

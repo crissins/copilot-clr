@@ -44,6 +44,7 @@ import { Feature7Page } from "./features/feature7/Feature7Page";
 import { AvatarPage } from "./features/avatar/AvatarPage";
 import { VoiceLivePage } from "./features/voicelive/VoiceLivePage";
 import { FeedbackPage } from "./components/FeedbackPage";
+import { AboutPage } from "./components/AboutPage";
 import { FloatingChat } from "./components/FloatingChat";
 import { FloatingTimer } from "./components/FloatingTimer";
 
@@ -104,11 +105,12 @@ const useStyles = makeStyles({
 const VIEW_STYLE_HIDDEN: React.CSSProperties = { display: "none" };
 const VIEW_STYLE_VISIBLE: React.CSSProperties = { display: "flex", flexDirection: "column", flex: 1, height: "100%", overflow: "hidden" };
 
-function ViewContent({ activeView, onStartOnboarding, loadSessionId, onSessionLoaded }: {
+function ViewContent({ activeView, onStartOnboarding, loadSessionId, onSessionLoaded, onNavigate }: {
   activeView: string;
   onStartOnboarding?: () => void;
   loadSessionId?: string | null;
   onSessionLoaded?: () => void;
+  onNavigate?: (viewId: string) => void;
 }) {
   return (
     <>
@@ -123,6 +125,7 @@ function ViewContent({ activeView, onStartOnboarding, loadSessionId, onSessionLo
       <div style={activeView === "avatar" ? VIEW_STYLE_VISIBLE : VIEW_STYLE_HIDDEN}><AvatarPage /></div>
       <div style={activeView === "voicelive" ? VIEW_STYLE_VISIBLE : VIEW_STYLE_HIDDEN}><VoiceLivePage /></div>
       <div style={activeView === "feedback" ? VIEW_STYLE_VISIBLE : VIEW_STYLE_HIDDEN}><FeedbackPage /></div>
+      <div style={activeView === "about" ? VIEW_STYLE_VISIBLE : VIEW_STYLE_HIDDEN}><AboutPage onNavigate={onNavigate} /></div>
       <div style={activeView === "settings" ? VIEW_STYLE_VISIBLE : VIEW_STYLE_HIDDEN}><SettingsPage onStartOnboarding={onStartOnboarding} /></div>
     </>
   );
@@ -364,9 +367,7 @@ function AppShell() {
                 <SmartContextSidebar
                   collapsed={historySidebarCollapsed}
                   onToggle={() => setHistorySidebarCollapsed(!historySidebarCollapsed)}
-                  onLoadSession={handleLoadSession}
                   onNavigate={setActiveView}
-                  activeSessionId={activeSessionId}
                 />
                 <main className={styles.main} role="main">
                   <ViewContent
@@ -374,6 +375,7 @@ function AppShell() {
                     onStartOnboarding={startOnboarding}
                     loadSessionId={pendingSessionId}
                     onSessionLoaded={() => setPendingSessionId(null)}
+                    onNavigate={setActiveView}
                   />
                 </main>
                 <FloatingTimer />
@@ -417,9 +419,7 @@ function AppShell() {
                     <SmartContextSidebar
                       collapsed={historySidebarCollapsed}
                       onToggle={() => setHistorySidebarCollapsed(!historySidebarCollapsed)}
-                      onLoadSession={handleLoadSession}
                       onNavigate={setActiveView}
-                      activeSessionId={activeSessionId}
                     />
                     <main className={styles.main} role="main">
                       <ViewContent
@@ -427,6 +427,7 @@ function AppShell() {
                         onStartOnboarding={startOnboarding}
                         loadSessionId={pendingSessionId}
                         onSessionLoaded={() => setPendingSessionId(null)}
+                        onNavigate={setActiveView}
                       />
                     </main>
                     <FloatingTimer />
