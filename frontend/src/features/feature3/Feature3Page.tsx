@@ -7,7 +7,7 @@
  * Backend: POST/GET /api/reminders, PUT/DELETE /api/reminders/{id}
  */
 
-import { useState, useCallback, useEffect, useRef } from "react";
+import { useState, useCallback, useEffect } from "react";
 import {
   Button,
   Card,
@@ -38,6 +38,7 @@ import {
 import { apiClient } from "../../services/api";
 import type { Reminder } from "../../services/api";
 import { useAuth } from "../../hooks/useAuth";
+import { useTimer } from "../../hooks/TimerContext";
 
 const useStyles = makeStyles({
   container: {
@@ -120,11 +121,8 @@ export function Feature3Page() {
   const [channel, setChannel] = useState("push");
   const [recurring, setRecurring] = useState("");
 
-  // ── Focus timer state ──
-  const [timerSeconds, setTimerSeconds] = useState(25 * 60);
-  const [timerRunning, setTimerRunning] = useState(false);
-  const [timerPreset, setTimerPreset] = useState(25);
-  const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  // ── Focus timer (shared context) ──
+  const timer = useTimer();
 
   // Load reminders
   const loadReminders = useCallback(async () => {
@@ -141,28 +139,6 @@ export function Feature3Page() {
   }, [getAccessToken]);
 
   useEffect(() => { loadReminders(); }, [loadReminders]);
-
-  // Timer tick
-  useEffect(() => {
-    if (timerRunning && timerSeconds > 0) {
-      intervalRef.current = setInterval(() => {
-        setTimerSeconds((prev) => {
-          if (prev <= 1) {
-            setTimerRunning(false);
-            // Gentle notification when timer ends
-            if ("Notification" in window && Notification.permission === "granted") {
-              new Notification("Focus session complete!", {
-                body: "Great work! Take a short break before your next session.",
-              });
-            }
-            return 0;
-          }
-          return prev - 1;
-        });
-      }, 1000);
-    }
-    return () => { if (intervalRef.current) clearInterval(intervalRef.current); };
-  }, [timerRunning, timerSeconds]);
 
   // Create reminder
   const handleCreate = useCallback(async () => {
@@ -217,18 +193,20 @@ export function Feature3Page() {
     }
   }, [getAccessToken, loadReminders]);
 
-  // Timer helpers
+  // Timer helpers (delegated to shared context)
   const startTimer = () => {
-    if (timerSeconds === 0) setTimerSeconds(timerPreset * 60);
-    setTimerRunning(true);
-    // Request notification permission on first start
+    if (timer.seconds === 0) timer.reset();
+    timer.start();
     if ("Notification" in window && Notification.permission === "default") {
       Notification.requestPermission();
     }
   };
-  const pauseTimer = () => setTimerRunning(false);
-  const resetTimer = () => { setTimerRunning(false); setTimerSeconds(timerPreset * 60); };
-  const setPreset = (mins: number) => { setTimerPreset(mins); setTimerSeconds(mins * 60); setTimerRunning(false); };
+  const pauseTimer = () => timer.pause();
+  const resetTimer = () => timer.reset();
+  const handleSetPreset = (mins: number) => timer.setPreset(mins);
+  const timerSeconds = timer.seconds;
+  const timerRunning = timer.running;
+  const timerPreset = timer.preset;
 
   return (
     <div className={styles.container}>
@@ -270,7 +248,7 @@ export function Feature3Page() {
                 key={m}
                 appearance={timerPreset === m ? "primary" : "outline"}
                 size="small"
-                onClick={() => setPreset(m)}
+                onClick={() => handleSetPreset(m)}
               >
                 {m} min
               </Button>

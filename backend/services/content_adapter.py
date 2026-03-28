@@ -147,7 +147,13 @@ async def _run_adaptation(
     """
     endpoint = os.environ.get("PROJECT_ENDPOINT", "") or os.environ.get("AI_FOUNDRY_ENDPOINT", "")
     if not endpoint:
-        raise RuntimeError("Azure AI Foundry is required for content adaptation, but no project endpoint is configured.")
+        if _LOCAL_DEV:
+            logger.warning("No PROJECT_ENDPOINT configured — using local fallback adaptation")
+            return _local_fallback_adaptation(source_text, profile, analysis)
+        raise RuntimeError(
+            "Azure AI Foundry is required for content adaptation, but no project endpoint is configured. "
+            "Set PROJECT_ENDPOINT or AI_FOUNDRY_ENDPOINT environment variable."
+        )
 
     try:
         from agents.content_workflow import AzureAIClient, DefaultAzureCredential, Message
@@ -345,3 +351,32 @@ def _decompose_tasks(text: str) -> list[dict]:
                 "priority": "must-do",
             })
     return tasks
+
+
+def _local_fallback_adaptation(
+    source_text: str,
+    profile: dict,
+    analysis: dict,
+) -> dict[str, str]:
+    """Simple local text adaptation when AI Foundry is not available."""
+    sentences = source_text.replace("\n", " ").split(". ")
+    max_words = profile.get("max_sentence_words", 15)
+    adapted_sentences = []
+    for s in sentences:
+        s = s.strip()
+        if not s:
+            continue
+        words = s.split()
+        if len(words) > max_words:
+            adapted_sentences.append(" ".join(words[:max_words]) + "...")
+        else:
+            adapted_sentences.append(s)
+    adapted_text = ".\n\n".join(adapted_sentences)
+    if adapted_text and not adapted_text.endswith("."):
+        adapted_text += "."
+    summary = adapted_sentences[0] if adapted_sentences else source_text[:200]
+    return {
+        "adapted_text": adapted_text,
+        "summary": summary,
+        "change_summary": _default_change_summary(profile),
+    }

@@ -22,6 +22,7 @@ import {
   Document24Regular,
   Video24Regular,
   Play24Regular,
+  Delete24Regular,
 } from "@fluentui/react-icons";
 import { apiClient } from "../../services/api";
 import type { ContentItem } from "../../services/api";
@@ -97,6 +98,7 @@ export function Feature1Page() {
   const [documents, setDocuments] = useState<ContentItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [analyzingId, setAnalyzingId] = useState<string | null>(null);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
 
   const loadDocuments = useCallback(async () => {
     setLoading(true);
@@ -127,6 +129,19 @@ export function Feature1Page() {
       setAnalyzingId(null);
     }
   }, [getAccessToken, loadDocuments]);
+
+  const handleDelete = useCallback(async (docId: string) => {
+    setDeletingId(docId);
+    try {
+      const token = await getAccessToken();
+      await apiClient.deleteContent(docId, token);
+      setDocuments((prev) => prev.filter((d) => d.id !== docId));
+    } catch (err) {
+      console.error("Delete failed:", err);
+    } finally {
+      setDeletingId(null);
+    }
+  }, [getAccessToken]);
 
   return (
     <div className={styles.container}>
@@ -181,6 +196,14 @@ export function Feature1Page() {
                   <Text size={200} style={{ opacity: 0.6 }}>
                     {new Date(doc.createdAt).toLocaleDateString()}
                   </Text>
+                  <Button
+                    size="small"
+                    appearance="subtle"
+                    icon={deletingId === doc.id ? <Spinner size="tiny" /> : <Delete24Regular />}
+                    onClick={() => handleDelete(doc.id)}
+                    disabled={!!deletingId}
+                    aria-label="Delete document"
+                  />
                 </div>
               </div>
             </Card>

@@ -157,7 +157,7 @@ export function AvatarPage() {
   const peerConnectionRef = useRef<RTCPeerConnection | null>(null);
   const synthesizerRef = useRef<speechSdk.AvatarSynthesizer | null>(null);
 
-  // Cleanup on unmount
+  // Cleanup synthesizer and peer connection on unmount only
   useEffect(() => {
     return () => {
       if (synthesizerRef.current) {
@@ -166,6 +166,12 @@ export function AvatarPage() {
       if (peerConnectionRef.current) {
         peerConnectionRef.current.close();
       }
+    };
+  }, []);
+
+  // Cleanup old media stream tracks when stream changes or on unmount
+  useEffect(() => {
+    return () => {
       if (mediaStream) {
         mediaStream.getTracks().forEach(track => track.stop());
       }
@@ -175,11 +181,13 @@ export function AvatarPage() {
   // Synchronize media stream with video element
   useEffect(() => {
     if (connected && videoRef.current && mediaStream) {
-      console.log("[Avatar] Attaching media stream to video element");
+      console.log("[Avatar] Attaching media stream to video element, tracks:", mediaStream.getTracks().map(t => `${t.kind}:${t.readyState}`));
       videoRef.current.srcObject = mediaStream;
-      // Ensure it plays
+      // Start muted to satisfy browser autoplay policy; unmuted on user speak action
+      videoRef.current.muted = true;
       videoRef.current.play().catch(err => {
         console.warn("[Avatar] Failed to auto-play video:", err);
+        setError("Browser blocked video autoplay. Click Speak to start.");
       });
     }
   }, [mediaStream, connected]);
@@ -284,7 +292,18 @@ export function AvatarPage() {
       };
 
       console.log("[Avatar] Starting avatar async (WebRTC)...");
-      await synthesizer.startAvatarAsync(pc);
+      const startResult = await synthesizer.startAvatarAsync(pc);
+      console.log("[Avatar] startAvatarAsync result reason:", startResult.reason);
+
+      if (startResult.reason === speechSdk.ResultReason.Canceled) {
+        const errorDetails = startResult.properties?.getProperty(speechSdk.PropertyId.CancellationDetails_ReasonDetailedText) || "";
+        console.error("[Avatar] Start canceled, details:", errorDetails);
+        setError(`Avatar start failed: ${errorDetails || "Connection was canceled"}`);
+        setStatus("Connection failed — avatar session was canceled");
+        setConnecting(false);
+        return;
+      }
+
       console.log("[Avatar] Avatar connected successfully!");
       setConnected(true);
       setStatus("Avatar connected! Type something to make the avatar speak.");
@@ -331,9 +350,22 @@ export function AvatarPage() {
       const token = await getAccessToken();
       const result = await apiClient.avatarSpeak(trimmed, token, undefined, style);
 
+      // Unmute video for audio playback (muted initially for autoplay policy)
+      if (videoRef.current) {
+        videoRef.current.muted = false;
+      }
+
       // Use the SSML from the backend for consistent calm delivery
-      await synthesizerRef.current.speakSsmlAsync(result.ssml);
-      setStatus("Done speaking. Type more text or disconnect.");
+      const speakResult = await synthesizerRef.current.speakSsmlAsync(result.ssml);
+
+      if (speakResult.reason === speechSdk.ResultReason.Canceled) {
+        const errorDetails = speakResult.properties?.getProperty(speechSdk.PropertyId.CancellationDetails_ReasonDetailedText) || "";
+        console.error("[Avatar] Speak canceled, details:", errorDetails);
+        setError(`Speech failed: ${errorDetails || "Synthesis was canceled"}`);
+        setStatus("Speak failed — see error above");
+      } else {
+        setStatus("Done speaking. Type more text or disconnect.");
+      }
       setText("");
     } catch (err: any) {
       console.error("Avatar speak failed:", err);
@@ -388,6 +420,7 @@ export function AvatarPage() {
             className={styles.videoElement}
             autoPlay
             playsInline
+            muted
           />
         ) : (
           <div className={styles.placeholder}>

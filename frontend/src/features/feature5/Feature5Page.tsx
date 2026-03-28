@@ -42,6 +42,8 @@ import {
   Chat24Regular,
   Send24Regular,
   ChevronDown24Regular,
+  ArrowUp24Regular,
+  ArrowDown24Regular,
 } from "@fluentui/react-icons";
 import { apiClient } from "../../services/api";
 import type { TaskPlan, TaskStep, Message } from "../../services/api";
@@ -508,6 +510,12 @@ const PRIORITY_COLOR: Record<string, "important" | "informative" | "subtle"> = {
   low: "subtle",
 };
 
+const PRIORITY_ICON: Record<string, JSX.Element> = {
+  high: <ArrowUp24Regular />,
+  medium: <ArrowRight24Regular />,
+  low: <ArrowDown24Regular />,
+};
+
 // ── Component ──────────────────────────────────────────────────────────────
 
 export function Feature5Page() {
@@ -903,7 +911,7 @@ export function Feature5Page() {
                           aria-label={step.completed ? `Step ${idx + 1} done. Undo?` : `Mark step ${idx + 1} complete`}
                           style={{ cursor: "pointer", border: "none" }}
                         >
-                          {step.completed ? "✓" : idx + 1}
+                          {step.completed ? <CheckmarkCircle24Regular /> : idx + 1}
                         </button>
 
                         {/* Step body */}
@@ -923,7 +931,7 @@ export function Feature5Page() {
                             </div>
                           </div>
                           <div className={styles.stepMeta}>
-                            <Badge size="small" color={PRIORITY_COLOR[step.priority] ?? "informative"}>
+                            <Badge size="small" color={PRIORITY_COLOR[step.priority] ?? "informative"} icon={PRIORITY_ICON[step.priority]}>
                               {step.priority}
                             </Badge>
                             <Badge size="small" appearance="outline" icon={<Clock24Regular />}>

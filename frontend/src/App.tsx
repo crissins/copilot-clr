@@ -30,6 +30,7 @@ import { LanguageSelector } from "./components/LanguageSelector";
 import { OnboardingWizard } from "./components/OnboardingWizard";
 import { useAuth } from "./hooks/useAuth";
 import { SettingsProvider, useSharedSettings } from "./hooks/SettingsContext";
+import { TimerProvider } from "./hooks/TimerContext";
 import { useFocusTimer } from "./hooks/useFocusTimer";
 import { getAppI18n } from "./i18n";
 import { I18nProvider } from "./I18nContext";
@@ -44,6 +45,7 @@ import { AvatarPage } from "./features/avatar/AvatarPage";
 import { VoiceLivePage } from "./features/voicelive/VoiceLivePage";
 import { FeedbackPage } from "./components/FeedbackPage";
 import { FloatingChat } from "./components/FloatingChat";
+import { FloatingTimer } from "./components/FloatingTimer";
 
 const LOCAL_DEV = import.meta.env.VITE_LOCAL_DEV === "true";
 
@@ -357,6 +359,7 @@ function AppShell() {
                   onNavigate={setActiveView}
                   collapsed={sidebarCollapsed}
                   onToggle={() => setSidebarCollapsed(!sidebarCollapsed)}
+                  onLoadSession={handleLoadSession}
                 />
                 <SmartContextSidebar
                   collapsed={historySidebarCollapsed}
@@ -373,6 +376,7 @@ function AppShell() {
                     onSessionLoaded={() => setPendingSessionId(null)}
                   />
                 </main>
+                <FloatingTimer />
                 <FloatingChat />
               </>
             )
@@ -408,6 +412,7 @@ function AppShell() {
                       onNavigate={setActiveView}
                       collapsed={sidebarCollapsed}
                       onToggle={() => setSidebarCollapsed(!sidebarCollapsed)}
+                      onLoadSession={handleLoadSession}
                     />
                     <SmartContextSidebar
                       collapsed={historySidebarCollapsed}
@@ -424,6 +429,7 @@ function AppShell() {
                         onSessionLoaded={() => setPendingSessionId(null)}
                       />
                     </main>
+                    <FloatingTimer />
                     <FloatingChat />
                   </>
                 )}
@@ -443,10 +449,11 @@ function AppShell() {
 }
 
 export default function App() {
-  // SettingsProvider wraps the entire shell so settings are shared globally.
   return (
     <SettingsProvider>
-      <AppShell />
+      <TimerProvider>
+        <AppShell />
+      </TimerProvider>
     </SettingsProvider>
   );
 }

@@ -398,6 +398,42 @@ def get_adapted_content(content_id: str, adapted_id: str, req: Request) -> JSONR
     return JSONResponse({k: v for k, v in adapted_doc.items() if not k.startswith("_")})
 
 
+@router.delete("/content/{content_id}")
+def delete_content(content_id: str, req: Request) -> Response:
+    """Delete an uploaded content document and its adapted versions."""
+    from starlette.responses import Response
+    from auth.entra import AuthError
+    try:
+        user_id = _get_user_id(req.headers.get("Authorization"))
+    except AuthError as e:
+        return JSONResponse({"error": str(e)}, status_code=401)
+
+    try:
+        _content_container.delete_item(item=content_id, partition_key=user_id)
+    except Exception:
+        return JSONResponse({"error": "Content not found."}, status_code=404)
+
+    # Also delete any adapted versions
+    try:
+        adapted_items = list(_adapted_container.query_items(
+            query="SELECT c.id FROM c WHERE c.sourceContentId = @cid AND c.userId = @userId",
+            parameters=[
+                {"name": "@cid", "value": content_id},
+                {"name": "@userId", "value": user_id},
+            ],
+            enable_cross_partition_query=False,
+        ))
+        for item in adapted_items:
+            try:
+                _adapted_container.delete_item(item=item["id"], partition_key=user_id)
+            except Exception:
+                pass
+    except Exception:
+        pass
+
+    return Response(status_code=204)
+
+
 def _chunk_text(text: str, max_chunk_size: int = 1000) -> list[str]:
     """Split text into chunks at paragraph boundaries."""
     paragraphs = text.split("\n\n")

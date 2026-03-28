@@ -1118,7 +1118,7 @@ async def report_message(req: Request) -> JSONResponse:
 # ============================================================================
 
 @app.get("/api/task-plans")
-def list_task_plans(req: Request) -> JSONResponse:
+def list_task_plans_v1(req: Request) -> JSONResponse:
     """List all task decomposition plans for the user, newest first."""
     try:
         user_id = _get_user_id(req.headers.get("Authorization"))
@@ -1128,7 +1128,7 @@ def list_task_plans(req: Request) -> JSONResponse:
     tasks = list(_tasks_container.query_items(
         query="SELECT * FROM c WHERE c.userId = @userId ORDER BY c.createdAt DESC",
         parameters=[{"name": "@userId", "value": user_id}],
-        partition_key=user_id,
+        enable_cross_partition_query=True,
     ))
     return JSONResponse({"tasks": [
         {k: v for k, v in t.items() if not k.startswith("_")} for t in tasks
@@ -1140,7 +1140,7 @@ def list_task_plans(req: Request) -> JSONResponse:
 # ============================================================================
 
 @app.get("/api/task-plans/{task_id}")
-def get_task_plan(task_id: str, req: Request) -> JSONResponse:
+def get_task_plan_v1(task_id: str, req: Request) -> JSONResponse:
     """Return a task plan document with all steps."""
     try:
         user_id = _get_user_id(req.headers.get("Authorization"))
@@ -1148,7 +1148,7 @@ def get_task_plan(task_id: str, req: Request) -> JSONResponse:
         return JSONResponse({"error": str(e)}, status_code=401)
 
     try:
-        task = _tasks_container.read_item(item=task_id, partition_key=user_id)
+        task = _tasks_container.read_item(item=task_id, partition_key=task_id)
     except Exception:
         return JSONResponse({"error": "Task plan not found"}, status_code=404)
 
@@ -1162,7 +1162,7 @@ def get_task_plan(task_id: str, req: Request) -> JSONResponse:
 # ============================================================================
 
 @app.patch("/api/task-plans/{task_id}/steps/{step_id}")
-async def toggle_step(task_id: str, step_id: str, req: Request) -> JSONResponse:
+async def toggle_step_v1(task_id: str, step_id: str, req: Request) -> JSONResponse:
     """Mark a step as completed or uncompleted."""
     try:
         user_id = _get_user_id(req.headers.get("Authorization"))
@@ -1177,7 +1177,7 @@ async def toggle_step(task_id: str, step_id: str, req: Request) -> JSONResponse:
     completed = body.get("completed", False)
 
     try:
-        task = _tasks_container.read_item(item=task_id, partition_key=user_id)
+        task = _tasks_container.read_item(item=task_id, partition_key=task_id)
     except Exception:
         return JSONResponse({"error": "Task plan not found"}, status_code=404)
 
@@ -1206,7 +1206,7 @@ async def toggle_step(task_id: str, step_id: str, req: Request) -> JSONResponse:
 # ============================================================================
 
 @app.delete("/api/task-plans/{task_id}")
-def delete_task_plan(task_id: str, req: Request) -> Response:
+def delete_task_plan_v1(task_id: str, req: Request) -> Response:
     """Delete a task decomposition plan."""
     try:
         user_id = _get_user_id(req.headers.get("Authorization"))
@@ -1214,7 +1214,7 @@ def delete_task_plan(task_id: str, req: Request) -> Response:
         return JSONResponse({"error": str(e)}, status_code=401)
 
     try:
-        _tasks_container.delete_item(item=task_id, partition_key=user_id)
+        _tasks_container.delete_item(item=task_id, partition_key=task_id)
     except Exception:
         return JSONResponse({"error": "Task plan not found"}, status_code=404)
 
@@ -1226,7 +1226,7 @@ def delete_task_plan(task_id: str, req: Request) -> Response:
 # ============================================================================
 
 @app.post("/api/task-plans/{task_id}/remind")
-async def send_reminder(task_id: str, req: Request) -> JSONResponse:
+async def send_reminder_v1(task_id: str, req: Request) -> JSONResponse:
     """Queue a reminder for a specific task step via Service Bus.
 
     The reminder will be picked up by a Service Bus trigger and delivered
@@ -1246,7 +1246,7 @@ async def send_reminder(task_id: str, req: Request) -> JSONResponse:
     notify_email = body.get("email", "")
 
     try:
-        task = _tasks_container.read_item(item=task_id, partition_key=user_id)
+        task = _tasks_container.read_item(item=task_id, partition_key=task_id)
     except Exception:
         return JSONResponse({"error": "Task plan not found"}, status_code=404)
 

@@ -461,6 +461,14 @@ class ApiClient {
     return res.json();
   }
 
+  async deleteContent(contentId: string, token: string | null): Promise<void> {
+    const res = await fetch(`${API_BASE}/api/content/${encodeURIComponent(contentId)}`, {
+      method: "DELETE",
+      headers: this.getHeaders(token),
+    });
+    if (!res.ok) throw new Error(`Delete content failed: ${res.status}`);
+  }
+
   // ── Reminders ───────────────────────────────────────────────────────
 
   async createReminder(

@@ -77,6 +77,15 @@ const useStyles = makeStyles({
     gap: "8px",
     flexWrap: "wrap",
   },
+  twoColGrid: {
+    display: "grid",
+    gridTemplateColumns: "1fr 1fr",
+    gap: "20px",
+    alignItems: "start",
+    "@media (max-width: 768px)": {
+      gridTemplateColumns: "1fr",
+    },
+  },
   empty: {
     textAlign: "center" as const,
     ...shorthands.padding("40px"),
@@ -253,6 +262,8 @@ export function Feature6Page({ onStartOnboarding }: Feature6PageProps) {
 
           <Divider />
 
+          {/* Two-column layout for preferences and suggestions */}
+          <div className={styles.twoColGrid}>
           {/* Reading Level Preferences */}
           <div>
             <Text size={500} weight="semibold">Reading Level Preferences</Text>
@@ -309,8 +320,6 @@ export function Feature6Page({ onStartOnboarding }: Feature6PageProps) {
             )}
           </div>
 
-          <Divider />
-
           {/* Personalised Suggestions */}
           <div>
             <Text size={500} weight="semibold">Personalised Suggestions</Text>
@@ -344,6 +353,7 @@ export function Feature6Page({ onStartOnboarding }: Feature6PageProps) {
                 ))}
               </div>
             )}
+          </div>
           </div>
         </>
       )}
