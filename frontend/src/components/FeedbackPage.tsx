@@ -31,18 +31,21 @@ const useStyles = makeStyles({
     marginRight: "auto",
     ...shorthands.padding("24px"),
     height: "100%",
+    overflow: "hidden",
   },
   layout: {
     display: "flex",
     gap: "24px",
     flex: 1,
     minHeight: 0,
+    overflow: "hidden",
     "@media (max-width: 768px)": {
       flexDirection: "column",
     },
   },
   formColumn: {
     flex: "0 0 360px",
+    flexShrink: 0,
     "@media (max-width: 768px)": {
       flex: "none",
     },
@@ -54,6 +57,7 @@ const useStyles = makeStyles({
     gap: "8px",
     overflowY: "auto",
     minHeight: 0,
+    maxHeight: "100%",
   },
   formCard: {
     ...shorthands.padding("20px"),

@@ -189,6 +189,57 @@ async def upload_content(req: Request, file: UploadFile = File(...)) -> JSONResp
     }, status_code=201)
 
 
+@router.post("/content/simplify")
+async def simplify_text_endpoint(req: Request) -> JSONResponse:
+    """Simplify raw text directly — no document upload required."""
+    from auth.entra import AuthError
+    try:
+        user_id = _get_user_id(req.headers.get("Authorization"))
+    except AuthError as e:
+        return JSONResponse({"error": str(e)}, status_code=401)
+
+    try:
+        body = await req.json()
+    except Exception:
+        return JSONResponse({"error": "Invalid JSON body."}, status_code=400)
+
+    text = (body.get("text") or "").strip()
+    profile = body.get("profile", "medium")
+
+    if not text:
+        return JSONResponse({"error": "No text provided."}, status_code=400)
+
+    if len(text) > 50_000:
+        return JSONResponse({"error": "Text too long. Max 50 000 characters."}, status_code=400)
+
+    start = time.monotonic()
+    from services.content_adapter import adapt_content, build_change_metrics
+    try:
+        result = await adapt_content(source_text=text, profile=profile)
+    except RuntimeError as exc:
+        logger.exception("Text simplification failed")
+        return JSONResponse({"error": str(exc)}, status_code=502)
+    adapt_ms = int((time.monotonic() - start) * 1000)
+
+    adapted_text = result.get("adapted_text", "")
+    change_metrics = build_change_metrics(
+        source_text=text,
+        adapted_text=adapted_text,
+        profile=profile,
+        profile_description=result.get("profile_description", profile),
+    )
+
+    return JSONResponse({
+        "adaptedText": adapted_text,
+        "summary": result.get("summary", ""),
+        "changeSummary": result.get("change_summary", change_metrics["changeSummary"]),
+        "originalWordCount": change_metrics["originalWordCount"],
+        "adaptedWordCount": change_metrics["adaptedWordCount"],
+        "reductionPercent": change_metrics["reductionPercent"],
+        "adaptationMs": adapt_ms,
+    })
+
+
 @router.post("/content/{content_id}/adapt")
 async def adapt_content_endpoint(content_id: str, req: Request) -> JSONResponse:
     """Adapt indexed content for a specific neurodiverse profile."""

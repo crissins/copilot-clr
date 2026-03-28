@@ -1476,6 +1476,66 @@ def list_task_plans(req: Request) -> JSONResponse:
 
 
 # ============================================================================
+# POST /api/tasks/plans — Save a pre-built task plan (e.g. from Speech Assistant)
+# ============================================================================
+
+@app.post("/api/tasks/plans")
+async def save_task_plan(req: Request) -> JSONResponse:
+    """Save a task plan with pre-built steps (no LLM decomposition needed)."""
+    try:
+        user_id = _get_user_id(req.headers.get("Authorization"))
+    except AuthError as e:
+        return JSONResponse({"error": str(e)}, status_code=401)
+
+    try:
+        body = await req.json()
+    except Exception:
+        return JSONResponse({"error": "Invalid JSON"}, status_code=400)
+
+    goal = body.get("goal", "").strip()
+    steps = body.get("steps", [])
+
+    if not goal:
+        return JSONResponse({"error": "Goal is required"}, status_code=400)
+    if not steps or not isinstance(steps, list):
+        return JSONResponse({"error": "Steps are required"}, status_code=400)
+
+    now = datetime.now(timezone.utc).isoformat()
+    task_id = str(uuid.uuid4())
+
+    # Normalise steps
+    normalised_steps = []
+    for i, s in enumerate(steps):
+        normalised_steps.append({
+            "id": s.get("id", str(uuid.uuid4())),
+            "title": s.get("title", f"Step {i + 1}"),
+            "estimatedMinutes": s.get("estimatedMinutes", 5),
+            "priority": s.get("priority", "medium"),
+            "focusTip": s.get("focusTip", s.get("detail", "")),
+            "completed": s.get("completed", False),
+            "completedAt": None,
+        })
+
+    task_doc = {
+        "id": task_id,
+        "taskId": task_id,
+        "userId": user_id,
+        "goal": goal,
+        "steps": normalised_steps,
+        "explanation": body.get("explanation", "Plan extracted from Speech Assistant conversation."),
+        "readingLevel": "",
+        "createdAt": now,
+        "updatedAt": now,
+    }
+    _tasks_container.upsert_item(task_doc)
+
+    logger.info("task_plan_saved id=%s user=%s steps=%d", task_id, user_id, len(normalised_steps))
+    return JSONResponse({
+        "task": {k: v for k, v in task_doc.items() if not k.startswith("_")},
+    }, status_code=201)
+
+
+# ============================================================================
 # GET /api/tasks/plans/{task_id} — Get a specific task plan
 # ============================================================================
 

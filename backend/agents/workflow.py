@@ -50,6 +50,7 @@ from agents.agent_tools import (
     set_tool_context,
     update_task,
 )
+from agents.memory import UserMemoryProvider, CosmosDBHistoryProvider
 
 logger = logging.getLogger(__name__)
 
@@ -182,6 +183,12 @@ async def _run_agent(
         send_reminder_email,
     ]
 
+    # Providers for conversation continuity:
+    # 1. UserMemoryProvider handles name/preference extraction/injection
+    # 2. CosmosDBHistoryProvider loads past messages so the agent has context
+    memory_provider = UserMemoryProvider()
+    history_provider = CosmosDBHistoryProvider(session_id, user_id, load_messages=True)
+
     async with AzureAIClient(
         project_endpoint=os.getenv("PROJECT_ENDPOINT", ""),
         model_deployment_name=os.getenv("MODEL_DEPLOYMENT_NAME", "gpt-4o-mini"),
@@ -190,6 +197,7 @@ async def _run_agent(
         name="CopilotCLR-Workflow",
         instructions=instructions,
         tools=tools,
+        context_providers=[history_provider, memory_provider],
     ) as agent:
         response = await agent.run(messages)
         return response.text if hasattr(response, "text") else str(response)

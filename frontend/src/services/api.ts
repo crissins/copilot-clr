@@ -265,6 +265,32 @@ class ApiClient {
     return data.tasks;
   }
 
+  async saveTaskPlan(
+    goal: string,
+    steps: Array<{ id: string; title: string; detail?: string; timeEstimate?: string; completed: boolean }>,
+    token: string | null,
+  ): Promise<TaskPlan> {
+    const res = await fetch(`${API_BASE}/api/tasks/plans`, {
+      method: "POST",
+      headers: this.getHeaders(token),
+      body: JSON.stringify({
+        goal,
+        steps: steps.map(s => ({
+          id: s.id,
+          title: s.title,
+          detail: s.detail,
+          estimatedMinutes: s.timeEstimate ? parseInt(s.timeEstimate) || 5 : 5,
+          priority: "medium",
+          focusTip: s.detail || "",
+          completed: s.completed,
+        })),
+      }),
+    });
+    if (!res.ok) throw new Error(`Save task plan failed: ${res.status}`);
+    const data = await res.json();
+    return data.task;
+  }
+
   async getTaskPlan(
     taskId: string,
     token: string | null
@@ -446,6 +472,28 @@ class ApiClient {
   }
 
   // ── Content Adaptation ──────────────────────────────────────────────
+
+  async simplifyText(
+    text: string,
+    profile: string,
+    token: string | null,
+  ): Promise<{
+    adaptedText: string;
+    summary: string;
+    changeSummary: string;
+    originalWordCount: number;
+    adaptedWordCount: number;
+    reductionPercent: number;
+    adaptationMs: number;
+  }> {
+    const res = await fetch(`${API_BASE}/api/content/simplify`, {
+      method: "POST",
+      headers: this.getHeaders(token),
+      body: JSON.stringify({ text, profile }),
+    });
+    if (!res.ok) throw new Error(`Simplify text failed: ${res.status}`);
+    return res.json();
+  }
 
   async adaptContent(
     contentId: string,

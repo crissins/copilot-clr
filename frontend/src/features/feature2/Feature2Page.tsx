@@ -29,6 +29,7 @@ import {
   ArrowClockwise24Regular,
   Checkmark24Regular,
   ArrowDownload24Regular,
+  Clipboard24Regular,
 } from "@fluentui/react-icons";
 import ReactMarkdown from "react-markdown";
 import { apiClient } from "../../services/api";
@@ -125,6 +126,21 @@ export function Feature2Page() {
   const styles = useStyles();
   const { getAccessToken } = useAuth();
 
+  // -- Tab mode: "paste" (direct text) or "upload" (document) --
+  const [mode, setMode] = useState<"paste" | "upload">("paste");
+
+  // -- Direct text state --
+  const [inputText, setInputText] = useState("");
+  const [simplifiedResult, setSimplifiedResult] = useState<{
+    adaptedText: string;
+    summary: string;
+    changeSummary: string;
+    originalWordCount: number;
+    adaptedWordCount: number;
+    reductionPercent: number;
+    adaptationMs: number;
+  } | null>(null);
+
   const [documents, setDocuments] = useState<ContentItem[]>([]);
   const [selectedDocId, setSelectedDocId] = useState<string | null>(null);
   const [contentDetail, setContentDetail] = useState<ContentDetail | null>(null);
@@ -190,6 +206,26 @@ export function Feature2Page() {
     }
   }, [selectedDocId, profile, getAccessToken, loadDetail]);
 
+  const handleSimplifyText = useCallback(async () => {
+    if (!inputText.trim()) return;
+    setAdapting(true);
+    setError(null);
+    setSuccessMsg(null);
+    setSimplifiedResult(null);
+    try {
+      const token = await getAccessToken();
+      const result = await apiClient.simplifyText(inputText, profile, token);
+      setSimplifiedResult(result);
+      setSuccessMsg(
+        `Simplified to "${PROFILES.find(p => p.value === profile)?.label}" level in ${result.adaptationMs}ms.`
+      );
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Simplification failed. Please try again.");
+    } finally {
+      setAdapting(false);
+    }
+  }, [inputText, profile, getAccessToken]);
+
   return (
     <div className={styles.container}>
       {/* Header */}
@@ -199,15 +235,36 @@ export function Feature2Page() {
             <TextGrammarSettings24Regular />
             <Text size={600} weight="bold">Simplify Content</Text>
           </div>
-          <div style={{ display: "flex", gap: "8px", alignItems: "center" }}>
-            <FileUpload onUploadComplete={() => loadDocuments()} />
-            <Button appearance="subtle" icon={<ArrowClockwise24Regular />} onClick={loadDocuments} aria-label="Refresh" />
-          </div>
+          {mode === "upload" && (
+            <div style={{ display: "flex", gap: "8px", alignItems: "center" }}>
+              <FileUpload onUploadComplete={() => loadDocuments()} />
+              <Button appearance="subtle" icon={<ArrowClockwise24Regular />} onClick={loadDocuments} aria-label="Refresh" />
+            </div>
+          )}
         </div>
         <Text size={300} style={{ color: tokens.colorNeutralForeground3 }}>
-          Select a document and choose a reading level. The AI will rewrite it in simpler, clearer
-          language and explain what it changed. Take your time — there is no rush.
+          Paste text or select a document, choose a reading level, and the AI will rewrite it in
+          simpler, clearer language so you can compare side-by-side.
         </Text>
+        {/* Mode tabs */}
+        <div style={{ display: "flex", gap: "8px", marginTop: "4px" }}>
+          <Button
+            appearance={mode === "paste" ? "primary" : "outline"}
+            icon={<Clipboard24Regular />}
+            onClick={() => { setMode("paste"); setError(null); setSuccessMsg(null); }}
+            size="small"
+          >
+            Paste Text
+          </Button>
+          <Button
+            appearance={mode === "upload" ? "primary" : "outline"}
+            icon={<Document24Regular />}
+            onClick={() => { setMode("upload"); setError(null); setSuccessMsg(null); }}
+            size="small"
+          >
+            From Document
+          </Button>
+        </div>
       </div>
 
       {error && (
@@ -221,6 +278,105 @@ export function Feature2Page() {
         </MessageBar>
       )}
 
+      {/* ─── Paste Text mode ─── */}
+      {mode === "paste" && (
+        <>
+          <div className={styles.adaptSection}>
+            <Text size={400} weight="semibold">Paste your text below</Text>
+            <textarea
+              value={inputText}
+              onChange={(e) => setInputText(e.target.value)}
+              placeholder="Paste or type the text you want to simplify..."
+              rows={8}
+              style={{
+                width: "100%",
+                padding: "12px",
+                borderRadius: tokens.borderRadiusMedium,
+                border: `1px solid ${tokens.colorNeutralStroke1}`,
+                backgroundColor: tokens.colorNeutralBackground1,
+                color: tokens.colorNeutralForeground1,
+                fontFamily: "inherit",
+                fontSize: tokens.fontSizeBase300,
+                resize: "vertical",
+              }}
+            />
+            <div className={styles.profileRow}>
+              <Select value={profile} onChange={(_, d) => setProfile(d.value)} style={{ minWidth: 220 }}>
+                {PROFILES.map((p) => (
+                  <option key={p.value} value={p.value}>{p.label} — {p.description}</option>
+                ))}
+              </Select>
+              <Button
+                appearance="primary"
+                onClick={handleSimplifyText}
+                disabled={adapting || !inputText.trim()}
+                icon={adapting ? <Spinner size="tiny" /> : undefined}
+              >
+                {adapting ? "Simplifying..." : "Simplify"}
+              </Button>
+            </div>
+          </div>
+
+          {/* Side-by-side comparison for pasted text */}
+          {simplifiedResult && (
+            <div className={styles.resultArea}>
+              <div className={styles.metaBadges}>
+                <Badge appearance="filled" color="brand">{PROFILES.find(p => p.value === profile)?.label || profile}</Badge>
+                <Badge appearance="outline">{simplifiedResult.originalWordCount} → {simplifiedResult.adaptedWordCount} words</Badge>
+                <Badge appearance="outline">{simplifiedResult.reductionPercent}% shorter</Badge>
+              </div>
+              {simplifiedResult.summary && (
+                <div className={styles.summaryCard}>
+                  <Text size={200} weight="semibold">Summary</Text>
+                  <Text block size={300} style={{ marginTop: 4 }}>{simplifiedResult.summary}</Text>
+                </div>
+              )}
+              <div className={styles.sideBySide}>
+                <div>
+                  <Text size={400} weight="semibold" className={styles.columnLabel}>Original</Text>
+                  <div className={styles.adaptedText} style={{ opacity: 0.75 }}>
+                    <Text>{inputText}</Text>
+                  </div>
+                </div>
+                <div>
+                  <Text size={400} weight="semibold" className={styles.columnLabel}>Simplified</Text>
+                  <div className={styles.adaptedText}>
+                    <ReactMarkdown>{simplifiedResult.adaptedText}</ReactMarkdown>
+                  </div>
+                  <div style={{ display: "flex", gap: "4px", marginTop: 8 }}>
+                    <TTSButton text={simplifiedResult.adaptedText} />
+                    <ImmersiveReaderButton title="Simplified content" text={simplifiedResult.adaptedText} />
+                    <Button
+                      appearance="subtle"
+                      icon={<ArrowDownload24Regular />}
+                      onClick={() => {
+                        const blob = new Blob([simplifiedResult.adaptedText], { type: "text/markdown;charset=utf-8" });
+                        const url = URL.createObjectURL(blob);
+                        const a = document.createElement("a");
+                        a.href = url;
+                        a.download = `simplified-${profile}-${new Date().toISOString().slice(0, 10)}.md`;
+                        a.click();
+                        URL.revokeObjectURL(url);
+                      }}
+                    >
+                      Download
+                    </Button>
+                  </div>
+                </div>
+              </div>
+              <div className={styles.explanationBar}>
+                <Text size={200}>
+                  <strong>What changed:</strong> {simplifiedResult.changeSummary}
+                </Text>
+              </div>
+            </div>
+          )}
+        </>
+      )}
+
+      {/* ─── Upload Document mode ─── */}
+      {mode === "upload" && (
+        <>
       {/* Document list */}
       <div>
         <Text size={400} weight="semibold">Your Documents</Text>
@@ -354,6 +510,8 @@ export function Feature2Page() {
             );
           })}
         </div>
+      )}
+        </>
       )}
     </div>
   );

@@ -43,6 +43,9 @@ import {
   Keyboard24Regular,
   Settings24Regular,
   ImmersiveReader24Regular,
+  Pause24Regular,
+  Play24Regular,
+  History24Regular,
 } from "@fluentui/react-icons";
 import ReactMarkdown from "react-markdown";
 import * as speechSdk from "microsoft-cognitiveservices-speech-sdk";
@@ -397,6 +400,7 @@ export function Feature7Page() {
   const [isRecording, setIsRecording] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
   const [isSpeaking, setIsSpeaking] = useState(false);
+  const [isPaused, setIsPaused] = useState(false);
   const [status, setStatus] = useState("Tap the microphone or type a message to begin.");
   const [textInput, setTextInput] = useState("");
 
@@ -410,6 +414,10 @@ export function Feature7Page() {
   // Speech settings
   const [voiceName, setVoiceName] = useState("en-US-JennyNeural");
   const [speechRate, setSpeechRate] = useState("slow");
+
+  // Saved plans from speech-extracted tasks
+  const [savedPlans, setSavedPlans] = useState<Array<{ id: string; goal: string; steps: number; createdAt: string }>>([]);
+  const [showSavedPlans, setShowSavedPlans] = useState(false);
 
   // Immersive Reader
   const { settings: irSettings, updateSettings: updateIRSettings, launch: launchIR, isOpen: irIsOpen } = useImmersiveReader();
@@ -432,6 +440,32 @@ export function Feature7Page() {
       conversationEndRef.current?.scrollIntoView({ behavior: "smooth" });
     }, 100);
   }, []);
+
+  // Load saved plans on mount
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const token = await getAccessToken();
+        const plans = await apiClient.listTaskPlans(token);
+        if (!cancelled) setSavedPlans(plans.map(p => ({ id: p.id, goal: p.goal, steps: p.steps.length, createdAt: p.createdAt })));
+      } catch {
+        // Plans are optional
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [getAccessToken]);
+
+  // Save task steps as a plan when extracted from conversation
+  const saveTaskPlan = useCallback(async (goal: string, steps: TaskStep[]) => {
+    try {
+      const token = await getAccessToken();
+      const plan = await apiClient.saveTaskPlan(goal, steps, token);
+      setSavedPlans(prev => [{ id: plan.id, goal: plan.goal, steps: plan.steps.length, createdAt: plan.createdAt }, ...prev]);
+    } catch {
+      // Save is best-effort; steps remain available locally
+    }
+  }, [getAccessToken]);
 
   // ── STT via browser Speech SDK ─────────────────────────────────────────
 
@@ -634,6 +668,9 @@ export function Feature7Page() {
         // Store tasks for interactive tracking
         if (tasks) {
           setTaskSteps((prev) => new Map(prev).set(assistantTurn.id, tasks));
+          // Save to backend so they appear in "Previous Plans"
+          const goalSummary = text.length > 80 ? text.slice(0, 80) + "…" : text;
+          saveTaskPlan(goalSummary, tasks);
         }
 
         scrollToBottom();
@@ -734,10 +771,28 @@ export function Feature7Page() {
   const stopSpeaking = useCallback(() => {
     if (currentAudioRef.current) {
       currentAudioRef.current.pause();
+      currentAudioRef.current.currentTime = 0;
       currentAudioRef.current = null;
     }
     setIsSpeaking(false);
+    setIsPaused(false);
   }, []);
+
+  const pauseSpeaking = useCallback(() => {
+    if (currentAudioRef.current && isSpeaking && !isPaused) {
+      currentAudioRef.current.pause();
+      setIsPaused(true);
+      setStatus("Reading paused. Tap play to continue.");
+    }
+  }, [isSpeaking, isPaused]);
+
+  const resumeSpeaking = useCallback(() => {
+    if (currentAudioRef.current && isPaused) {
+      currentAudioRef.current.play();
+      setIsPaused(false);
+      setStatus("Continuing to read...");
+    }
+  }, [isPaused]);
 
   const replayTurn = useCallback(
     async (text: string) => {
@@ -756,6 +811,7 @@ export function Feature7Page() {
     setTaskSteps(new Map());
     setStatus("Tap the microphone or type a message to begin.");
     stopSpeaking();
+    setIsPaused(false);
     setNotification(null);
   }, [stopSpeaking]);
 
@@ -879,16 +935,38 @@ export function Feature7Page() {
                               </Badge>
                             </Tooltip>
                             <div className={styles.assistantActions}>
-                              <Tooltip content="Read aloud" relationship="label">
-                                <Button
-                                  appearance="subtle"
-                                  size="small"
-                                  icon={<Speaker224Regular />}
-                                  disabled={disabled}
-                                  onClick={() => replayTurn(turn.text)}
-                                  aria-label="Read this response aloud"
-                                />
-                              </Tooltip>
+                              {isSpeaking && !isPaused ? (
+                                <Tooltip content="Pause reading" relationship="label">
+                                  <Button
+                                    appearance="subtle"
+                                    size="small"
+                                    icon={<Pause24Regular />}
+                                    onClick={pauseSpeaking}
+                                    aria-label="Pause reading"
+                                  />
+                                </Tooltip>
+                              ) : isPaused ? (
+                                <Tooltip content="Resume reading" relationship="label">
+                                  <Button
+                                    appearance="subtle"
+                                    size="small"
+                                    icon={<Play24Regular />}
+                                    onClick={resumeSpeaking}
+                                    aria-label="Resume reading"
+                                  />
+                                </Tooltip>
+                              ) : (
+                                <Tooltip content="Read aloud" relationship="label">
+                                  <Button
+                                    appearance="subtle"
+                                    size="small"
+                                    icon={<Speaker224Regular />}
+                                    disabled={disabled}
+                                    onClick={() => replayTurn(turn.text)}
+                                    aria-label="Read this response aloud"
+                                  />
+                                </Tooltip>
+                              )}
                               <Tooltip content="Immersive Reader" relationship="label">
                                 <Button
                                   appearance="subtle"
@@ -1025,6 +1103,16 @@ export function Feature7Page() {
                 aria-label="Start over"
               />
             </Tooltip>
+            <Tooltip content={showSavedPlans ? "Hide saved plans" : "View saved plans"} relationship="label">
+              <Button
+                appearance={showSavedPlans ? "primary" : "subtle"}
+                size="small"
+                icon={<History24Regular />}
+                onClick={() => setShowSavedPlans(!showSavedPlans)}
+                aria-label={showSavedPlans ? "Hide saved plans" : "View saved plans"}
+                aria-pressed={showSavedPlans}
+              />
+            </Tooltip>
             <Tooltip content={showSettings ? "Hide voice settings" : "Voice settings"} relationship="label">
               <Button
                 appearance={showSettings ? "primary" : "subtle"}
@@ -1094,18 +1182,70 @@ export function Feature7Page() {
             />
           )}
 
+          {/* Saved plans panel */}
+          {showSavedPlans && (
+            <div style={{
+              display: "flex",
+              flexDirection: "column",
+              gap: "6px",
+              padding: "8px 12px",
+              borderRadius: tokens.borderRadiusMedium,
+              backgroundColor: tokens.colorNeutralBackground3,
+              maxHeight: "200px",
+              overflowY: "auto",
+            }}>
+              <Text size={300} weight="semibold">Previous Plans</Text>
+              {savedPlans.length === 0 ? (
+                <Text size={200} style={{ color: tokens.colorNeutralForeground3 }}>
+                  No saved plans yet. Plans are saved automatically when the assistant provides task steps.
+                </Text>
+              ) : (
+                savedPlans.map((plan) => (
+                  <div key={plan.id} style={{
+                    display: "flex",
+                    justifyContent: "space-between",
+                    alignItems: "center",
+                    padding: "6px 10px",
+                    borderRadius: tokens.borderRadiusSmall,
+                    backgroundColor: tokens.colorNeutralBackground1,
+                    cursor: "default",
+                  }}>
+                    <div style={{ minWidth: 0, flex: 1 }}>
+                      <Text size={200} weight="semibold" truncate wrap={false} style={{ display: "block" }}>
+                        {plan.goal}
+                      </Text>
+                      <Text size={100} style={{ color: tokens.colorNeutralForeground3 }}>
+                        {plan.steps} steps · {new Date(plan.createdAt).toLocaleDateString()}
+                      </Text>
+                    </div>
+                  </div>
+                ))
+              )}
+            </div>
+          )}
+
           {/* Input area — voice or text */}
           {inputMode === "voice" ? (
             <div className={styles.controlBar}>
               {isSpeaking ? (
-                <Tooltip content="Stop speaking" relationship="label">
-                  <Button
-                    appearance="subtle"
-                    icon={<MicOff24Regular />}
-                    onClick={stopSpeaking}
-                    aria-label="Stop speaking"
-                  />
-                </Tooltip>
+                <div style={{ display: "flex", gap: "8px" }}>
+                  <Tooltip content={isPaused ? "Resume reading" : "Pause reading"} relationship="label">
+                    <Button
+                      appearance="subtle"
+                      icon={isPaused ? <Play24Regular /> : <Pause24Regular />}
+                      onClick={isPaused ? resumeSpeaking : pauseSpeaking}
+                      aria-label={isPaused ? "Resume reading" : "Pause reading"}
+                    />
+                  </Tooltip>
+                  <Tooltip content="Stop reading" relationship="label">
+                    <Button
+                      appearance="subtle"
+                      icon={<MicOff24Regular />}
+                      onClick={stopSpeaking}
+                      aria-label="Stop reading"
+                    />
+                  </Tooltip>
+                </div>
               ) : (
                 <div style={{ width: 32 }} aria-hidden />
               )}
