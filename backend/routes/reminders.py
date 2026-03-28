@@ -241,7 +241,10 @@ async def update_reminder(reminder_id: str, req: Request) -> JSONResponse:
     try:
         doc = _reminders_container.read_item(item=reminder_id, partition_key=user_id)
     except Exception:
-        return JSONResponse({"error": "Reminder not found."}, status_code=404)
+        try:
+            doc = _reminders_container.read_item(item=reminder_id, partition_key=reminder_id)
+        except Exception:
+            return JSONResponse({"error": "Reminder not found."}, status_code=404)
 
     # Validate and apply updates
     if "title" in body:
@@ -296,9 +299,16 @@ async def delete_reminder(reminder_id: str, req: Request) -> JSONResponse:
         return JSONResponse({"error": str(e)}, status_code=401)
 
     try:
+        # Try partition_key=user_id first (standard: /userId partition)
         _reminders_container.delete_item(item=reminder_id, partition_key=user_id)
-    except Exception:
-        return JSONResponse({"error": "Reminder not found."}, status_code=404)
+    except Exception as e1:
+        logger.warning("delete_reminder pk=userId failed id=%s user=%s: %s", reminder_id, user_id, e1)
+        try:
+            # Fallback: partition_key=reminder_id (in case container uses /id)
+            _reminders_container.delete_item(item=reminder_id, partition_key=reminder_id)
+        except Exception as e2:
+            logger.warning("delete_reminder pk=id also failed id=%s: %s", reminder_id, e2)
+            return JSONResponse({"error": "Reminder not found."}, status_code=404)
 
     logger.info("reminder_deleted user=%s id=%s", user_id, reminder_id)
     return JSONResponse({"deleted": True})

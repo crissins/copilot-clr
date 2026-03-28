@@ -34,21 +34,23 @@ _adapted_container = None
 _audio_container = None
 _get_user_id = None
 _check_content_safety = None
+_get_user_profile = None
 
 ALLOWED_EXTENSIONS = {".pdf", ".docx", ".mp4", ".mov", ".avi", ".mkv", ".webm"}
 VIDEO_EXTENSIONS = {".mp4", ".mov", ".avi", ".mkv", ".webm"}
 MAX_FILE_SIZE = 100 * 1024 * 1024  # 100 MB
 
 
-def init_routes(content_ctr, adapted_ctr, audio_ctr, get_user_fn, safety_fn):
+def init_routes(content_ctr, adapted_ctr, audio_ctr, get_user_fn, safety_fn, get_profile_fn=None):
     """Wire storage containers and auth helper into this router module."""
     global _content_container, _adapted_container, _audio_container
-    global _get_user_id, _check_content_safety
+    global _get_user_id, _check_content_safety, _get_user_profile
     _content_container = content_ctr
     _adapted_container = adapted_ctr
     _audio_container = audio_ctr
     _get_user_id = get_user_fn
     _check_content_safety = safety_fn
+    _get_user_profile = get_profile_fn
 
 
 @router.post("/content/upload")
@@ -678,3 +680,118 @@ def _extract_docx_text(content_bytes: bytes) -> str:
     except Exception:
         logger.exception("DOCX text extraction failed")
         return ""
+
+
+@router.post("/content/{content_id}/email")
+async def email_content_endpoint(content_id: str, req: Request) -> JSONResponse:
+    """Send an adapted content via email to the authenticated user."""
+    from auth.entra import AuthError
+    try:
+        profile = _get_user_profile(req.headers.get("Authorization"))
+        user_id = profile["userId"]
+        recipient_email = profile.get("email", "")
+    except AuthError as e:
+        return JSONResponse({"error": str(e)}, status_code=401)
+
+    if not recipient_email:
+        return JSONResponse({"error": "No email address found in user profile."}, status_code=400)
+
+    try:
+        body = await req.json()
+    except Exception:
+        body = {}
+
+    adaptation_id = body.get("adaptationId")
+    profile_type = body.get("profile", "adhd")
+
+    # 1. Retrieve the adaptation
+    try:
+        adapted_doc = _adapted_container.read_item(item=adaptation_id, partition_key=user_id)
+    except Exception:
+        return JSONResponse({"error": "Adapted content not found."}, status_code=404)
+
+    adapted_text = adapted_doc.get("adaptedText", "")
+    summary = adapted_doc.get("summary", "")
+
+    # 2. Clean and format
+    from services.content_adapter import format_and_clean_content, generate_html_email, PROFILES
+    clean_text = format_and_clean_content(adapted_text)
+    profile_label = PROFILES.get(profile_type, {}).get("description", profile_type)
+
+    # 3. Build HTML body
+    title = f"Adapted Content: {summary[:50]}..." if summary else "Your Adapted Content"
+    html_body = generate_html_email(title, clean_text, profile_label)
+
+    # 4. Send email
+    from services.notifications import send_email_reminder
+    try:
+        send_email_reminder(
+            recipient_email=recipient_email,
+            subject=f"Accessible Content: {title}",
+            body=clean_text[:1000],  # Plain text fallback
+            html_body=html_body,
+        )
+    except Exception:
+        logger.exception("Failed to send content email to %s", recipient_email)
+        return JSONResponse({"error": "Failed to send email."}, status_code=502)
+
+    return JSONResponse({"status": "sent", "email": recipient_email})
+
+
+@router.post("/content/simplify/email")
+async def email_simplified_endpoint(req: Request) -> JSONResponse:
+    """Send simplified text via email immediately."""
+    from auth.entra import AuthError
+    try:
+        profile = _get_user_profile(req.headers.get("Authorization"))
+        user_id = profile["userId"]
+        recipient_email = profile.get("email", "")
+    except AuthError as e:
+        return JSONResponse({"error": str(e)}, status_code=401)
+
+    if not recipient_email:
+        return JSONResponse({"error": "No email address found in user profile."}, status_code=400)
+
+    try:
+        body = await req.json()
+    except Exception:
+        return JSONResponse({"error": "Invalid JSON body."}, status_code=400)
+
+    text = (body.get("text") or "").strip()
+    profile_type = body.get("profile", "adhd")
+
+    if not text:
+        return JSONResponse({"error": "No text provided."}, status_code=400)
+
+    # 1. Adapt content first (immediate)
+    from services.content_adapter import adapt_content, format_and_clean_content, generate_html_email, PROFILES
+    try:
+        result = await adapt_content(source_text=text, profile=profile_type)
+    except RuntimeError as exc:
+        return JSONResponse({"error": str(exc)}, status_code=502)
+
+    adapted_text = result.get("adapted_text", "")
+    summary = result.get("summary", "")
+
+    # 2. Clean and format
+    clean_text = format_and_clean_content(adapted_text)
+    profile_label = PROFILES.get(profile_type, {}).get("description", profile_type)
+
+    # 3. Build HTML body
+    title = f"Simplified Content: {summary[:50]}..." if summary else "Your Simplified Content"
+    html_body = generate_html_email(title, clean_text, profile_label)
+
+    # 4. Send email
+    from services.notifications import send_email_reminder
+    try:
+        send_email_reminder(
+            recipient_email=recipient_email,
+            subject=f"Accessible Content: {title}",
+            body=clean_text[:1000],
+            html_body=html_body,
+        )
+    except Exception:
+        logger.exception("Failed to send content email to %s", recipient_email)
+        return JSONResponse({"error": "Failed to send email."}, status_code=502)
+
+    return JSONResponse({"status": "sent", "email": recipient_email})

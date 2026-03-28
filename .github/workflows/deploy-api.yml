@@ -3,13 +3,10 @@
 # Triggers on changes to backend/ folder on main branch
 # ============================================================================
 
-name: Deploy API (Functions)
+name: Deploy API (Functions) [DISABLED]
 
 on:
-  push:
-    branches: [main]
-    paths: ['backend/**']
-  workflow_dispatch:
+  workflow_dispatch:    # manual-only — auto-trigger removed (always fails)
 
 permissions:
   id-token: write

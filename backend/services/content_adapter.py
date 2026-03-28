@@ -8,11 +8,15 @@ Agents: Analyzer, Simplifier, TaskDecomposer, ContentFormatter.
 import json
 import logging
 import os
+import re
 import uuid
 from datetime import datetime, timezone
-from typing import Any
+from typing import Any, Dict, List, Optional, Union
 
+import markdown
 import textstat
+
+from agents.content_workflow import AzureAIClient, DefaultAzureCredential, Message
 
 logger = logging.getLogger(__name__)
 
@@ -44,7 +48,9 @@ PROFILES = {
             "Bold the single most important action in each chunk. "
             "Add a time estimate (e.g., ‘~2 min’) to each chunk. "
             "Use ✅ checkboxes for actionable items. "
-            "Avoid walls of text — white space is critical."
+            "Avoid walls of text — white space is critical. "
+            "Use Markdown headers (###) for sections. "
+            "DO NOT use raw JSON keys like 'header' or 'content' in the final text."
         ),
     },
     "dyslexia": {
@@ -126,9 +132,9 @@ def _analyze_source(text: str) -> dict[str, Any]:
         for kw in ["step", "first", "then", "next", "finally", "instructions", "procedure", "how to"]
     )
     return {
-        "fkgl": round(fkgl, 1),
-        "word_count": word_count,
-        "sentence_count": sentence_count,
+        "fkgl": round(float(fkgl), 1),
+        "word_count": int(word_count),
+        "sentence_count": int(sentence_count),
         "has_instructions": has_instructions,
         "char_count": len(text),
     }
@@ -156,7 +162,7 @@ async def _run_adaptation(
         )
 
     try:
-        from agents.content_workflow import AzureAIClient, DefaultAzureCredential, Message
+        # Azure AI Foundry Agent SDK
 
         extra = profile.get("extra_instructions", "")
         pref_format = "bullet points"
@@ -204,7 +210,7 @@ async def _run_adaptation(
 
         if not summary:
             parts = adapted_text.split("\n\n", 1)
-            summary = parts[0] if len(parts) > 1 else adapted_text[:200]
+            summary = str(parts[0]) if len(parts) > 1 else adapted_text[:200]
 
         if not change_summary:
             change_summary = _default_change_summary(profile)
@@ -295,7 +301,7 @@ def _generate_audio_scripts(adapted_text: str, max_duration_s: int = 30) -> list
         s_words = len(sentence.split())
         if current_word_count + s_words > words_per_chunk and current_chunk:
             chunk_text = ". ".join(current_chunk) + "."
-            est_duration = round(current_word_count / 150 * 60, 1)
+            est_duration = round(float(current_word_count) / 150 * 60, 1)
             chunks.append({
                 "index": len(chunks),
                 "text": chunk_text,
@@ -312,7 +318,7 @@ def _generate_audio_scripts(adapted_text: str, max_duration_s: int = 30) -> list
         chunk_text = ". ".join(current_chunk)
         if not chunk_text.endswith("."):
             chunk_text += "."
-        est_duration = round(current_word_count / 150 * 60, 1)
+        est_duration = round(float(current_word_count) / 150 * 60, 1)
         chunks.append({
             "index": len(chunks),
             "text": chunk_text,
@@ -380,3 +386,90 @@ def _local_fallback_adaptation(
         "summary": summary,
         "change_summary": _default_change_summary(profile),
     }
+
+
+def format_and_clean_content(text: str) -> str:
+    """Clean the adapted text from 'header'/'content' keys and ensure clean Markdown."""
+    text = text.strip()
+
+    # Handle the specific case where AI returns pseudo-JSON structure in strings
+    # e.g. section_1: { header: '...', content: '...' }
+    if "section_" in text and ("header" in text.lower() or "content" in text.lower()):
+        # Try to parse as JSON if it's already a JSON string
+        try:
+            data = json.loads(text)
+            if isinstance(data, dict):
+                lines = []
+                for _, section in data.items():
+                    if isinstance(section, dict):
+                        h = section.get("header", section.get("title", ""))
+                        c = section.get("content", section.get("body", ""))
+                        if h:
+                            lines.append(f"### {h}")
+                        if c:
+                            lines.append(c)
+                        lines.append("")
+                if lines:
+                    return "\n".join(lines).strip()
+        except json.JSONDecodeError:
+            pass
+
+        # If not standard JSON, or parse failed, do some regex/string cleaning
+        # Remove section keys like 'section_1': {
+        text = re.sub(r"['\"]?section_\d+['\"]?:\s*\{", "", text)
+        # Convert 'header': '...' to ### ...
+        text = re.sub(r"['\"]?header['\"]?:\s*['\"](.*?)['\"]", r"### \1", text)
+        # Remove 'content': '...'
+        text = re.sub(r"['\"]?content['\"]?:\s*['\"](.*?)['\"]", r"\1", text)
+        # Remove trailing braces
+        text = text.replace("}", "")
+        # Clean up extra quotes/commas that might be left over from broken JSON
+        text = text.replace("',", "").replace('",', "").strip("'").strip('"')
+
+    return text.strip()
+
+
+def generate_html_email(title: str, markdown_content: str, profile_label: str) -> str:
+    """Wrap Markdown content in a premium-styled HTML email template."""
+    html_body = markdown.markdown(markdown_content)
+
+    # Use brand colors: #0078d4 (Microsoft Blue/Brand), #f3f2f1 (Background)
+    # Styles for a "premium" feel: glassmorphism-inspired borders, typography.
+    template = f"""
+    <!DOCTYPE html>
+    <html>
+    <head>
+        <meta charset="utf-8">
+        <style>
+            body {{ font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; line-height: 1.6; color: #323130; background-color: #faf9f8; margin: 0; padding: 20px; }}
+            .container {{ max-width: 600px; margin: 0 auto; background: white; border-radius: 8px; overflow: hidden; box-shadow: 0 4px 12px rgba(0,0,0,0.08); border: 1px solid #edebe9; }}
+            .header {{ background: linear-gradient(135deg, #0078d4 0%, #005a9e 100%); padding: 32px 24px; color: white; }}
+            .header h1 {{ margin: 0; font-size: 24px; font-weight: 600; }}
+            .badge {{ display: inline-block; padding: 4px 12px; background: rgba(255,255,255,0.2); border-radius: 20px; font-size: 12px; margin-top: 8px; }}
+            .content {{ padding: 32px 24px; font-size: 16px; }}
+            .content h2, .content h3 {{ color: #0078d4; margin-top: 24px; }}
+            .content p {{ margin-bottom: 16px; }}
+            .content ul {{ padding-left: 20px; }}
+            .content li {{ margin-bottom: 8px; }}
+            .footer {{ background: #f3f2f1; padding: 20px 24px; text-align: center; font-size: 12px; color: #605e5c; border-top: 1px solid #edebe9; }}
+            .action-box {{ background: #eff6fc; border-left: 4px solid #0078d4; padding: 16px; margin: 24px 0; border-radius: 4px; }}
+        </style>
+    </head>
+    <body>
+        <div class="container">
+            <div class="header">
+                <h1>{title}</h1>
+                <div class="badge">Adapted for: {profile_label}</div>
+            </div>
+            <div class="content">
+                {html_body}
+            </div>
+            <div class="footer">
+                <p>Sent via Base Innovation AI Content Adapter</p>
+                <p>&copy; 2026 Base Innovation. All rights reserved.</p>
+            </div>
+        </div>
+    </body>
+    </html>
+    """
+    return template

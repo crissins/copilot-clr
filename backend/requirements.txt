@@ -51,6 +51,7 @@ opentelemetry-instrumentation-fastapi
 
 # Text analysis
 textstat
+markdown
 
 # PDF fallback extraction (when Document Intelligence is unavailable)
 PyPDF2
