@@ -207,10 +207,26 @@ export function AvatarPage() {
       // Set up WebRTC peer connection
       setStatus("Setting up WebRTC connection...");
       console.log("[Avatar] Got auth token, region:", result.region);
+      console.log("[Avatar] Endpoint from backend:", result.endpoint);
+
+      // Enable SDK verbose logging to console for debugging
+      speechSdk.Diagnostics.logging.enableConsoleLogging();
+
       const speechConfig = speechSdk.SpeechConfig.fromAuthorizationToken(
         result.authToken!,
         result.region!,
       );
+
+      // Explicitly set the host if a custom subdomain is used
+      if (result.endpoint) {
+        try {
+          const url = new URL(result.endpoint);
+          speechConfig.host = `wss://${url.host}/`;
+          console.log("[Avatar] Set SpeechConfig host to:", speechConfig.host);
+        } catch (e) {
+          console.warn("[Avatar] Failed to parse endpoint URL, using default regional host:", e);
+        }
+      }
 
       const videoFormat = new speechSdk.AvatarVideoFormat();
       const avatarConfig = new speechSdk.AvatarConfig(
@@ -251,11 +267,20 @@ export function AvatarPage() {
         console.log("[Avatar] ICE gathering state:", pc.iceGatheringState);
       };
 
+      pc.onsignalingstatechange = () => {
+        console.log("[Avatar] Signaling state:", pc.signalingState);
+      };
+
       pc.onconnectionstatechange = () => {
         console.log("[Avatar] Connection state:", pc.connectionState);
         if (pc.connectionState === "failed") {
           setError("WebRTC peer connection failed. Check network/firewall settings.");
         }
+      };
+
+      // Log when tracks are added
+      pc.onnegotiationneeded = () => {
+        console.log("[Avatar] Negotiation needed");
       };
 
       console.log("[Avatar] Starting avatar async (WebRTC)...");
