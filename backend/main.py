@@ -152,9 +152,6 @@ class _InMemoryContainer:
             docs.sort(key=lambda d: d.get("createdAt", ""), reverse=True)
         elif "ORDER BY c.createdAt ASC" in query:
             docs.sort(key=lambda d: d.get("createdAt", ""))
-        # Handle aggregate COUNT queries that Cosmos returns as [int]
-        if "SELECT VALUE COUNT" in query.upper():
-            return [len(docs)]
         return docs
 
     def patch_item(
@@ -1877,16 +1874,6 @@ def get_user_insights(req: Request) -> JSONResponse:
     except AuthError as e:
         return JSONResponse({"error": str(e)}, status_code=401)
 
-    try:
-        return _build_insights(user_id)
-    except Exception:
-        logger.exception("Failed to load insights for user=%s", user_id)
-        return JSONResponse({"error": "Failed to load insights."}, status_code=502)
-
-
-def _build_insights(user_id: str) -> JSONResponse:
-    """Gather adaptive-insights data from Cosmos containers."""
-
     # Count sessions
     sessions = list(_sessions_container.query_items(
         query="SELECT VALUE COUNT(1) FROM c WHERE c.userId = @uid",
@@ -1895,47 +1882,37 @@ def _build_insights(user_id: str) -> JSONResponse:
     ))
     total_sessions = sessions[0] if sessions else 0
 
-    # Count messages — query by session IDs (matches partition key) instead
-    # of cross-partition scan on userId which lacks an index.
-    user_sessions = list(_sessions_container.query_items(
-        query="SELECT c.id FROM c WHERE c.userId = @uid",
+    # Count messages
+    messages = list(_messages_container.query_items(
+        query="SELECT VALUE COUNT(1) FROM c WHERE c.userId = @uid",
         parameters=[{"name": "@uid", "value": user_id}],
-        partition_key=user_id,
+        enable_cross_partition_query=True,
     ))
-    session_ids = [s["id"] for s in user_sessions if s.get("id")]
+    total_messages = messages[0] if messages else 0
 
-    total_messages = 0
+    # Estimate token usage from message content when explicit usage is unavailable.
+    message_rows = list(_messages_container.query_items(
+        query="SELECT c.content, c.meta, c.tokenUsage FROM c WHERE c.userId = @uid",
+        parameters=[{"name": "@uid", "value": user_id}],
+        enable_cross_partition_query=True,
+    ))
     total_tokens_used = 0
+    for msg in message_rows:
+        token_usage = msg.get("tokenUsage") or {}
+        explicit_total = token_usage.get("totalTokens")
+        if explicit_total is None:
+            meta = msg.get("meta") or {}
+            explicit_total = meta.get("totalTokens")
+        if explicit_total is not None:
+            try:
+                total_tokens_used += int(explicit_total)
+                continue
+            except (TypeError, ValueError):
+                pass
 
-    for sid in session_ids:
-        msg_count = list(_messages_container.query_items(
-            query="SELECT VALUE COUNT(1) FROM c WHERE c.sessionId = @sid",
-            parameters=[{"name": "@sid", "value": sid}],
-            partition_key=sid,
-        ))
-        total_messages += msg_count[0] if msg_count else 0
-
-        message_rows = list(_messages_container.query_items(
-            query="SELECT c.content, c.meta, c.tokenUsage FROM c WHERE c.sessionId = @sid",
-            parameters=[{"name": "@sid", "value": sid}],
-            partition_key=sid,
-        ))
-        for msg in message_rows:
-            token_usage = msg.get("tokenUsage") or {}
-            explicit_total = token_usage.get("totalTokens")
-            if explicit_total is None:
-                meta = msg.get("meta") or {}
-                explicit_total = meta.get("totalTokens")
-            if explicit_total is not None:
-                try:
-                    total_tokens_used += int(explicit_total)
-                    continue
-                except (TypeError, ValueError):
-                    pass
-
-            content = (msg.get("content") or "").strip()
-            word_count = len(content.split()) if content else 0
-            total_tokens_used += int(word_count * 1.3)
+        content = (msg.get("content") or "").strip()
+        word_count = len(content.split()) if content else 0
+        total_tokens_used += int(word_count * 1.3)
 
     # Task plans and completion
     tasks = list(_tasks_container.query_items(

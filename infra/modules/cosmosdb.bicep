@@ -97,7 +97,6 @@ resource messagesContainer 'Microsoft.DocumentDB/databaseAccounts/sqlDatabases/c
         indexingMode: 'consistent'
         includedPaths: [
           { path: '/sessionId/?' }
-          { path: '/userId/?' }
           { path: '/createdAt/?' }
           { path: '/role/?' }
         ]
