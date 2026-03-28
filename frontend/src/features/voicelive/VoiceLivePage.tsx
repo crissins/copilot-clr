@@ -387,7 +387,6 @@ export function VoiceLivePage() {
           break;
 
         case "error":
-          console.error("Voice Live error:", msg.error?.message);
           setStatus(`Error: ${msg.error?.message || "Unknown error"}`);
           break;
       }
@@ -405,15 +404,12 @@ export function VoiceLivePage() {
 
     try {
       const token = await getAccessToken();
-      console.log("[VoiceLive] Negotiating Web PubSub URL...");
       const { url } = await apiClient.negotiateVoice(token);
-      console.log("[VoiceLive] Got PubSub URL, connecting WebSocket...");
 
       const ws = new WebSocket(url, "json.webpubsub.azure.v1");
       wsRef.current = ws;
 
       ws.onopen = () => {
-        console.log("[VoiceLive] WebSocket opened");
         setStatus("WebSocket connected. Waiting for Voice Live...");
       };
 
@@ -428,7 +424,7 @@ export function VoiceLivePage() {
               : wrapper.data;
             handleWsMessage(new MessageEvent("message", { data: JSON.stringify(inner) }));
           } else if (wrapper.type === "system" && wrapper.event === "connected") {
-            console.log("[VoiceLive] PubSub system connected event, connectionId:", wrapper.connectionId);
+            // PubSub system connected
           } else {
             // Try as direct message
             handleWsMessage(event);
@@ -438,14 +434,12 @@ export function VoiceLivePage() {
         }
       };
 
-      ws.onerror = (ev: any) => {
-        console.error("[VoiceLive] WebSocket error observed. Handshake likely failed or unauthorized.", ev);
+      ws.onerror = () => {
         setConnectionState("error");
         setStatus("Connection failed. Check authentication and project configuration.");
       };
 
       ws.onclose = (ev) => {
-        console.warn(`[VoiceLive] WebSocket closed. Code: ${ev.code}, Reason: ${ev.reason || "No reason provided"}`);
         
         // Handle specific Web PubSub error codes
         if (ev.code === 4001) setStatus("Unauthorized: Web PubSub access token is invalid.");
@@ -460,8 +454,6 @@ export function VoiceLivePage() {
       // Start microphone capture
       await startMicStream(ws);
     } catch (err: any) {
-      console.error("[VoiceLive] Connection failed:", err);
-      console.error("[VoiceLive] Error name:", err.name, "message:", err.message, "status:", err.status);
       setConnectionState("error");
       const msg = err.message || "Failed to connect";
       if (msg.includes("503") || msg.includes("not configured") || msg.includes("Web PubSub")) {

@@ -183,12 +183,10 @@ export function AvatarPage() {
   // Synchronize media stream with video element
   useEffect(() => {
     if (connected && videoRef.current && mediaStream) {
-      console.log("[Avatar] Attaching media stream to video element, tracks:", mediaStream.getTracks().map(t => `${t.kind}:${t.readyState}`));
       videoRef.current.srcObject = mediaStream;
       // Start muted to satisfy browser autoplay policy; unmuted on user speak action
       videoRef.current.muted = true;
-      videoRef.current.play().catch(err => {
-        console.warn("[Avatar] Failed to auto-play video:", err);
+      videoRef.current.play().catch(() => {
         setError("Browser blocked video autoplay. Click Speak to start.");
       });
     }
@@ -200,14 +198,11 @@ export function AvatarPage() {
     setStatus("Requesting avatar session...");
     try {
       const token = await getAccessToken();
-      console.log("[Avatar] Requesting session from backend...");
       const result = await apiClient.createAvatarSession(token);
-      console.log("[Avatar] Session response:", JSON.stringify(result, null, 2));
       setSessionData(result);
 
       if (result.status !== "ready") {
         const detail = result.message || "Avatar session not available.";
-        console.warn("[Avatar] Session not ready:", result.status, detail, result.supported_regions || "");
         setError(detail);
         setStatus("Avatar session unavailable");
         setConnecting(false);
@@ -216,11 +211,6 @@ export function AvatarPage() {
 
       // Set up WebRTC peer connection
       setStatus("Setting up WebRTC connection...");
-      console.log("[Avatar] Got auth token, region:", result.region);
-      console.log("[Avatar] Endpoint from backend:", result.endpoint);
-
-      // Enable SDK verbose logging to console for debugging
-      speechSdk.Diagnostics.StartConsoleOutput();
 
       // Use fromEndpoint when a custom subdomain endpoint is provided,
       // otherwise fall back to regional auth-token flow.
@@ -229,11 +219,9 @@ export function AvatarPage() {
         try {
           const url = new URL(result.endpoint);
           const wssUrl = `wss://${url.host}/`;
-          console.log("[Avatar] Using custom endpoint host:", wssUrl);
           speechConfig = speechSdk.SpeechConfig.fromEndpoint(new URL(wssUrl));
           speechConfig.authorizationToken = result.authToken!;
-        } catch (e) {
-          console.warn("[Avatar] Failed to parse endpoint URL, falling back to regional host:", e);
+        } catch {
           speechConfig = speechSdk.SpeechConfig.fromAuthorizationToken(
             result.authToken!,
             result.region!,
@@ -253,7 +241,6 @@ export function AvatarPage() {
         videoFormat,
       );
       avatarConfig.customized = result.avatarConfig?.isPhotoAvatar || false;
-      console.log("[Avatar] Avatar config:", result.avatarConfig?.character, result.avatarConfig?.style);
 
       const synthesizer = new speechSdk.AvatarSynthesizer(speechConfig, avatarConfig);
       synthesizerRef.current = synthesizer;
@@ -264,33 +251,30 @@ export function AvatarPage() {
       peerConnectionRef.current = pc;
 
       pc.ontrack = (event) => {
-        console.log("[Avatar] ontrack — got media stream, kind:", event.track.kind);
         if (event.streams[0]) {
           setMediaStream(event.streams[0]);
         }
       };
 
       pc.oniceconnectionstatechange = () => {
-        console.log("[Avatar] ICE state:", pc.iceConnectionState);
         if (pc.iceConnectionState === "disconnected" || pc.iceConnectionState === "failed") {
           setConnected(false);
           setError(`WebRTC connection ${pc.iceConnectionState}. Try reconnecting.`);
           setStatus("Connection lost. Try reconnecting.");
         } else if (pc.iceConnectionState === "connected") {
-          console.log("[Avatar] ICE connected successfully");
+          // ICE connected successfully
         }
       };
 
       pc.onicegatheringstatechange = () => {
-        console.log("[Avatar] ICE gathering state:", pc.iceGatheringState);
+        // ICE gathering state changed
       };
 
       pc.onsignalingstatechange = () => {
-        console.log("[Avatar] Signaling state:", pc.signalingState);
+        // Signaling state changed
       };
 
       pc.onconnectionstatechange = () => {
-        console.log("[Avatar] Connection state:", pc.connectionState);
         if (pc.connectionState === "failed") {
           setError("WebRTC peer connection failed. Check network/firewall settings.");
         }
@@ -298,28 +282,22 @@ export function AvatarPage() {
 
       // Log when tracks are added
       pc.onnegotiationneeded = () => {
-        console.log("[Avatar] Negotiation needed");
+        // Negotiation needed
       };
 
-      console.log("[Avatar] Starting avatar async (WebRTC)...");
       const startResult = await synthesizer.startAvatarAsync(pc);
-      console.log("[Avatar] startAvatarAsync result reason:", startResult.reason);
 
       if (startResult.reason === speechSdk.ResultReason.Canceled) {
         const errorDetails = startResult.properties?.getProperty(speechSdk.PropertyId.CancellationDetails_ReasonDetailedText) || "";
-        console.error("[Avatar] Start canceled, details:", errorDetails);
         setError(`Avatar start failed: ${errorDetails || "Connection was canceled"}`);
         setStatus("Connection failed — avatar session was canceled");
         setConnecting(false);
         return;
       }
 
-      console.log("[Avatar] Avatar connected successfully!");
       setConnected(true);
       setStatus("Avatar connected! Type something to make the avatar speak.");
     } catch (err: any) {
-      console.error("[Avatar] Connection failed:", err);
-      console.error("[Avatar] Error name:", err.name, "message:", err.message);
       const msg = err.message || "Failed to connect avatar";
       if (msg.includes("Avatar session not available") || msg.includes("unavailable") || msg.includes("unsupported_region")) {
         setError("Avatar requires Azure Speech Service in a supported region (e.g., westus2, westeurope). Check your deployment configuration.");
@@ -370,7 +348,6 @@ export function AvatarPage() {
 
       if (speakResult.reason === speechSdk.ResultReason.Canceled) {
         const errorDetails = speakResult.properties?.getProperty(speechSdk.PropertyId.CancellationDetails_ReasonDetailedText) || "";
-        console.error("[Avatar] Speak canceled, details:", errorDetails);
         setError(`Speech failed: ${errorDetails || "Synthesis was canceled"}`);
         setStatus("Speak failed — see error above");
       } else {
@@ -378,7 +355,6 @@ export function AvatarPage() {
       }
       setText("");
     } catch (err: any) {
-      console.error("Avatar speak failed:", err);
       setError(err.message || "Failed to speak");
       setStatus("Speak failed");
     } finally {
