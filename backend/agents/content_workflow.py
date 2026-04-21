@@ -16,7 +16,7 @@ Entry point:
 
 Environment variables:
   PROJECT_ENDPOINT             — Azure AI Foundry project endpoint
-  MODEL_DEPLOYMENT_NAME        — Model deployment (default: gpt-4o-mini)
+  MODEL_DEPLOYMENT_NAME        — Model deployment (default: gpt-4.1-mini)
   COSMOS_DB_ENDPOINT / DATABASE
   SPEECH_ENDPOINT / SPEECH_REGION / SPEECH_RESOURCE_ID
   STORAGE_ACCOUNT_NAME
@@ -339,7 +339,7 @@ class RequestBuilderExecutor(Executor):
             async with AzureAIClient(
                 project_endpoint=endpoint,
                 model_deployment_name=os.getenv(
-                    "MODEL_DEPLOYMENT_NAME", "gpt-4o-mini"
+                    "MODEL_DEPLOYMENT_NAME", "gpt-4.1-mini"
                 ),
                 credential=credential,
             ).as_agent(
@@ -439,7 +439,7 @@ class ContentAdaptExecutor(Executor):
             async with AzureAIClient(
                 project_endpoint=endpoint,
                 model_deployment_name=os.getenv(
-                    "MODEL_DEPLOYMENT_NAME", "gpt-4o-mini"
+                    "MODEL_DEPLOYMENT_NAME", "gpt-4.1-mini"
                 ),
                 credential=credential,
             ).as_agent(
@@ -509,7 +509,7 @@ class TaskPlanExecutor(Executor):
             async with AzureAIClient(
                 project_endpoint=endpoint,
                 model_deployment_name=os.getenv(
-                    "MODEL_DEPLOYMENT_NAME", "gpt-4o-mini"
+                    "MODEL_DEPLOYMENT_NAME", "gpt-4.1-mini"
                 ),
                 credential=credential,
             ).as_agent(
@@ -614,7 +614,7 @@ class AudiobookExecutor(Executor):
             async with AzureAIClient(
                 project_endpoint=endpoint,
                 model_deployment_name=os.getenv(
-                    "MODEL_DEPLOYMENT_NAME", "gpt-4o-mini"
+                    "MODEL_DEPLOYMENT_NAME", "gpt-4.1-mini"
                 ),
                 credential=credential,
             ).as_agent(

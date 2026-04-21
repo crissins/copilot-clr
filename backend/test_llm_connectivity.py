@@ -66,7 +66,7 @@ def test_azure_openai() -> bool:
     )
 
     # Try known deployment names in order of preference
-    deployments = ["gpt-4o-mini", "gpt-4.1-mini", "gpt-4o"]
+    deployments = ["gpt-4.1-mini", "gpt-4o", "gpt-4o-mini"]
     client = AzureOpenAI(
         azure_endpoint=endpoint,
         azure_ad_token_provider=token_provider,
@@ -116,7 +116,7 @@ async def _test_agent_framework() -> bool:
     except ImportError as e:
         return result("Agent Framework", False, f"Missing package: {e}")
 
-    deploy = os.getenv("MODEL_DEPLOYMENT_NAME", "gpt-4o-mini")
+    deploy = os.getenv("MODEL_DEPLOYMENT_NAME", "gpt-4.1-mini")
     credential = DefaultAzureCredential()
 
     try:

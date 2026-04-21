@@ -70,7 +70,7 @@ def _local_response(message: str) -> dict:
 # ============================================================================
 
 AGENT_NAME = os.environ.get("SPEECH_AGENT_NAME", "CopilotCLR-SpeechAssistant")
-AGENT_MODEL = os.environ.get("SPEECH_MODEL_DEPLOYMENT", "gpt-4o-mini")
+AGENT_MODEL = os.environ.get("SPEECH_MODEL_DEPLOYMENT", "gpt-4.1-mini")
 
 AGENT_INSTRUCTIONS = """You are Copilot CLR Speech Assistant — a calm, warm AI that helps \
 neurodiverse users (ADHD, autism, dyslexia) through voice conversation.

@@ -39,7 +39,7 @@ def _local_response(message: str) -> str:
 # ============================================================================
 
 AGENT_NAME = "Copilot CLRAssistant"
-AGENT_MODEL = "gpt-4o-mini"
+AGENT_MODEL = "gpt-4.1-mini"
 
 AGENT_INSTRUCTIONS = """You are Copilot CLR — a calm, supportive AI assistant for neurodiverse users \
 (ADHD, autism, dyslexia).

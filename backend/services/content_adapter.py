@@ -185,7 +185,7 @@ async def _run_adaptation(
         try:
             async with AzureAIClient(
                 project_endpoint=endpoint,
-                model_deployment_name=os.getenv("MODEL_DEPLOYMENT_NAME", "gpt-4o-mini"),
+                model_deployment_name=os.getenv("MODEL_DEPLOYMENT_NAME", "gpt-4.1-mini"),
                 credential=credential,
             ).as_agent(
                 name=f"CopilotCLR-Simplifier-{profile.get('target_grade', 5)}",

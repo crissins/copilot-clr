@@ -14,7 +14,7 @@ with AzureAIClient and WorkflowBuilder for a two-stage pipeline:
 
 Environment variables:
   PROJECT_ENDPOINT            — Azure AI Foundry project endpoint
-  MODEL_DEPLOYMENT_NAME       — Model deployment (default: gpt-4o-mini)
+  MODEL_DEPLOYMENT_NAME       — Model deployment (default: gpt-4.1-mini)
   COSMOS_DB_ENDPOINT          — Cosmos DB account endpoint
   COSMOS_DB_DATABASE          — Cosmos DB database name (default: ChatApp)
   BING_SEARCH_API_KEY         — (optional) Bing Search v7 API key
@@ -191,7 +191,7 @@ async def _run_agent(
 
     async with AzureAIClient(
         project_endpoint=os.getenv("PROJECT_ENDPOINT", ""),
-        model_deployment_name=os.getenv("MODEL_DEPLOYMENT_NAME", "gpt-4o-mini"),
+        model_deployment_name=os.getenv("MODEL_DEPLOYMENT_NAME", "gpt-4.1-mini"),
         credential=credential,
     ).as_agent(
         name="CopilotCLR-Workflow",

@@ -1,8 +1,8 @@
 // ============================================================================
 // Azure OpenAI Service + Custom RAI Content Filter Policy
 // Used by: AI Foundry Hub (connected AI service), Agent Framework inference
-// Tier: S0 (pay-per-token, ~$1-5/mo in dev with gpt-4o-mini)
-// Models: gpt-4o-mini (chat), text-embedding-ada-002 (vectors)
+// Tier: S0 (pay-per-token, ~$1-5/mo in dev with gpt-4.1-mini)
+// Models: gpt-4.1-mini (chat), text-embedding-ada-002 (vectors)
 //
 // RAI Policy: CopilotCLR-ContentFilter enforces blocking content filters
 // on all prompts and completions (Hate, Sexual, SelfHarm, Violence,
@@ -90,7 +90,7 @@ resource raiPolicy 'Microsoft.CognitiveServices/accounts/raiPolicies@2024-04-01-
 
 resource gpt4oMiniDeployment 'Microsoft.CognitiveServices/accounts/deployments@2024-04-01-preview' = {
   parent: openAi
-  name: 'gpt-4o-mini'
+  name: 'gpt-4.1-mini'
   dependsOn: deployCustomRaiPolicy ? [raiPolicy] : []
   sku: {
     name: 'Standard'
@@ -99,8 +99,8 @@ resource gpt4oMiniDeployment 'Microsoft.CognitiveServices/accounts/deployments@2
   properties: {
     model: {
       format: 'OpenAI'
-      name: 'gpt-4o-mini'
-      version: '2024-07-18'
+      name: 'gpt-4.1-mini'
+      version: '2025-04-14'
     }
     raiPolicyName: effectiveRaiPolicy
   }
@@ -127,7 +127,7 @@ resource embeddingDeployment 'Microsoft.CognitiveServices/accounts/deployments@2
 // Set deployRealtimeModel = false in low-cost mode: Realtime API costs ~$0.06/min input + $0.24/min output audio
 resource realtimeDeployment 'Microsoft.CognitiveServices/accounts/deployments@2024-04-01-preview' = if (deployRealtimeModel) {
   parent: openAi
-  name: 'gpt-4o-mini-realtime-preview'
+  name: 'gpt-4o-realtime-preview'
   dependsOn: [embeddingDeployment]
   sku: {
     name: 'GlobalStandard'
@@ -136,7 +136,7 @@ resource realtimeDeployment 'Microsoft.CognitiveServices/accounts/deployments@20
   properties: {
     model: {
       format: 'OpenAI'
-      name: 'gpt-4o-mini-realtime-preview'
+      name: 'gpt-4o-realtime-preview'
       version: '2024-12-17'
     }
     raiPolicyName: effectiveRaiPolicy
