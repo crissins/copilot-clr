@@ -213,6 +213,8 @@ resource containerApp 'Microsoft.App/containerApps@2024-03-01' = {
             { name: 'VIDEO_INDEXER_LOCATION',     value: videoIndexerLocation }
             { name: 'VIDEO_INDEXER_RESOURCE_ID',  value: videoIndexerResourceId }
             { name: 'OPENAI_CHAT_MODEL',          value: openAiChatModel }
+            { name: 'MODEL_DEPLOYMENT_NAME',     value: 'gpt-4.1-mini' }
+            { name: 'STATIC_WEB_APP_HOSTNAME',   value: staticWebAppHostname }
           ]
         }
       ]

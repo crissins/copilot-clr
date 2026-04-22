@@ -751,8 +751,8 @@ async def chat(req: Request) -> JSONResponse:
             session_id=session_id,
             user_id=user_id,
         )
-    except Exception:
-        logger.exception("Agent error for session=%s", session_id)
+    except Exception as exc:
+        logger.exception("Agent error for session=%s error=%s", session_id, exc)
         agent_response = (
             "I'm sorry, I had a little trouble with that. "
             "Let's try again — feel free to rephrase your question."
@@ -1873,6 +1873,19 @@ def get_user_insights(req: Request) -> JSONResponse:
         user_id = _get_user_id(req.headers.get("Authorization"))
     except AuthError as e:
         return JSONResponse({"error": str(e)}, status_code=401)
+
+    try:
+        return _compute_insights(user_id)
+    except Exception as exc:
+        logger.exception("Insights computation failed for user=%s", user_id)
+        return JSONResponse(
+            {"error": f"Failed to compute insights: {type(exc).__name__}: {exc}"},
+            status_code=500,
+        )
+
+
+def _compute_insights(user_id: str) -> JSONResponse:
+    """Inner helper that computes insights — extracted so the caller can catch errors."""
 
     # Count sessions
     sessions = list(_sessions_container.query_items(

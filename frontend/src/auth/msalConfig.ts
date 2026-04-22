@@ -14,7 +14,7 @@ export const msalConfig: Configuration = {
     // "common" supports both organizational and personal (@outlook.com) accounts
     authority: `https://login.microsoftonline.com/${
       import.meta.env.VITE_ENTRA_TENANT_ID || "common"
-    }/v2.0`,
+    }`,
     knownAuthorities: ["login.microsoftonline.com"],
     redirectUri: window.location.origin,
     postLogoutRedirectUri: window.location.origin,
