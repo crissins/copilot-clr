@@ -5,13 +5,13 @@
 # Usage:
 #   ./infra/scripts/fetch-env.sh [resource-group]
 #
-# Defaults to rg-chatapp-prod. Requires `az login` and `jq`.
+# Defaults to rg-copilot-clr-prod. Requires `az login` and `jq`.
 # Auth uses DefaultAzureCredential (az login) — no keys stored.
 # ============================================================================
 
 set -euo pipefail
 
-RESOURCE_GROUP="${1:-rg-chatapp-prod}"
+RESOURCE_GROUP="${1:-rg-copilot-clr-prod}"
 ENV_FILE="backend/.env"
 
 echo "=========================================="

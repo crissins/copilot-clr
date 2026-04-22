@@ -8,7 +8,7 @@ logging.basicConfig(stream=sys.stdout, level=logging.DEBUG)
 # Try the workspace path WITHOUT the /agents/v1.0 prefix
 endpoint = (
     "https://eastus2.api.azureml.ms/subscriptions/edd0e1f4-aaca-4046-888f-dbd0c67914a0"
-    "/resourceGroups/rg-chatapp-prod/providers/Microsoft.MachineLearningServices"
+    "/resourceGroups/rg-copilot-clr-prod/providers/Microsoft.MachineLearningServices"
     "/workspaces/ai-project-kvhky"
 )
 

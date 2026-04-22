@@ -9,7 +9,7 @@
 # ============================================================================
 
 param(
-    [string]$ResourceGroup = "rg-chatapp-prod"
+    [string]$ResourceGroup = "rg-copilot-clr-prod"
 )
 
 $ErrorActionPreference = "Stop"

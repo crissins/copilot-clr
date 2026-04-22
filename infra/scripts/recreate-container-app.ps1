@@ -1,10 +1,10 @@
 # Recreate Container App with all env vars and the new backend image
 # Run from: c:\Github Projects\base innovation
 
-$rg = "rg-chatapp-prod"
-$envName = "container-apps-environment-kvhky"
-$appName = "container-apps-kvhky"
-$acr = "containerregistrykvhky.azurecr.io"
+$rg = "rg-copilot-clr-prod"
+$envName = "env-copilotclr"
+$appName = "copilot-backend"
+$acr = "containerregistrylqkh3.azurecr.io"
 $image = "${acr}/copilot-clr-api:latest"
 
 Write-Host "Gathering resource endpoints..." -ForegroundColor Cyan
