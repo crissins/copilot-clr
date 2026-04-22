@@ -96,16 +96,21 @@ jobs:
 
           echo "Container App FQDN: $FQDN"
 
-          az webpubsub hub update \
-            --hub-name ${{ env.WEBPUBSUB_HUB }} \
-            --name ${{ env.WEBPUBSUB_NAME }} \
-            --resource-group ${{ env.RESOURCE_GROUP }} \
-            --event-handler \
-              url-template="https://${FQDN}/api/webpubsub/voice" \
-              user-event-pattern="*" \
-              system-event=connect \
-              system-event=connected \
-              system-event=disconnected
+          # Only attempt to update the Web PubSub hub if the resource exists
+          if az resource show --name "${{ env.WEBPUBSUB_NAME }}" --resource-group "${{ env.RESOURCE_GROUP }}" --resource-type "Microsoft.SignalRService/WebPubSub" >/dev/null 2>&1; then
+            az webpubsub hub update \
+              --hub-name ${{ env.WEBPUBSUB_HUB }} \
+              --name ${{ env.WEBPUBSUB_NAME }} \
+              --resource-group ${{ env.RESOURCE_GROUP }} \
+              --event-handler \
+                url-template="https://${FQDN}/api/webpubsub/voice" \
+                user-event-pattern="*" \
+                system-event=connect \
+                system-event=connected \
+                system-event=disconnected
+          else
+            echo "Web PubSub '${{ env.WEBPUBSUB_NAME }}' not found in resource group '${{ env.RESOURCE_GROUP }}' — skipping hub update"
+          fi
 
   # ═══════════════════════════════════════════════════════════════════════════
   # JOB 2 — Build frontend, deploy to Azure Static Web Apps
