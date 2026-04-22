@@ -214,13 +214,19 @@ def _get_user_id(authorization: str | None) -> str:
 
     client_id = os.environ.get("ENTRA_CLIENT_ID", "")
     if not client_id:
+        logger.warning("_get_user_id: ENTRA_CLIENT_ID is empty, returning 'anonymous'")
         return "anonymous"
 
     if not authorization or not authorization.startswith("Bearer "):
+        logger.warning("_get_user_id: Missing or invalid Authorization header, returning 'anonymous'")
         raise AuthError("Missing or invalid Authorization header")
 
-    claims = validate_token(authorization[7:], client_id)
-    return claims.get("oid", claims.get("sub", "unknown"))
+    try:
+        claims = validate_token(authorization[7:], client_id)
+        return claims.get("oid", claims.get("sub", "unknown"))
+    except Exception as e:
+        logger.error(f"_get_user_id: Token validation failed: {e}")
+        raise AuthError(f"Token validation failed: {e}")
 
 
 def _get_user_profile(authorization: str | None) -> dict:
