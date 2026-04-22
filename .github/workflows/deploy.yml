@@ -7,12 +7,12 @@ on:
 
 # ─── Environment variables shared across jobs ─────────────────────────────────
 env:
-  RESOURCE_GROUP: rg-chatapp-prod
+  RESOURCE_GROUP: rg-copilot-clr-prod
   LOCATION: eastus2
 
   # Container App / ACR
-  ACR_LOGIN_SERVER: containerregistrykvhky.azurecr.io
-  ACR_IMAGE: containerregistrykvhky.azurecr.io/copilot-clr-api
+  ACR_LOGIN_SERVER: containerregistrylqkh3.azurecr.io
+  ACR_IMAGE: containerregistrylqkh3.azurecr.io/copilot-clr-api
   CONTAINER_APP_NAME: container-apps-kvhky
   CONTAINER_APP_ENV: container-apps-environment-kvhky
 
@@ -45,9 +45,15 @@ jobs:
         with:
           creds: ${{ secrets.AZURE_CREDENTIALS }}
 
+      - name: Debug Azure context
+        run: |
+          az account show
+          az acr list --output table
+          az acr show --name containerregistrylqkh3 || true
+
       # Authenticate docker to ACR using the SP credentials
       - name: ACR login
-        run: az acr login --name containerregistrykvhky
+        run: az acr login --name containerregistrylqkh3
 
       # Build image — tag with git SHA for traceability AND :latest for rollout
       - name: Build & push Docker image
