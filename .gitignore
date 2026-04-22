@@ -37,7 +37,6 @@ Desktop.ini
 # My files
 tmp/
 *my_other_project/
-*github/agents/
-*github/hooks/
-*github/instructions/
-*github
+github/agents/
+github/hooks/
+github/instructions/
