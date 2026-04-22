@@ -76,11 +76,11 @@ jobs:
       # (more reliable than :latest — avoids revision reuse)
       - name: Deploy to Container App
         run: |
-          az containerapp update \
-            --name ${{ env.CONTAINER_APP_NAME }} \
-            --resource-group ${{ env.RESOURCE_GROUP }} \
-            --image "$IMAGE" \
-            --query "{name:name, latestRevision:properties.latestRevisionName}" \
+          az containerapp update
+            --name ${{ env.CONTAINER_APP_NAME }}
+            --resource-group ${{ env.RESOURCE_GROUP }}
+            --image "$IMAGE"
+            --query "{name:name, latestRevision:properties.latestRevisionName}"
             --output table
 
       # Web PubSub validates event handlers via abuse-protection OPTIONS on hub
