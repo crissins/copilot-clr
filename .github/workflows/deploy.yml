@@ -13,8 +13,8 @@ env:
   # Container App / ACR
   ACR_LOGIN_SERVER: containerregistrylqkh3.azurecr.io
   ACR_IMAGE: containerregistrylqkh3.azurecr.io/copilot-clr-api
-  CONTAINER_APP_NAME: container-apps-kvhky
-  CONTAINER_APP_ENV: container-apps-environment-kvhky
+  CONTAINER_APP_NAME: copilot-backend
+  CONTAINER_APP_ENV: env-copilotclr
 
   # Web PubSub (re-register event handler after backend deploy)
   WEBPUBSUB_NAME: webpubsub-kvhky
