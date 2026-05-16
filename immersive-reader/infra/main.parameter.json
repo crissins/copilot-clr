@@ -1,0 +1,37 @@
+{
+  "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentParameters.json#",
+  "contentVersion": "1.0.0.0",
+  "parameters": {
+    "location": {
+      "value": "eastus"
+    },
+    "foundryAccountName": {
+      "value": "aif-hackaton-danielx11"
+    },
+    "foundryProjectName": {
+      "value": "proj-cognitive-load"
+    },
+    "modelDeploymentName": {
+      "value": "gpt-4.1-mini"
+    },
+    "modelName": {
+      "value": "gpt-4.1-mini"
+    },
+    "modelVersion": {
+      "value": "2025-04-14"
+    },
+    "modelFormat": {
+      "value": "OpenAI"
+    },
+    "immersiveReaderName": {
+      "value": "ir-hackaton-danielx11"
+    },
+    "tags": {
+      "value": {
+        "project": "hackathon",
+        "owner": "daniel",
+        "env": "dev"
+      }
+    }
+  }
+}

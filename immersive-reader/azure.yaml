@@ -1,0 +1,35 @@
+name: hackathon-cognitive-load
+
+metadata:
+  template: hackathon-cognitive-load@0.0.1
+
+infra:
+  provider: bicep
+  path: infra
+
+services:
+  backend:
+    project: ./app
+    host: containerapp
+    language: python
+    docker:
+      path: ./app/Dockerfile
+      remoteBuild: true
+
+hooks:
+  postprovision:
+    posix:
+      shell: sh
+      run: |
+        python3 ./scripts/create_agent.py
+        sh ./scripts/create_immersive_reader_entra.sh
+      interactive: true
+      continueOnError: false
+
+    windows:
+      shell: pwsh
+      run: |
+        python ./scripts/create_agent.py
+        bash ./scripts/create_immersive_reader_entra.sh
+      interactive: true
+      continueOnError: false
